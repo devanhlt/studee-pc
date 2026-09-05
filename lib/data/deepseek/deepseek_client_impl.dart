@@ -1,0 +1,479 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:studee_pc/core/errors/app_failure.dart';
+import 'package:studee_pc/core/logging/app_logger.dart';
+import 'package:studee_pc/data/deepseek/cancel_token.dart';
+import 'package:studee_pc/data/deepseek/deepseek_config.dart';
+import 'package:studee_pc/data/deepseek/prompts.dart';
+import 'package:studee_pc/domain/entities/deepseek_answer_response.dart';
+import 'package:studee_pc/domain/entities/evidence_item.dart';
+import 'package:studee_pc/domain/entities/evidence_package.dart';
+import 'package:studee_pc/domain/entities/parsed_choice.dart';
+import 'package:studee_pc/domain/entities/parsed_question.dart';
+import 'package:studee_pc/domain/enums/question_type.dart';
+import 'package:studee_pc/domain/repositories/credentials_repository.dart';
+import 'package:studee_pc/domain/repositories/deepseek_client.dart';
+
+/// HTTP DeepSeek client with exponential backoff and structured JSON validation.
+///
+/// Never logs API keys, full prompts, or study content.
+class DeepSeekClientImpl implements DeepSeekClient {
+  DeepSeekClientImpl({
+    required CredentialsRepository credentials,
+    http.Client? httpClient,
+    this.baseUrl = DeepSeekConfig.baseUrl,
+    this.model = DeepSeekConfig.model,
+  })  : _credentials = credentials,
+        _http = httpClient ?? http.Client();
+
+  final CredentialsRepository _credentials;
+  final http.Client _http;
+  final String baseUrl;
+  final String model;
+  final AppLogger _log = AppLogger('DeepSeekClient');
+
+  /// Optional token checked during in-flight requests.
+  CancelToken? activeCancelToken;
+
+  Uri get _chatUri => Uri.parse('$baseUrl${DeepSeekConfig.chatCompletionsPath}');
+
+  @override
+  Future<StructureSourceResponse> structureSource(
+    StructureSourceRequest request,
+  ) async {
+    final version =
+        request.promptVersion ?? DeepSeekPrompts.sourceStructuringVersion;
+    final userPayload = {
+      'source_id': request.sourceId,
+      'language': request.language,
+      'pages': request.pageTexts
+          .map((p) => {'page_number': p.pageNumber, 'text': p.text})
+          .toList(),
+    };
+
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.sourceStructuringSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: version,
+      maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
+    );
+
+    final map = _requireJsonObject(raw);
+    final units = (map['knowledge_units'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    final questions = (map['questions'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+    final relations = (map['relations'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    return StructureSourceResponse(
+      knowledgeUnits: units,
+      questions: questions,
+      relations: relations,
+      promptVersion: version,
+      rawJson: raw,
+    );
+  }
+
+  @override
+  Future<ParsedQuestion> parseQuestion(ParseQuestionRequest request) async {
+    final version =
+        request.promptVersion ?? DeepSeekPrompts.questionParsingVersion;
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.questionParsingSystem(),
+      userContent: jsonEncode({
+        'language': request.language,
+        'raw_text': request.rawText,
+      }),
+      promptVersion: version,
+    );
+
+    final map = _requireJsonObject(raw);
+    final choices = (map['choices'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map(
+          (c) => ParsedChoice(
+            label: (c['label'] ?? '').toString(),
+            content: (c['content'] ?? '').toString(),
+          ),
+        )
+        .where((c) => c.label.isNotEmpty || c.content.isNotEmpty)
+        .toList();
+
+    return ParsedQuestion(
+      questionType: QuestionType.fromWire(
+        map['question_type'] as String? ??
+            (choices.isEmpty ? 'text_response' : 'multiple_choice'),
+      ),
+      content: (map['content'] as String? ?? request.rawText).trim(),
+      choices: choices,
+      missingInformation: map['missing_information'] as bool? ?? false,
+      warnings: (map['warnings'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+    );
+  }
+
+  @override
+  Future<DeepSeekAnswerResponse> generateAnswer(
+    GenerateAnswerRequest request,
+  ) async {
+    final version =
+        request.promptVersion ?? DeepSeekPrompts.groundedAnswerVersion;
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.groundedAnswerSystem(),
+      userContent: jsonEncode(_evidencePackagePayload(request.evidencePackage)),
+      promptVersion: version,
+    );
+
+    final parsed = _parseAnswer(raw);
+    // Leave validation to SolveService so it can attempt one repair pass.
+    return parsed;
+  }
+
+  @override
+  Future<DeepSeekAnswerResponse> repairResponse(
+    RepairResponseRequest request,
+  ) async {
+    final version = request.promptVersion ?? DeepSeekPrompts.repairVersion;
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.repairSystem(),
+      userContent: jsonEncode({
+        'validation_errors': request.validationErrors,
+        'invalid_response': request.invalidResponse,
+        'evidence_package':
+            _evidencePackagePayload(request.evidencePackage),
+      }),
+      promptVersion: version,
+    );
+
+    return _parseAnswer(raw);
+  }
+
+  @override
+  Future<void> testConnection() async {
+    // Tiny no-content probe — never includes questions, OCR, PDFs, or evidence.
+    await _chatJson(
+      systemPrompt:
+          'Reply with a minimal JSON object: {"ok":true}. Do not include other fields.',
+      userContent: '{"ping":true}',
+      promptVersion: 'connectionTest.v1',
+      maxTokensOverride: 32,
+    );
+  }
+
+  @override
+  void beginCancellableSession() {
+    activeCancelToken?.cancel('replaced');
+    activeCancelToken = CancelToken();
+  }
+
+  @override
+  void cancelActiveSession() {
+    activeCancelToken?.cancel('user_cancelled');
+    activeCancelToken = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // HTTP + backoff
+  // ---------------------------------------------------------------------------
+
+  Future<String> _chatJson({
+    required String systemPrompt,
+    required String userContent,
+    required String promptVersion,
+    int? maxTokensOverride,
+  }) async {
+    final apiKey = await _credentials.getDeepSeekApiKey();
+    if (apiKey == null || apiKey.trim().isEmpty) {
+      throw const MissingApiKeyFailure();
+    }
+
+    final body = jsonEncode({
+      'model': model,
+      'temperature': DeepSeekConfig.temperature,
+      'max_tokens': maxTokensOverride ?? DeepSeekConfig.maxTokens,
+      'response_format': {'type': 'json_object'},
+      'messages': [
+        {'role': 'system', 'content': systemPrompt},
+        {'role': 'user', 'content': userContent},
+      ],
+    });
+
+    _log.info('DeepSeek request promptVersion=$promptVersion');
+
+    var attempt = 0;
+    var delay = DeepSeekConfig.initialBackoff;
+
+    while (true) {
+      activeCancelToken?.throwIfCancelled();
+      attempt++;
+      try {
+        final response = await _send(apiKey.trim(), body);
+        return _extractContent(response);
+      } on CancelledException {
+        throw const CancelledFailure(code: 'deepseek_cancelled');
+      } on AppFailure catch (failure) {
+        final retryable = failure is NetworkFailure ||
+            failure is RateLimitFailure ||
+            (failure is UnknownFailure && failure.code == 'http_5xx');
+        if (!retryable || attempt > DeepSeekConfig.maxRetries) {
+          rethrow;
+        }
+        _log.warning(
+          'DeepSeek transient failure code=${failure.code}; retry=$attempt',
+        );
+        await _sleep(delay);
+        final nextMs = (delay.inMilliseconds * 2)
+            .clamp(0, DeepSeekConfig.maxBackoff.inMilliseconds);
+        delay = Duration(milliseconds: nextMs);
+      }
+    }
+  }
+
+  Future<http.Response> _send(String apiKey, String body) async {
+    final token = activeCancelToken;
+    token?.throwIfCancelled();
+
+    final client = _http;
+    late http.Response response;
+    try {
+      response = await client
+          .post(
+            _chatUri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiKey',
+            },
+            body: body,
+          )
+          .timeout(
+            DeepSeekConfig.readTimeout,
+            onTimeout: () {
+              throw const NetworkFailure(
+                userMessage: 'Hết thời gian chờ phản hồi từ DeepSeek.',
+                code: 'deepseek_timeout',
+              );
+            },
+          );
+    } on TimeoutException {
+      throw const NetworkFailure(
+        userMessage: 'Hết thời gian chờ phản hồi từ DeepSeek.',
+        code: 'deepseek_timeout',
+      );
+    } on CancelledException {
+      rethrow;
+    } on AppFailure {
+      rethrow;
+    } on http.ClientException catch (e) {
+      throw NetworkFailure(
+        code: 'deepseek_network',
+        details: e.runtimeType.toString(),
+      );
+    } on Object catch (e) {
+      if (e is CancelledException) rethrow;
+      throw NetworkFailure(
+        code: 'deepseek_network',
+        details: e.runtimeType.toString(),
+      );
+    }
+
+    token?.throwIfCancelled();
+    _mapHttpError(response);
+    return response;
+  }
+
+  void _mapHttpError(http.Response response) {
+    final code = response.statusCode;
+    if (code >= 200 && code < 300) return;
+
+    // Never log response bodies that may echo prompts.
+    _log.warning('DeepSeek HTTP status=$code');
+
+    if (code == 401 || code == 403) {
+      throw AuthFailure(code: 'deepseek_http_$code');
+    }
+    if (code == 429) {
+      throw RateLimitFailure(code: 'deepseek_http_429');
+    }
+    if (code == 402) {
+      throw QuotaFailure(code: 'deepseek_http_402');
+    }
+    if (code >= 500) {
+      throw UnknownFailure(
+        userMessage: 'Máy chủ DeepSeek tạm thời lỗi. Thử lại sau.',
+        code: 'http_5xx',
+        details: 'status=$code',
+      );
+    }
+    throw UnknownFailure(
+      userMessage: 'Yêu cầu DeepSeek thất bại.',
+      code: 'deepseek_http_$code',
+      details: 'status=$code',
+    );
+  }
+
+  String _extractContent(http.Response response) {
+    if (response.body.isEmpty) {
+      throw const ValidationFailure(
+        userMessage: 'Phản hồi DeepSeek trống.',
+        code: 'deepseek_empty',
+      );
+    }
+
+    late final Map<String, dynamic> envelope;
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('root not object');
+      }
+      envelope = decoded;
+    } on Object {
+      throw const ValidationFailure(
+        userMessage: 'Phản hồi DeepSeek không phải JSON hợp lệ.',
+        code: 'deepseek_malformed_envelope',
+      );
+    }
+
+    final choices = envelope['choices'];
+    if (choices is! List || choices.isEmpty) {
+      throw const ValidationFailure(
+        userMessage: 'Phản hồi DeepSeek thiếu nội dung.',
+        code: 'deepseek_empty_choices',
+      );
+    }
+
+    final message = choices.first is Map
+        ? (choices.first as Map)['message']
+        : null;
+    final content = message is Map ? message['content'] : null;
+    if (content is! String || content.trim().isEmpty) {
+      throw const ValidationFailure(
+        userMessage: 'Phản hồi DeepSeek trống.',
+        code: 'deepseek_empty_content',
+      );
+    }
+
+    // Ensure content is parseable JSON (may be fenced).
+    final cleaned = _stripCodeFence(content.trim());
+    try {
+      jsonDecode(cleaned);
+    } on Object {
+      throw const ValidationFailure(
+        userMessage: 'Nội dung DeepSeek không phải JSON hợp lệ.',
+        code: 'deepseek_malformed_json',
+      );
+    }
+    return cleaned;
+  }
+
+  DeepSeekAnswerResponse _parseAnswer(String raw) {
+    final map = _requireJsonObject(raw);
+    return DeepSeekAnswerResponse.fromJson(map).copyWithRaw(raw);
+  }
+
+  Map<String, dynamic> _requireJsonObject(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } on Object {
+      // fall through
+    }
+    throw const ValidationFailure(
+      userMessage: 'Không phân tích được JSON từ DeepSeek.',
+      code: 'deepseek_json_object_required',
+    );
+  }
+
+  Map<String, dynamic> _evidencePackagePayload(EvidencePackage package) {
+    return {
+      'current_question': {
+        'content': package.currentQuestion.content,
+        'question_type': package.currentQuestion.questionType.wireName,
+        'choices': package.currentQuestion.choices
+            .map((c) => {'label': c.label, 'content': c.content})
+            .toList(),
+      },
+      'answer_constraint': {
+        'fixed': package.answerConstraint.fixed,
+        'answer_label': package.answerConstraint.answerLabel,
+        'answer_content': package.answerConstraint.answerContent,
+      },
+      'evidence': package.evidence.map(_evidenceItemPayload).toList(),
+      'warnings': package.warnings,
+    };
+  }
+
+  Map<String, dynamic> _evidenceItemPayload(EvidenceItem item) => {
+        'evidence_id': item.evidenceId,
+        'local_id': item.localId,
+        'type': item.type.wireName,
+        'content': item.content,
+        'verification_status': item.verificationStatus.wireName,
+        'source_title': item.sourceTitle,
+        'page': item.page,
+      };
+
+  static String _stripCodeFence(String input) {
+    final fence = RegExp(r'^```(?:json)?\s*([\s\S]*?)\s*```$', multiLine: true);
+    final match = fence.firstMatch(input);
+    if (match != null) return match.group(1)!.trim();
+    return input;
+  }
+
+  Future<void> _sleep(Duration delay) async {
+    final token = activeCancelToken;
+    if (token == null) {
+      await Future<void>.delayed(delay);
+      return;
+    }
+    token.throwIfCancelled();
+    final completer = Completer<void>();
+    Timer? timer;
+    void onCancel() {
+      timer?.cancel();
+      if (!completer.isCompleted) {
+        completer.completeError(CancelledException(token.reason));
+      }
+    }
+
+    token.addListener(onCancel);
+    timer = Timer(delay, () {
+      token.removeListener(onCancel);
+      if (!completer.isCompleted) completer.complete();
+    });
+    await completer.future;
+  }
+
+  /// Closes the underlying HTTP client when owned by this impl.
+  void dispose() {
+    _http.close();
+  }
+}
+
+extension on DeepSeekAnswerResponse {
+  DeepSeekAnswerResponse copyWithRaw(String raw) {
+    return DeepSeekAnswerResponse(
+      questionType: questionType,
+      finalAnswerLabel: finalAnswerLabel,
+      finalAnswerContent: finalAnswerContent,
+      shortAnswer: shortAnswer,
+      explanationMarkdown: explanationMarkdown,
+      usedEvidenceIds: usedEvidenceIds,
+      modelKnowledgeUsed: modelKnowledgeUsed,
+      missingInformation: missingInformation,
+      warnings: warnings,
+      rawJson: raw,
+    );
+  }
+}

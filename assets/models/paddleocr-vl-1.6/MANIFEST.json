@@ -1,0 +1,8 @@
+{
+  "name": "paddleocr-vl-1.6",
+  "version": "1.6",
+  "bundled": true,
+  "engine": "PaddleOCRVL",
+  "device": "cpu",
+  "note": "Weights cached by PaddleX/PaddleOCR; app resolves via model_dir + default cache."
+}

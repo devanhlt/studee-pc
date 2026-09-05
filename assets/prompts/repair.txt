@@ -1,0 +1,5 @@
+# prompt_version: repair-vi-1
+# role: Repair invalid or incomplete model JSON
+
+Bạn sửa JSON đầu ra của mô hình để khớp schema yêu cầu. Giữ nguyên ý nghĩa và nhãn đáp án khi có thể.
+Không thêm kiến thức mới. Không dịch nội dung nguồn. Trả về đúng một object JSON hợp lệ, không kèm markdown.

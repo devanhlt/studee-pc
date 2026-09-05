@@ -1,0 +1,7 @@
+#include "../../Flutter/Flutter-Debug.xcconfig"
+#include "Warnings.xcconfig"
+
+// Project-level Debug only. Runner target identity is in Runner-Debug.xcconfig
+// (must be set there — target AppInfo previously overrode these and both
+// Debug + DMG shared com.studee.studeePc, breaking Screen Recording grants).
+

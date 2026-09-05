@@ -1,0 +1,16 @@
+# OCR worker dependencies for the Study Overlay App.
+#
+# Install the real stack with:
+#   ./setup_real_ocr.sh
+# then warm models once:
+#   ./warmup_models.sh
+#
+# Flutter launches `.venv/bin/python -u main.py` when the venv exists.
+
+pypdfium2>=4.30.0
+Pillow>=10.0.0
+
+# Real OCR (installed by setup_real_ocr.sh from the paddle CPU index):
+# paddlepaddle==3.2.1
+# paddleocr[doc-parser]
+# Optional Apple Silicon: mlx-vlm>=0.3.11

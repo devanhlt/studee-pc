@@ -1,0 +1,7 @@
+// Runner target — Debug / local Profile builds.
+// Must be the target's baseConfigurationReference so these overrides win over
+// AppInfo (project-level Debug.xcconfig alone does not affect the Runner target).
+#include "AppInfo.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = com.studee.studeePc.debug
+STUDEE_DISPLAY_NAME = Studee (Debug)

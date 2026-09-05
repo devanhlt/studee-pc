@@ -1,0 +1,5 @@
+// Runner target — Release / packaged DMG builds.
+#include "AppInfo.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = com.studee.studeePc
+STUDEE_DISPLAY_NAME = Studee
