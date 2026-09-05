@@ -14,25 +14,33 @@ import 'package:studee_pc/domain/entities/retrieval_result.dart';
 import 'package:studee_pc/domain/enums/knowledge_unit_type.dart';
 import 'package:studee_pc/domain/enums/question_type.dart';
 import 'package:studee_pc/domain/enums/verification_status.dart';
+import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/domain/repositories/knowledge_retriever.dart';
 import 'package:studee_pc/domain/services/candidate_scorer.dart';
 import 'package:studee_pc/domain/services/choice_mapper.dart';
 
 /// Retrieval pipeline:
-/// exact fingerprint → reordered choices → lexical similarity → FTS5 → empty.
+/// exact fingerprint → reordered choices → semantic key → lexical → FTS →
+/// LLM meaning match → empty.
 class KnowledgeRetrieverImpl implements KnowledgeRetriever {
   KnowledgeRetrieverImpl({
     required SubjectDatabaseManager databaseManager,
+    DeepSeekClient? deepSeek,
     CandidateScorer scorer = const CandidateScorer(),
     ChoiceMapper choiceMapper = const ChoiceMapper(),
   })  : _dbManager = databaseManager,
+        _deepSeek = deepSeek,
         _scorer = scorer,
         _choiceMapper = choiceMapper;
 
   final SubjectDatabaseManager _dbManager;
+  final DeepSeekClient? _deepSeek;
   final CandidateScorer _scorer;
   final ChoiceMapper _choiceMapper;
   final AppLogger _log = AppLogger('KnowledgeRetriever');
+
+  /// Caps lazy semantic-key backfill per retrieve call.
+  static const int _backfillBatch = 15;
 
   @override
   Future<RetrievalResult> retrieve({
@@ -88,18 +96,20 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
     }
 
     // 2) Reordered choices: same normalized stem + same choice-set fingerprint
-    final stemRows = await (db.select(db.questions)
+    // Compare against raw question content (normalizedContent may include aliases).
+    final stemCandidates = await (db.select(db.questions)
           ..where(
-            (q) =>
-                q.normalizedContent.equals(normalizedQuestion) &
-                q.verificationStatus.isNotValue(
-                  VerificationStatus.rejected.wireName,
-                ),
+            (q) => q.verificationStatus.isNotValue(
+              VerificationStatus.rejected.wireName,
+            ),
           ))
         .get();
 
     final reordered = <RankedCandidate>[];
-    for (final row in stemRows) {
+    for (final row in stemCandidates) {
+      final rowStem = TextNormalizer.normalizeQuestionText(row.content);
+      if (rowStem != normalizedQuestion) continue;
+
       final choices = await _loadChoices(db, row.id);
       final storedSetFp = Fingerprints.choiceSetFingerprint(
         choices.map((c) => c.content),
@@ -147,9 +157,15 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
       );
     }
 
-    // 3) High lexical similarity among non-rejected questions (includes
-    // user-imported / unreviewed — previously only official+reviewed, which
-    // made freshly imported Q&A invisible to the solver).
+    // 3) Semantic key equality (canonical meaning)
+    final semanticHit = await _retrieveBySemanticKey(
+      db,
+      question: question,
+      cappedLimit: cappedLimit,
+    );
+    if (semanticHit != null) return semanticHit;
+
+    // 4) High lexical similarity among non-rejected questions
     final lexicalRows = await (db.select(db.questions)
           ..where(
             (q) => q.verificationStatus.isNotValue(
@@ -163,8 +179,8 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
       question: question,
       candidates: lexicalPool,
     );
-    // Keep true high-lexical only — score alone is not enough (FTS siblings).
-    final strongLexical = lexicalScored.where((c) => c.highLexicalMatch).toList();
+    final strongLexical =
+        lexicalScored.where((c) => c.highLexicalMatch).toList();
 
     if (strongLexical.isNotEmpty) {
       final expanded = await _expandWithRelatedKnowledge(
@@ -183,7 +199,7 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
       );
     }
 
-    // 3b) Softer lexical pass (accent-folded) when OCR/diacritics drift.
+    // 4b) Softer lexical pass (accent-folded) when OCR/diacritics drift.
     final softLexical = <RankedCandidate>[];
     for (final candidate in lexicalPool) {
       if (!candidate.verificationStatus.isRetrievable) continue;
@@ -193,36 +209,17 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
       );
       if (folded < 0.72) continue;
       final scored = _scorer.score(question: question, candidate: candidate);
-      // Keep if base score is near threshold or accent overlap is strong.
       if (scored.score < _scorer.rejectThreshold && folded < 0.88) continue;
       softLexical.add(
         scored.copyWith(
           score: math.max(scored.score, folded * 0.85),
-          // Soft pass is for context / OCR diacritics only — never claim
-          // high-lexical identity (that would lock a sibling question's answer).
           highLexicalMatch: false,
         ),
       );
     }
     softLexical.sort((a, b) => b.score.compareTo(a.score));
-    if (softLexical.isNotEmpty) {
-      final expanded = await _expandWithRelatedKnowledge(
-        db,
-        softLexical.take(cappedLimit).toList(),
-        cappedLimit,
-      );
-      _log.info(
-        'Retrieve soft-lexical hits=${softLexical.length} '
-        'expanded=${expanded.length}',
-      );
-      return RetrievalResult(
-        candidates: expanded,
-        exactMatches: const [],
-        hasTrustedConflict: _hasTrustedConflict(expanded),
-      );
-    }
 
-    // 4) FTS5 over questions + knowledge units (OR query — tolerant of OCR drift)
+    // 5) FTS5 over questions + knowledge units
     final ftsQuestions = await db.searchQuestionsFts(
       question.content,
       limit: cappedLimit * 2,
@@ -242,6 +239,36 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
       candidates: ftsCandidates,
     );
 
+    // 6) LLM same-meaning match against soft + FTS question candidates
+    final weakPool = _dedupeCandidates([
+      ...softLexical,
+      ...ftsScored.where((c) => c.questionId != null),
+    ]);
+    final meaningHit = await _retrieveByMeaningMatch(
+      db,
+      question: question,
+      weakPool: weakPool,
+      cappedLimit: cappedLimit,
+    );
+    if (meaningHit != null) return meaningHit;
+
+    if (softLexical.isNotEmpty) {
+      final expanded = await _expandWithRelatedKnowledge(
+        db,
+        softLexical.take(cappedLimit).toList(),
+        cappedLimit,
+      );
+      _log.info(
+        'Retrieve soft-lexical hits=${softLexical.length} '
+        'expanded=${expanded.length}',
+      );
+      return RetrievalResult(
+        candidates: expanded,
+        exactMatches: const [],
+        hasTrustedConflict: _hasTrustedConflict(expanded),
+      );
+    }
+
     if (ftsScored.isNotEmpty) {
       _log.info('Retrieve FTS hits=${ftsScored.length}');
       return RetrievalResult(
@@ -251,9 +278,227 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
       );
     }
 
-    // 5) Empty — caller may fall back to model-only solve.
+    // 7) Empty — caller may fall back to model-only solve.
     _log.info('Retrieve empty for subjectId=$subjectId');
     return const RetrievalResult(candidates: []);
+  }
+
+  Future<RetrievalResult?> _retrieveBySemanticKey(
+    SubjectDatabase db, {
+    required ParsedQuestion question,
+    required int cappedLimit,
+  }) async {
+    final deepSeek = _deepSeek;
+    if (deepSeek == null) return null;
+
+    try {
+      await _lazyBackfillSemanticKeys(db, deepSeek);
+
+      final canon = await deepSeek.canonicalizeQuestions([
+        CanonicalizeItem(
+          id: 'live',
+          questionText: question.content,
+          choiceContents: question.choiceContents.toList(),
+        ),
+      ]);
+      final key = canon['live']?.semanticKey.trim();
+      if (key == null || key.isEmpty) return null;
+
+      final fp = Fingerprints.semanticFingerprint(key);
+      final rows = await (db.select(db.questions)
+            ..where(
+              (q) =>
+                  q.semanticFingerprint.equals(fp) &
+                  q.verificationStatus.isNotValue(
+                    VerificationStatus.rejected.wireName,
+                  ),
+            ))
+          .get();
+      if (rows.isEmpty) return null;
+
+      final promoted = <RankedCandidate>[];
+      for (final row in rows) {
+        if (!_scorer.numericSignaturesCompatible(question.content, row.content)) {
+          continue;
+        }
+        final choices = await _loadChoices(db, row.id);
+        final mapped = _choiceMapper.mapStoredAnswer(
+          storedAnswerContent: row.answerContent,
+          storedAnswerLabel: row.answerLabel,
+          currentQuestion: question,
+        );
+        promoted.add(
+          await _questionToCandidate(
+            db,
+            row,
+            choices,
+            overrideAnswerLabel: mapped?.label,
+            overrideAnswerContent: mapped?.content ?? row.answerContent,
+            scoreHint: 0.97,
+            highLexical: true,
+          ),
+        );
+      }
+      if (promoted.isEmpty) return null;
+
+      final expanded = await _expandWithRelatedKnowledge(
+        db,
+        promoted.take(cappedLimit).toList(),
+        cappedLimit,
+      );
+      _log.info(
+        'Retrieve semantic-key hits=${promoted.length} '
+        'expanded=${expanded.length}',
+      );
+      return RetrievalResult(
+        candidates: expanded,
+        exactMatches: const [],
+        hasTrustedConflict: _hasTrustedConflict(promoted),
+      );
+    } on Object catch (e) {
+      _log.warning('Semantic-key retrieve failed: ${e.runtimeType}');
+      return null;
+    }
+  }
+
+  Future<void> _lazyBackfillSemanticKeys(
+    SubjectDatabase db,
+    DeepSeekClient deepSeek,
+  ) async {
+    final missing = await (db.select(db.questions)
+          ..where(
+            (q) =>
+                q.semanticFingerprint.isNull() &
+                q.verificationStatus.isNotValue(
+                  VerificationStatus.rejected.wireName,
+                ),
+          )
+          ..limit(_backfillBatch))
+        .get();
+    if (missing.isEmpty) return;
+
+    try {
+      final items = <CanonicalizeItem>[];
+      for (final row in missing) {
+        final choices = await _loadChoices(db, row.id);
+        items.add(
+          CanonicalizeItem(
+            id: row.id,
+            questionText: row.content,
+            choiceContents: choices.map((c) => c.content).toList(),
+          ),
+        );
+      }
+      final keys = await deepSeek.canonicalizeQuestions(items);
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      for (final row in missing) {
+        final sem = keys[row.id];
+        if (sem == null || sem.semanticKey.trim().isEmpty) continue;
+        final stemNorm = TextNormalizer.normalizeQuestionText(row.content);
+        final aliasBlob = sem.aliases
+            .map(TextNormalizer.normalizeQuestionText)
+            .where((s) => s.isNotEmpty && s != stemNorm)
+            .join(' ');
+        final normalized = aliasBlob.isEmpty ? stemNorm : '$stemNorm $aliasBlob';
+        await (db.update(db.questions)..where((q) => q.id.equals(row.id))).write(
+          QuestionsCompanion(
+            semanticKey: Value(sem.semanticKey),
+            semanticFingerprint: Value(
+              Fingerprints.semanticFingerprint(sem.semanticKey),
+            ),
+            normalizedContent: Value(normalized),
+            updatedAt: Value(now),
+          ),
+        );
+      }
+      _log.info('Lazy semantic-key backfill count=${keys.length}');
+    } on Object catch (e) {
+      _log.warning('Lazy semantic backfill failed: ${e.runtimeType}');
+    }
+  }
+
+  Future<RetrievalResult?> _retrieveByMeaningMatch(
+    SubjectDatabase db, {
+    required ParsedQuestion question,
+    required List<RankedCandidate> weakPool,
+    required int cappedLimit,
+  }) async {
+    final deepSeek = _deepSeek;
+    if (deepSeek == null) return null;
+
+    final questionCandidates = weakPool
+        .where((c) => c.questionId != null && c.verificationStatus.isRetrievable)
+        .take(8)
+        .toList();
+    if (questionCandidates.isEmpty) return null;
+
+    try {
+      final match = await deepSeek.matchQuestionMeaning(
+        liveQuestion: question.content,
+        candidates: [
+          for (final c in questionCandidates)
+            MeaningMatchCandidate(
+              id: c.questionId!,
+              questionText: c.content,
+            ),
+        ],
+      );
+      if (!match.sameMeaning || match.id == null) return null;
+
+      final hit = questionCandidates.where((c) => c.questionId == match.id).firstOrNull;
+      if (hit == null) return null;
+      if (!_scorer.numericSignaturesCompatible(question.content, hit.content)) {
+        _log.info('Meaning match rejected by numeric guard id=${match.id}');
+        return null;
+      }
+
+      final row = await (db.select(db.questions)
+            ..where((q) => q.id.equals(match.id!)))
+          .getSingleOrNull();
+      if (row == null) return null;
+
+      final choices = await _loadChoices(db, row.id);
+      final mapped = _choiceMapper.mapStoredAnswer(
+        storedAnswerContent: row.answerContent,
+        storedAnswerLabel: row.answerLabel,
+        currentQuestion: question,
+      );
+      final promoted = await _questionToCandidate(
+        db,
+        row,
+        choices,
+        overrideAnswerLabel: mapped?.label,
+        overrideAnswerContent: mapped?.content ?? row.answerContent,
+        scoreHint: math.max(0.9, hit.score),
+        highLexical: true,
+      );
+
+      final expanded = await _expandWithRelatedKnowledge(
+        db,
+        [promoted],
+        cappedLimit,
+      );
+      _log.info('Retrieve meaning-match hit id=${match.id}');
+      return RetrievalResult(
+        candidates: expanded,
+        exactMatches: const [],
+        hasTrustedConflict: false,
+      );
+    } on Object catch (e) {
+      _log.warning('Meaning-match retrieve failed: ${e.runtimeType}');
+      return null;
+    }
+  }
+
+  List<RankedCandidate> _dedupeCandidates(List<RankedCandidate> input) {
+    final seen = <String>{};
+    final out = <RankedCandidate>[];
+    for (final c in input) {
+      if (!seen.add(c.localId)) continue;
+      out.add(c);
+    }
+    out.sort((a, b) => b.score.compareTo(a.score));
+    return out;
   }
 
   Future<SubjectDatabase> _ensureOpen(String subjectId) async {
@@ -448,8 +693,6 @@ class KnowledgeRetrieverImpl implements KnowledgeRetriever {
       }
       final candidate = _unitToCandidate(unit).copyWith(
         score: math.max(0.4, seeds.first.score * 0.85),
-        // Related theory/answer units are context only — never inherit
-        // identity flags from the matched question (would lock wrong answers).
         highLexicalMatch: false,
         exactFingerprintMatch: false,
       );

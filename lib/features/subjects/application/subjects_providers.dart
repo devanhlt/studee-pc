@@ -4,12 +4,15 @@ import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/domain/entities/create_subject_input.dart';
 import 'package:studee_pc/domain/entities/knowledge_unit.dart';
 import 'package:studee_pc/domain/entities/question.dart';
+import 'package:studee_pc/domain/entities/question_choice.dart';
 import 'package:studee_pc/domain/entities/source.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/domain/enums/knowledge_unit_type.dart';
 import 'package:studee_pc/domain/enums/question_type.dart';
 import 'package:studee_pc/domain/enums/source_type.dart';
 import 'package:studee_pc/domain/enums/verification_status.dart';
+import 'package:studee_pc/domain/repositories/deepseek_client.dart';
+import 'package:studee_pc/features/subjects/application/study_notes_builder.dart';
 
 final subjectsListProvider =
     FutureProvider.autoDispose<List<Subject>>((ref) async {
@@ -87,6 +90,55 @@ class SubjectContentQueries {
           ),
         )
         .toList();
+  }
+
+  /// Questions with [Question.choices] loaded (for study-notes export).
+  Future<List<Question>> listQuestionsWithChoices(String subjectId) async {
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final rows = await (db.select(db.questions)
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    final out = <Question>[];
+    for (final r in rows) {
+      final choiceRows = await (db.select(db.questionChoices)
+            ..where((c) => c.questionId.equals(r.id))
+            ..orderBy([(c) => OrderingTerm.asc(c.sortOrder)]))
+          .get();
+      final choices = choiceRows
+          .map(
+            (c) => QuestionChoice(
+              id: c.id,
+              questionId: c.questionId,
+              label: c.label,
+              content: c.content,
+              normalizedContent: c.normalizedContent,
+              sortOrder: c.sortOrder,
+            ),
+          )
+          .toList();
+      out.add(
+        Question(
+          id: r.id,
+          knowledgeUnitId: r.knowledgeUnitId,
+          questionNumber: r.questionNumber,
+          questionType: QuestionType.fromWire(r.questionType),
+          content: r.content,
+          normalizedContent: r.normalizedContent,
+          questionFingerprint: r.questionFingerprint,
+          answerLabel: r.answerLabel,
+          answerContent: r.answerContent,
+          explanation: r.explanation,
+          verificationStatus:
+              VerificationStatus.fromWire(r.verificationStatus),
+          createdAt:
+              DateTime.fromMillisecondsSinceEpoch(r.createdAt, isUtc: true),
+          updatedAt:
+              DateTime.fromMillisecondsSinceEpoch(r.updatedAt, isUtc: true),
+          choices: choices,
+        ),
+      );
+    }
+    return out;
   }
 
   Future<List<Source>> listSources(String subjectId) async {
@@ -213,6 +265,57 @@ class SubjectsActions {
 
   Future<String> export(String id, String destination) {
     return _ref.read(subjectRepositoryProvider).exportSubject(id, destination);
+  }
+
+  /// Writes a concise Q&A study-notes Markdown file with LLM mnemonic tips.
+  /// Requires a DeepSeek API key. Returns the path written.
+  Future<String> exportStudyNotes({
+    required String subjectId,
+    required String subjectName,
+    required String destinationPath,
+  }) async {
+    final questions = await _ref
+        .read(subjectContentProvider)
+        .listQuestionsWithChoices(subjectId);
+    if (StudyNotesBuilder.countExportable(questions) == 0) {
+      throw StateError('Môn học chưa có câu hỏi để xuất ghi chú.');
+    }
+
+    final tipItems = <StudyTipItem>[];
+    for (final q in questions) {
+      if (q.content.trim().isEmpty) continue;
+      final meaning = StudyNotesBuilder.answerMeaning(q);
+      if (meaning == null) continue;
+      tipItems.add(
+        StudyTipItem(
+          id: q.id,
+          question: q.content.trim(),
+          answer: meaning,
+        ),
+      );
+    }
+
+    final deepSeek = _ref.read(deepSeekClientProvider);
+    deepSeek.beginCancellableSession();
+    Map<String, String> tips = {};
+    try {
+      if (tipItems.isNotEmpty) {
+        tips = await deepSeek.generateMemorizationTips(tipItems);
+      }
+    } finally {
+      deepSeek.cancelActiveSession();
+    }
+
+    final markdown = buildStudyNotesMarkdown(
+      subjectName: subjectName,
+      questions: questions,
+      tipsByQuestionId: tips,
+    );
+    final file = await StudyNotesBuilder.writeToFile(
+      destinationPath: destinationPath,
+      markdown: markdown,
+    );
+    return file.path;
   }
 
   Future<Subject> importZip(String zipPath) {

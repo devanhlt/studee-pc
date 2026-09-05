@@ -129,9 +129,100 @@ abstract interface class DeepSeekClient {
   /// Connectivity/auth check that must not send any study content.
   Future<void> testConnection();
 
+  /// Short mnemonic tips for study-notes export (answer meaning, never A/B/C).
+  /// Returns a map of [StudyTipItem.id] → tip text.
+  Future<Map<String, String>> generateMemorizationTips(
+    List<StudyTipItem> items,
+  );
+
+  /// Canonical semantic keys for question meaning (no answers in keys).
+  Future<Map<String, SemanticCanonicalization>> canonicalizeQuestions(
+    List<CanonicalizeItem> items,
+  );
+
+  /// Pick whether a live question shares meaning with any stored candidate.
+  Future<MeaningMatchResult> matchQuestionMeaning({
+    required String liveQuestion,
+    required List<MeaningMatchCandidate> candidates,
+  });
+
   /// Start a cancellable API session (cancels any previous one).
   void beginCancellableSession();
 
   /// Abort the active cancellable session (in-flight waits / retries).
   void cancelActiveSession();
+}
+
+/// One question used when asking DeepSeek for a memorization tip.
+class StudyTipItem extends Equatable {
+  const StudyTipItem({
+    required this.id,
+    required this.question,
+    required this.answer,
+  });
+
+  final String id;
+  final String question;
+  final String answer;
+
+  @override
+  List<Object?> get props => [id, question, answer];
+}
+
+/// Input for [DeepSeekClient.canonicalizeQuestions].
+class CanonicalizeItem extends Equatable {
+  const CanonicalizeItem({
+    required this.id,
+    required this.questionText,
+    this.choiceContents = const [],
+  });
+
+  final String id;
+  final String questionText;
+  final List<String> choiceContents;
+
+  @override
+  List<Object?> get props => [id, questionText, choiceContents];
+}
+
+/// Canonical meaning key plus optional FTS aliases.
+class SemanticCanonicalization extends Equatable {
+  const SemanticCanonicalization({
+    required this.semanticKey,
+    this.aliases = const [],
+  });
+
+  final String semanticKey;
+  final List<String> aliases;
+
+  @override
+  List<Object?> get props => [semanticKey, aliases];
+}
+
+/// Candidate stored question for meaning match.
+class MeaningMatchCandidate extends Equatable {
+  const MeaningMatchCandidate({
+    required this.id,
+    required this.questionText,
+  });
+
+  final String id;
+  final String questionText;
+
+  @override
+  List<Object?> get props => [id, questionText];
+}
+
+/// Result of [DeepSeekClient.matchQuestionMeaning].
+class MeaningMatchResult extends Equatable {
+  const MeaningMatchResult({
+    this.id,
+    required this.sameMeaning,
+  });
+
+  final String? id;
+  final bool sameMeaning;
+
+  @override
+  List<Object?> get props => [id, sameMeaning];
 }

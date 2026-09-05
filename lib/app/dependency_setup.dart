@@ -70,6 +70,7 @@ final deepSeekClientProvider = Provider<DeepSeekClient>((ref) {
 final knowledgeRetrieverProvider = Provider<KnowledgeRetriever>((ref) {
   return KnowledgeRetrieverImpl(
     databaseManager: ref.watch(subjectDatabaseManagerProvider),
+    deepSeek: ref.watch(deepSeekClientProvider),
   );
 });
 

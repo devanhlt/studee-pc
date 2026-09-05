@@ -160,6 +160,179 @@ class DeepSeekClientImpl implements DeepSeekClient {
   }
 
   @override
+  Future<Map<String, String>> generateMemorizationTips(
+    List<StudyTipItem> items,
+  ) async {
+    if (items.isEmpty) return {};
+
+    const batchSize = 12;
+    final out = <String, String>{};
+    for (var i = 0; i < items.length; i += batchSize) {
+      final end = (i + batchSize < items.length) ? i + batchSize : items.length;
+      final batch = items.sublist(i, end);
+      final version = DeepSeekPrompts.memorizationTipsVersion;
+      final userPayload = {
+        'items': [
+          for (final item in batch)
+            {
+              'id': item.id,
+              'question': item.question,
+              'answer': item.answer,
+            },
+        ],
+      };
+      final raw = await _chatJson(
+        systemPrompt: DeepSeekPrompts.memorizationTipsSystem(),
+        userContent: jsonEncode(userPayload),
+        promptVersion: version,
+        maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
+      );
+      out.addAll(_parseTips(raw, expectedIds: batch.map((e) => e.id).toSet()));
+    }
+    return out;
+  }
+
+  Map<String, String> _parseTips(
+    String raw, {
+    required Set<String> expectedIds,
+  }) {
+    final map = _requireJsonObject(raw);
+    final tips = map['tips'];
+    final out = <String, String>{};
+    if (tips is! List) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi mẹo nhớ không đúng định dạng JSON.',
+        code: 'memorization_tips_schema',
+      );
+    }
+    for (final entry in tips) {
+      if (entry is! Map) continue;
+      final id = entry['id']?.toString();
+      final tip = '${entry['tip'] ?? ''}'.trim();
+      if (id == null || tip.isEmpty) continue;
+      if (!expectedIds.contains(id)) continue;
+      // Drop letter-only tips if the model slips.
+      if (RegExp(r'^(đáp án\s*(là|=)\s*)?[A-Da-d]\.?$', caseSensitive: false)
+          .hasMatch(tip)) {
+        continue;
+      }
+      out[id] = tip;
+    }
+    return out;
+  }
+
+  @override
+  Future<Map<String, SemanticCanonicalization>> canonicalizeQuestions(
+    List<CanonicalizeItem> items,
+  ) async {
+    if (items.isEmpty) return {};
+
+    const batchSize = 15;
+    final out = <String, SemanticCanonicalization>{};
+    for (var i = 0; i < items.length; i += batchSize) {
+      final end = (i + batchSize < items.length) ? i + batchSize : items.length;
+      final batch = items.sublist(i, end);
+      final version = DeepSeekPrompts.canonicalizeVersion;
+      final userPayload = {
+        'items': [
+          for (final item in batch)
+            {
+              'id': item.id,
+              'question': item.questionText,
+              if (item.choiceContents.isNotEmpty)
+                'choices': item.choiceContents,
+            },
+        ],
+      };
+      final raw = await _chatJson(
+        systemPrompt: DeepSeekPrompts.canonicalizeQuestionsSystem(),
+        userContent: jsonEncode(userPayload),
+        promptVersion: version,
+        maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
+      );
+      out.addAll(
+        _parseCanonicalizations(raw, expectedIds: batch.map((e) => e.id).toSet()),
+      );
+    }
+    return out;
+  }
+
+  Map<String, SemanticCanonicalization> _parseCanonicalizations(
+    String raw, {
+    required Set<String> expectedIds,
+  }) {
+    final map = _requireJsonObject(raw);
+    final keys = map['keys'];
+    final out = <String, SemanticCanonicalization>{};
+    if (keys is! List) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi khóa ngữ nghĩa không đúng định dạng JSON.',
+        code: 'canonicalize_schema',
+      );
+    }
+    for (final entry in keys) {
+      if (entry is! Map) continue;
+      final id = entry['id']?.toString();
+      final key = '${entry['semantic_key'] ?? entry['semanticKey'] ?? ''}'.trim();
+      if (id == null || key.isEmpty) continue;
+      if (!expectedIds.contains(id)) continue;
+      final aliasesRaw = entry['aliases'];
+      final aliases = <String>[];
+      if (aliasesRaw is List) {
+        for (final a in aliasesRaw) {
+          final s = '$a'.trim();
+          if (s.isNotEmpty) aliases.add(s);
+        }
+      }
+      out[id] = SemanticCanonicalization(semanticKey: key, aliases: aliases);
+    }
+    return out;
+  }
+
+  @override
+  Future<MeaningMatchResult> matchQuestionMeaning({
+    required String liveQuestion,
+    required List<MeaningMatchCandidate> candidates,
+  }) async {
+    if (candidates.isEmpty) {
+      return const MeaningMatchResult(sameMeaning: false);
+    }
+
+    final capped = candidates.take(8).toList();
+    final version = DeepSeekPrompts.matchMeaningVersion;
+    final userPayload = {
+      'live_question': liveQuestion,
+      'candidates': [
+        for (final c in capped) {'id': c.id, 'question': c.questionText},
+      ],
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.matchQuestionMeaningSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: version,
+      maxTokensOverride: 256,
+    );
+    return _parseMeaningMatch(raw, expectedIds: capped.map((e) => e.id).toSet());
+  }
+
+  MeaningMatchResult _parseMeaningMatch(
+    String raw, {
+    required Set<String> expectedIds,
+  }) {
+    final map = _requireJsonObject(raw);
+    final same = map['same_meaning'] == true || map['sameMeaning'] == true;
+    final idRaw = map['id'];
+    final id = idRaw == null ? null : '$idRaw'.trim();
+    if (!same || id == null || id.isEmpty || id == 'null') {
+      return const MeaningMatchResult(sameMeaning: false);
+    }
+    if (!expectedIds.contains(id)) {
+      return const MeaningMatchResult(sameMeaning: false);
+    }
+    return MeaningMatchResult(id: id, sameMeaning: true);
+  }
+
+  @override
   Future<void> testConnection() async {
     // Tiny no-content probe — never includes questions, OCR, PDFs, or evidence.
     await _chatJson(

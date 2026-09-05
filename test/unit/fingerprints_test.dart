@@ -72,5 +72,16 @@ void main() {
       );
       expect(a, b);
     });
+
+    test('semanticFingerprint.v1 hashing helper', () {
+      expect(
+        Fingerprints.semanticFingerprint('1+1'),
+        Fingerprints.semanticFingerprint(' 1 + 1 '),
+      );
+      expect(
+        Fingerprints.semanticFingerprint('1+1'),
+        isNot(Fingerprints.semanticFingerprint('1+2')),
+      );
+    });
   });
 }

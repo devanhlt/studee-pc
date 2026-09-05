@@ -91,6 +91,10 @@ class Questions extends Table {
   TextColumn get content => text()();
   TextColumn get normalizedContent => text().named('normalized_content')();
   TextColumn get questionFingerprint => text().named('question_fingerprint')();
+  /// Canonical meaning key (LLM); used for paraphrase / cross-language match.
+  TextColumn get semanticKey => text().named('semantic_key').nullable()();
+  TextColumn get semanticFingerprint =>
+      text().named('semantic_fingerprint').nullable()();
   TextColumn get answerLabel => text().named('answer_label').nullable()();
   TextColumn get answerContent => text().named('answer_content').nullable()();
   TextColumn get explanation => text().nullable()();

@@ -95,6 +95,28 @@ class CandidateScorer {
   }
 
   /// Compare digit sequences so "2A+3B with matrix X" ≠ "2A+3B with matrix Y".
+  ///
+  /// Public for semantic-match guards (do not lock when numbers diverge).
+  double numericSignatureSimilarity(String a, String b) {
+    final na = TextNormalizer.normalizeQuestionText(a);
+    final nb = TextNormalizer.normalizeQuestionText(b);
+    return _numericSignatureSimilarity(na, nb);
+  }
+
+  /// True when numeric signatures are similar enough to allow a strong lock.
+  ///
+  /// If either side has no digit tokens (e.g. "one plus one"), do not reject —
+  /// paraphrase matching is handled by semantic keys / LLM meaning match.
+  /// When both sides expose digits, require agreement (avoid locking 1+1 onto 1+2).
+  bool numericSignaturesCompatible(String a, String b, {double min = 0.85}) {
+    final na = TextNormalizer.normalizeQuestionText(a);
+    final nb = TextNormalizer.normalizeQuestionText(b);
+    final tokensA = _numberTokens(na);
+    final tokensB = _numberTokens(nb);
+    if (tokensA.isEmpty || tokensB.isEmpty) return true;
+    return _numericSignatureSimilarity(na, nb) >= min;
+  }
+
   double _numericSignatureSimilarity(String a, String b) {
     final na = _numberTokens(a);
     final nb = _numberTokens(b);

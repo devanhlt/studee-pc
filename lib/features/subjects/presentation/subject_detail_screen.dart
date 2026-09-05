@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/widgets/app_shortcuts.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
+import 'package:studee_pc/core/errors/app_failure.dart';
+import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/history/presentation/history_list.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
@@ -45,6 +48,58 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
     context.push('/subjects/${widget.subjectId}/import');
   }
 
+  Future<void> _exportStudyNotes(Subject subject) async {
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Xuất tài liệu',
+      fileName: '${subject.name}-ghi-chu.md',
+      type: FileType.custom,
+      allowedExtensions: const ['md'],
+    );
+    if (path == null) return;
+
+    if (mounted) {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Expanded(
+                child: Text(
+                  'Đang tạo mẹo nhớ bằng AI…\nCó thể mất một lúc.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      final out = await ref.read(subjectsActionsProvider).exportStudyNotes(
+            subjectId: subject.id,
+            subjectName: subject.name,
+            destinationPath: path,
+          );
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã xuất ghi chú: $out')),
+      );
+    } on Object catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      final message = e is AppFailure
+          ? e.userMessage
+          : 'Xuất tài liệu thất bại: $e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    }
+  }
+
   void _selectTab(int index) {
     if (_tabs.index == index) return;
     _tabs.animateTo(index);
@@ -53,7 +108,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
   @override
   Widget build(BuildContext context) {
     final asyncSubject = ref.watch(subjectByIdProvider(widget.subjectId));
-    final wide = MediaQuery.sizeOf(context).width >= 640;
 
     return asyncSubject.when(
       loading: () => const Scaffold(
@@ -87,31 +141,30 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
               appBar: AppBar(
                 title: Text(subject.name),
                 actions: [
-                  if (wide)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: FilledButton.icon(
-                        onPressed: _openImport,
-                        icon: const Icon(Icons.upload_file_outlined, size: 18),
-                        label: const Text('Nhập kiến thức'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                        ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: TextButton.icon(
+                      onPressed: () => _exportStudyNotes(subject),
+                      icon: const Icon(Icons.upload, size: 18),
+                      label: const Text('Xuất tài liệu'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
                       ),
-                    )
-                  else
-                    IconButton.filled(
-                      tooltip: 'Nhập kiến thức',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 8, right: 8),
+                    child: FilledButton.icon(
                       onPressed: _openImport,
-                      style: IconButton.styleFrom(
+                      icon: const Icon(Icons.library_add, size: 18),
+                      label: const Text('Nhập kiến thức'),
+                      style: FilledButton.styleFrom(
                         backgroundColor: AppColors.accent,
                         foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
-                      icon: const Icon(Icons.upload_file_outlined),
                     ),
-                  const SizedBox(width: 8),
+                  ),
                 ],
                 bottom: TabBar(
                   controller: _tabs,

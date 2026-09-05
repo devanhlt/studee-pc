@@ -32,4 +32,15 @@ abstract final class Fingerprints {
     final choices = choiceSetFingerprint(choiceContents);
     return contentHash('$q\u{1e}$choices');
   }
+
+  /// Hash of a canonical semantic key (normalized, collapsed whitespace).
+  ///
+  /// Operator spacing is stripped so `1+1` and `1 + 1` share a fingerprint.
+  static String semanticFingerprint(String semanticKey) {
+    final key = TextNormalizer.normalizeQuestionText(semanticKey)
+        .replaceAll(RegExp(r'\s*([+\-*/^=])\s*'), r'$1')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return contentHash('sem\u{1e}$key');
+  }
 }

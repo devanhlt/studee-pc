@@ -220,6 +220,8 @@ class _SubjectCard extends ConsumerWidget {
                       await _showRenameDialog(context, ref, subject);
                     case 'export':
                       await _exportSubject(context, ref, subject);
+                    case 'export_notes':
+                      await _exportStudyNotes(context, ref, subject);
                     case 'delete':
                       await _showDeleteDialog(context, ref, subject);
                   }
@@ -227,6 +229,10 @@ class _SubjectCard extends ConsumerWidget {
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'rename', child: Text('Đổi tên')),
                   PopupMenuItem(value: 'export', child: Text('Xuất ZIP')),
+                  PopupMenuItem(
+                    value: 'export_notes',
+                    child: Text('Xuất tài liệu'),
+                  ),
                   PopupMenuItem(value: 'delete', child: Text('Xóa')),
                 ],
               ),
@@ -408,6 +414,64 @@ Future<void> _exportSubject(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Xuất thất bại: $e')),
+      );
+    }
+  }
+}
+
+Future<void> _exportStudyNotes(
+  BuildContext context,
+  WidgetRef ref,
+  Subject subject,
+) async {
+  final path = await FilePicker.platform.saveFile(
+    dialogTitle: 'Xuất tài liệu',
+    fileName: '${subject.name}-ghi-chu.md',
+    type: FileType.custom,
+    allowedExtensions: const ['md'],
+  );
+  if (path == null) return;
+
+  if (context.mounted) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                'Đang tạo mẹo nhớ bằng AI…\nCó thể mất một lúc.',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  try {
+    final out = await ref.read(subjectsActionsProvider).exportStudyNotes(
+          subjectId: subject.id,
+          subjectName: subject.name,
+          destinationPath: path,
+        );
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã xuất ghi chú: $out')),
+      );
+    }
+  } on Object catch (e) {
+    if (context.mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      final message = e is AppFailure
+          ? e.userMessage
+          : 'Xuất tài liệu thất bại: $e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
       );
     }
   }

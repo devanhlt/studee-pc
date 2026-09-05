@@ -2119,6 +2119,28 @@ class $QuestionsTable extends Questions
         type: DriftSqlType.string,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _semanticKeyMeta = const VerificationMeta(
+    'semanticKey',
+  );
+  @override
+  late final GeneratedColumn<String> semanticKey = GeneratedColumn<String>(
+    'semantic_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _semanticFingerprintMeta =
+      const VerificationMeta('semanticFingerprint');
+  @override
+  late final GeneratedColumn<String> semanticFingerprint =
+      GeneratedColumn<String>(
+        'semantic_fingerprint',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _answerLabelMeta = const VerificationMeta(
     'answerLabel',
   );
@@ -2194,6 +2216,8 @@ class $QuestionsTable extends Questions
     content,
     normalizedContent,
     questionFingerprint,
+    semanticKey,
+    semanticFingerprint,
     answerLabel,
     answerContent,
     explanation,
@@ -2278,6 +2302,24 @@ class $QuestionsTable extends Questions
       );
     } else if (isInserting) {
       context.missing(_questionFingerprintMeta);
+    }
+    if (data.containsKey('semantic_key')) {
+      context.handle(
+        _semanticKeyMeta,
+        semanticKey.isAcceptableOrUnknown(
+          data['semantic_key']!,
+          _semanticKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('semantic_fingerprint')) {
+      context.handle(
+        _semanticFingerprintMeta,
+        semanticFingerprint.isAcceptableOrUnknown(
+          data['semantic_fingerprint']!,
+          _semanticFingerprintMeta,
+        ),
+      );
     }
     if (data.containsKey('answer_label')) {
       context.handle(
@@ -2370,6 +2412,14 @@ class $QuestionsTable extends Questions
         DriftSqlType.string,
         data['${effectivePrefix}question_fingerprint'],
       )!,
+      semanticKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}semantic_key'],
+      ),
+      semanticFingerprint: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}semantic_fingerprint'],
+      ),
       answerLabel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}answer_label'],
@@ -2411,6 +2461,10 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
   final String content;
   final String normalizedContent;
   final String questionFingerprint;
+
+  /// Canonical meaning key (LLM); used for paraphrase / cross-language match.
+  final String? semanticKey;
+  final String? semanticFingerprint;
   final String? answerLabel;
   final String? answerContent;
   final String? explanation;
@@ -2425,6 +2479,8 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     required this.content,
     required this.normalizedContent,
     required this.questionFingerprint,
+    this.semanticKey,
+    this.semanticFingerprint,
     this.answerLabel,
     this.answerContent,
     this.explanation,
@@ -2444,6 +2500,12 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     map['content'] = Variable<String>(content);
     map['normalized_content'] = Variable<String>(normalizedContent);
     map['question_fingerprint'] = Variable<String>(questionFingerprint);
+    if (!nullToAbsent || semanticKey != null) {
+      map['semantic_key'] = Variable<String>(semanticKey);
+    }
+    if (!nullToAbsent || semanticFingerprint != null) {
+      map['semantic_fingerprint'] = Variable<String>(semanticFingerprint);
+    }
     if (!nullToAbsent || answerLabel != null) {
       map['answer_label'] = Variable<String>(answerLabel);
     }
@@ -2470,6 +2532,12 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       content: Value(content),
       normalizedContent: Value(normalizedContent),
       questionFingerprint: Value(questionFingerprint),
+      semanticKey: semanticKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(semanticKey),
+      semanticFingerprint: semanticFingerprint == null && nullToAbsent
+          ? const Value.absent()
+          : Value(semanticFingerprint),
       answerLabel: answerLabel == null && nullToAbsent
           ? const Value.absent()
           : Value(answerLabel),
@@ -2500,6 +2568,10 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       questionFingerprint: serializer.fromJson<String>(
         json['questionFingerprint'],
       ),
+      semanticKey: serializer.fromJson<String?>(json['semanticKey']),
+      semanticFingerprint: serializer.fromJson<String?>(
+        json['semanticFingerprint'],
+      ),
       answerLabel: serializer.fromJson<String?>(json['answerLabel']),
       answerContent: serializer.fromJson<String?>(json['answerContent']),
       explanation: serializer.fromJson<String?>(json['explanation']),
@@ -2521,6 +2593,8 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       'content': serializer.toJson<String>(content),
       'normalizedContent': serializer.toJson<String>(normalizedContent),
       'questionFingerprint': serializer.toJson<String>(questionFingerprint),
+      'semanticKey': serializer.toJson<String?>(semanticKey),
+      'semanticFingerprint': serializer.toJson<String?>(semanticFingerprint),
       'answerLabel': serializer.toJson<String?>(answerLabel),
       'answerContent': serializer.toJson<String?>(answerContent),
       'explanation': serializer.toJson<String?>(explanation),
@@ -2538,6 +2612,8 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     String? content,
     String? normalizedContent,
     String? questionFingerprint,
+    Value<String?> semanticKey = const Value.absent(),
+    Value<String?> semanticFingerprint = const Value.absent(),
     Value<String?> answerLabel = const Value.absent(),
     Value<String?> answerContent = const Value.absent(),
     Value<String?> explanation = const Value.absent(),
@@ -2554,6 +2630,10 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     content: content ?? this.content,
     normalizedContent: normalizedContent ?? this.normalizedContent,
     questionFingerprint: questionFingerprint ?? this.questionFingerprint,
+    semanticKey: semanticKey.present ? semanticKey.value : this.semanticKey,
+    semanticFingerprint: semanticFingerprint.present
+        ? semanticFingerprint.value
+        : this.semanticFingerprint,
     answerLabel: answerLabel.present ? answerLabel.value : this.answerLabel,
     answerContent: answerContent.present
         ? answerContent.value
@@ -2582,6 +2662,12 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       questionFingerprint: data.questionFingerprint.present
           ? data.questionFingerprint.value
           : this.questionFingerprint,
+      semanticKey: data.semanticKey.present
+          ? data.semanticKey.value
+          : this.semanticKey,
+      semanticFingerprint: data.semanticFingerprint.present
+          ? data.semanticFingerprint.value
+          : this.semanticFingerprint,
       answerLabel: data.answerLabel.present
           ? data.answerLabel.value
           : this.answerLabel,
@@ -2609,6 +2695,8 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
           ..write('content: $content, ')
           ..write('normalizedContent: $normalizedContent, ')
           ..write('questionFingerprint: $questionFingerprint, ')
+          ..write('semanticKey: $semanticKey, ')
+          ..write('semanticFingerprint: $semanticFingerprint, ')
           ..write('answerLabel: $answerLabel, ')
           ..write('answerContent: $answerContent, ')
           ..write('explanation: $explanation, ')
@@ -2628,6 +2716,8 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     content,
     normalizedContent,
     questionFingerprint,
+    semanticKey,
+    semanticFingerprint,
     answerLabel,
     answerContent,
     explanation,
@@ -2646,6 +2736,8 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
           other.content == this.content &&
           other.normalizedContent == this.normalizedContent &&
           other.questionFingerprint == this.questionFingerprint &&
+          other.semanticKey == this.semanticKey &&
+          other.semanticFingerprint == this.semanticFingerprint &&
           other.answerLabel == this.answerLabel &&
           other.answerContent == this.answerContent &&
           other.explanation == this.explanation &&
@@ -2662,6 +2754,8 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
   final Value<String> content;
   final Value<String> normalizedContent;
   final Value<String> questionFingerprint;
+  final Value<String?> semanticKey;
+  final Value<String?> semanticFingerprint;
   final Value<String?> answerLabel;
   final Value<String?> answerContent;
   final Value<String?> explanation;
@@ -2677,6 +2771,8 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     this.content = const Value.absent(),
     this.normalizedContent = const Value.absent(),
     this.questionFingerprint = const Value.absent(),
+    this.semanticKey = const Value.absent(),
+    this.semanticFingerprint = const Value.absent(),
     this.answerLabel = const Value.absent(),
     this.answerContent = const Value.absent(),
     this.explanation = const Value.absent(),
@@ -2693,6 +2789,8 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     required String content,
     required String normalizedContent,
     required String questionFingerprint,
+    this.semanticKey = const Value.absent(),
+    this.semanticFingerprint = const Value.absent(),
     this.answerLabel = const Value.absent(),
     this.answerContent = const Value.absent(),
     this.explanation = const Value.absent(),
@@ -2717,6 +2815,8 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     Expression<String>? content,
     Expression<String>? normalizedContent,
     Expression<String>? questionFingerprint,
+    Expression<String>? semanticKey,
+    Expression<String>? semanticFingerprint,
     Expression<String>? answerLabel,
     Expression<String>? answerContent,
     Expression<String>? explanation,
@@ -2734,6 +2834,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
       if (normalizedContent != null) 'normalized_content': normalizedContent,
       if (questionFingerprint != null)
         'question_fingerprint': questionFingerprint,
+      if (semanticKey != null) 'semantic_key': semanticKey,
+      if (semanticFingerprint != null)
+        'semantic_fingerprint': semanticFingerprint,
       if (answerLabel != null) 'answer_label': answerLabel,
       if (answerContent != null) 'answer_content': answerContent,
       if (explanation != null) 'explanation': explanation,
@@ -2752,6 +2855,8 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     Value<String>? content,
     Value<String>? normalizedContent,
     Value<String>? questionFingerprint,
+    Value<String?>? semanticKey,
+    Value<String?>? semanticFingerprint,
     Value<String?>? answerLabel,
     Value<String?>? answerContent,
     Value<String?>? explanation,
@@ -2768,6 +2873,8 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
       content: content ?? this.content,
       normalizedContent: normalizedContent ?? this.normalizedContent,
       questionFingerprint: questionFingerprint ?? this.questionFingerprint,
+      semanticKey: semanticKey ?? this.semanticKey,
+      semanticFingerprint: semanticFingerprint ?? this.semanticFingerprint,
       answerLabel: answerLabel ?? this.answerLabel,
       answerContent: answerContent ?? this.answerContent,
       explanation: explanation ?? this.explanation,
@@ -2801,6 +2908,12 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     }
     if (questionFingerprint.present) {
       map['question_fingerprint'] = Variable<String>(questionFingerprint.value);
+    }
+    if (semanticKey.present) {
+      map['semantic_key'] = Variable<String>(semanticKey.value);
+    }
+    if (semanticFingerprint.present) {
+      map['semantic_fingerprint'] = Variable<String>(semanticFingerprint.value);
     }
     if (answerLabel.present) {
       map['answer_label'] = Variable<String>(answerLabel.value);
@@ -2836,6 +2949,8 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
           ..write('content: $content, ')
           ..write('normalizedContent: $normalizedContent, ')
           ..write('questionFingerprint: $questionFingerprint, ')
+          ..write('semanticKey: $semanticKey, ')
+          ..write('semanticFingerprint: $semanticFingerprint, ')
           ..write('answerLabel: $answerLabel, ')
           ..write('answerContent: $answerContent, ')
           ..write('explanation: $explanation, ')
@@ -9285,6 +9400,8 @@ typedef $$QuestionsTableCreateCompanionBuilder =
       required String content,
       required String normalizedContent,
       required String questionFingerprint,
+      Value<String?> semanticKey,
+      Value<String?> semanticFingerprint,
       Value<String?> answerLabel,
       Value<String?> answerContent,
       Value<String?> explanation,
@@ -9302,6 +9419,8 @@ typedef $$QuestionsTableUpdateCompanionBuilder =
       Value<String> content,
       Value<String> normalizedContent,
       Value<String> questionFingerprint,
+      Value<String?> semanticKey,
+      Value<String?> semanticFingerprint,
       Value<String?> answerLabel,
       Value<String?> answerContent,
       Value<String?> explanation,
@@ -9391,6 +9510,16 @@ class $$QuestionsTableFilterComposer
 
   ColumnFilters<String> get questionFingerprint => $composableBuilder(
     column: $table.questionFingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get semanticKey => $composableBuilder(
+    column: $table.semanticKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get semanticFingerprint => $composableBuilder(
+    column: $table.semanticFingerprint,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9512,6 +9641,16 @@ class $$QuestionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get semanticKey => $composableBuilder(
+    column: $table.semanticKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get semanticFingerprint => $composableBuilder(
+    column: $table.semanticFingerprint,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get answerLabel => $composableBuilder(
     column: $table.answerLabel,
     builder: (column) => ColumnOrderings(column),
@@ -9598,6 +9737,16 @@ class $$QuestionsTableAnnotationComposer
 
   GeneratedColumn<String> get questionFingerprint => $composableBuilder(
     column: $table.questionFingerprint,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get semanticKey => $composableBuilder(
+    column: $table.semanticKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get semanticFingerprint => $composableBuilder(
+    column: $table.semanticFingerprint,
     builder: (column) => column,
   );
 
@@ -9714,6 +9863,8 @@ class $$QuestionsTableTableManager
                 Value<String> content = const Value.absent(),
                 Value<String> normalizedContent = const Value.absent(),
                 Value<String> questionFingerprint = const Value.absent(),
+                Value<String?> semanticKey = const Value.absent(),
+                Value<String?> semanticFingerprint = const Value.absent(),
                 Value<String?> answerLabel = const Value.absent(),
                 Value<String?> answerContent = const Value.absent(),
                 Value<String?> explanation = const Value.absent(),
@@ -9729,6 +9880,8 @@ class $$QuestionsTableTableManager
                 content: content,
                 normalizedContent: normalizedContent,
                 questionFingerprint: questionFingerprint,
+                semanticKey: semanticKey,
+                semanticFingerprint: semanticFingerprint,
                 answerLabel: answerLabel,
                 answerContent: answerContent,
                 explanation: explanation,
@@ -9746,6 +9899,8 @@ class $$QuestionsTableTableManager
                 required String content,
                 required String normalizedContent,
                 required String questionFingerprint,
+                Value<String?> semanticKey = const Value.absent(),
+                Value<String?> semanticFingerprint = const Value.absent(),
                 Value<String?> answerLabel = const Value.absent(),
                 Value<String?> answerContent = const Value.absent(),
                 Value<String?> explanation = const Value.absent(),
@@ -9761,6 +9916,8 @@ class $$QuestionsTableTableManager
                 content: content,
                 normalizedContent: normalizedContent,
                 questionFingerprint: questionFingerprint,
+                semanticKey: semanticKey,
+                semanticFingerprint: semanticFingerprint,
                 answerLabel: answerLabel,
                 answerContent: answerContent,
                 explanation: explanation,

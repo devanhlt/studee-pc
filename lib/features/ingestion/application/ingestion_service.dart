@@ -844,6 +844,28 @@ class IngestionService {
       final selectedUnits = units.where((u) => u.selected).toList();
       final selectedQuestions = questions.where((q) => q.selected).toList();
 
+      // Canonical semantic keys for selected questions (best-effort).
+      Map<String, SemanticCanonicalization> semanticById = {};
+      if (selectedQuestions.isNotEmpty) {
+        try {
+          semanticById = await _deepSeek.canonicalizeQuestions([
+            for (final q in selectedQuestions)
+              CanonicalizeItem(
+                id: q.id,
+                questionText: q.content,
+                choiceContents: [
+                  for (final c in q.choices) c['content'] ?? '',
+                ].where((s) => s.trim().isNotEmpty).toList(),
+              ),
+          ]);
+        } on Object catch (e) {
+          _log.warning(
+            'Canonicalize on ingest failed; saving without semantic keys: '
+            '${e.runtimeType}',
+          );
+        }
+      }
+
       await db.transaction(() async {
         final savedUnitIds = <String>{};
 
@@ -938,19 +960,34 @@ class IngestionService {
 
           final qId = q.id;
           final choiceContents = q.choices.map((c) => c['content'] ?? '');
+          final semantic = semanticById[qId];
+          final stemNorm = TextNormalizer.normalizeQuestionText(q.content);
+          final aliasBlob = (semantic?.aliases ?? const <String>[])
+              .map(TextNormalizer.normalizeQuestionText)
+              .where((s) => s.isNotEmpty && s != stemNorm)
+              .join(' ');
+          final normalizedWithAliases = aliasBlob.isEmpty
+              ? stemNorm
+              : '$stemNorm $aliasBlob';
           await db.into(db.questions).insert(
                 QuestionsCompanion.insert(
                   id: qId,
                   knowledgeUnitId: knowledgeUnitId,
                   questionType: q.questionType.wireName,
                   content: q.content,
-                  normalizedContent: TextNormalizer.normalizeQuestionText(
-                    q.content,
-                  ),
+                  normalizedContent: normalizedWithAliases,
                   questionFingerprint: Fingerprints.questionFingerprint(
                     questionText: q.content,
                     choiceContents: choiceContents,
                   ),
+                  semanticKey: semantic == null
+                      ? const Value.absent()
+                      : Value(semantic.semanticKey),
+                  semanticFingerprint: semantic == null
+                      ? const Value.absent()
+                      : Value(
+                          Fingerprints.semanticFingerprint(semantic.semanticKey),
+                        ),
                   answerLabel: Value(q.answerLabel),
                   answerContent: Value(detailedAnswer),
                   explanation: Value(q.explanation),
