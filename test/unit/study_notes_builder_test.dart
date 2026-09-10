@@ -39,6 +39,7 @@ void main() {
   test('uses answer meaning not letter; includes tip; no choice list', () {
     final md = buildStudyNotesMarkdown(
       subjectName: 'Toán',
+      knowledgeSummaryMarkdown: '- Cộng hai số cùng dấu',
       tipsByQuestionId: const {'1': 'Nhớ: 2 cặp 2 thành 4'},
       questions: [
         q(
@@ -73,17 +74,48 @@ void main() {
 
     expect(md, contains('# Toán — nhớ đáp án'));
     expect(md, contains('**TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM**'));
+    expect(md, contains('## Lý thuyết'));
+    expect(md, contains('- Cộng hai số cùng dấu'));
+    expect(md, contains('## Danh sách câu hỏi'));
     expect(
-      md.indexOf('**TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM**'),
+      md.indexOf('## Lý thuyết'),
+      lessThan(md.indexOf('## Danh sách câu hỏi')),
+    );
+    expect(
+      md.indexOf('## Danh sách câu hỏi'),
       lessThan(md.indexOf('**Hỏi:**')),
     );
-    expect(md, contains('**Hỏi:** 2 + 2 = ?'));
-    expect(md, contains('**Đáp:** 4'));
+    expect(md, contains('### 2'));
+    expect(md, contains('**Hỏi:**'));
+    expect(md, contains('2 + 2 = ?'));
+    expect(md, contains('**Đáp:**'));
+    expect(md, contains('4'));
     expect(md, contains('**Mẹo:** Nhớ: 2 cặp 2 thành 4'));
     expect(md, isNot(contains('A. 3')));
     expect(md, isNot(contains('**Đáp:** B')));
     expect(md, isNot(contains('Loại')));
     expect(md, isNot(contains('không xuất')));
+  });
+
+  test('wraps C program questions in fenced code blocks', () {
+    final md = buildStudyNotesMarkdown(
+      subjectName: 'KTLT',
+      questions: [
+        q(
+          id: '1',
+          type: QuestionType.textResponse,
+          content:
+              'Khi chạy chương trình sau thì kết quả là gì? #include<stdio.h> int main() { int a[] = {2,1}; printf("%d", *a); return 0; }',
+          answerContent: '2',
+        ),
+      ],
+    );
+
+    expect(md, contains('```c'));
+    expect(md, contains('#include'));
+    expect(md, contains('int main()'));
+    expect(md, contains('```'));
+    expect(md, contains('Khi chạy chương trình sau'));
   });
 
   test('text response uses answer content + tip', () {
@@ -100,13 +132,16 @@ void main() {
       ],
     );
 
-    expect(md, contains('**Đáp:** Hà Nội'));
+    expect(md, contains('**Đáp:**'));
+    expect(md, contains('Hà Nội'));
     expect(md, contains('**Mẹo:** Hà Nội — thủ đô từ lâu'));
   });
 
-  test('missing answer shows (chưa có)', () {
+  test('omits summary section when markdown empty; still has question list title',
+      () {
     final md = buildStudyNotesMarkdown(
       subjectName: 'X',
+      knowledgeSummaryMarkdown: '  ',
       questions: [
         q(
           id: 'm',
@@ -115,7 +150,10 @@ void main() {
         ),
       ],
     );
-    expect(md, contains('**Đáp:** (chưa có)'));
+    expect(md, isNot(contains('## Lý thuyết')));
+    expect(md, contains('## Danh sách câu hỏi'));
+    expect(md, contains('**Đáp:**'));
+    expect(md, contains('(chưa có)'));
   });
 
   test('answerMeaning resolves label via choices', () {

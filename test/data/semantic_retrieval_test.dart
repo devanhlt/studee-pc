@@ -106,6 +106,14 @@ class _FakeDeepSeek implements DeepSeekClient {
       {};
 
   @override
+  Future<String> generateKnowledgeSummary({
+    required String subjectName,
+    required List<KnowledgeSummaryUnit> units,
+    required List<KnowledgeSummaryQa> questions,
+  }) async =>
+      '- Tóm tắt giả lập cho $subjectName';
+
+  @override
   void beginCancellableSession() {}
 
   @override

@@ -83,6 +83,12 @@ class StudyMarkdown extends StatelessWidget {
   }
 
   /// Normalize common model / OCR LaTeX quirks before rendering.
+  static String prepareForRender(String input) => _prepareLatex(input);
+
+  /// Strip delimiters and fix common Unicode/math mixups for the TeX engine.
+  static String normalizeTex(String tex) => _latexWorkaround(tex);
+
+  /// Normalize common model / OCR LaTeX quirks before rendering.
   static String _prepareLatex(String input) {
     var text = input.replaceAll('\r\n', '\n');
 

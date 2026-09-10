@@ -455,8 +455,8 @@ class IngestionService {
                     rawOcrRelativePath: Value(relativeOcr),
                     textLayer: Value(text),
                     normalizedText: Value(TextNormalizer.normalize(text)),
-                    ocrEngine: const Value('paddleocr-vl'),
-                    ocrModelVersion: const Value('1.6'),
+                    ocrEngine: const Value('mathpix'),
+                    ocrModelVersion: const Value('v3'),
                     processingStatus: 'ocr_done',
                   ),
                 );

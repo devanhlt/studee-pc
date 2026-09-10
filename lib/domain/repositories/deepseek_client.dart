@@ -135,6 +135,14 @@ abstract interface class DeepSeekClient {
     List<StudyTipItem> items,
   );
 
+  /// Compact subject knowledge summary grounded only in provided Q&A + units.
+  /// Returns Markdown body (no document title).
+  Future<String> generateKnowledgeSummary({
+    required String subjectName,
+    required List<KnowledgeSummaryUnit> units,
+    required List<KnowledgeSummaryQa> questions,
+  });
+
   /// Canonical semantic keys for question meaning (no answers in keys).
   Future<Map<String, SemanticCanonicalization>> canonicalizeQuestions(
     List<CanonicalizeItem> items,
@@ -167,6 +175,36 @@ class StudyTipItem extends Equatable {
 
   @override
   List<Object?> get props => [id, question, answer];
+}
+
+/// General knowledge unit snippet for [DeepSeekClient.generateKnowledgeSummary].
+class KnowledgeSummaryUnit extends Equatable {
+  const KnowledgeSummaryUnit({
+    required this.type,
+    required this.content,
+  });
+
+  final String type;
+  final String content;
+
+  @override
+  List<Object?> get props => [type, content];
+}
+
+/// Q&A pair for knowledge summary (answer as meaning, not A/B/C).
+class KnowledgeSummaryQa extends Equatable {
+  const KnowledgeSummaryQa({
+    required this.question,
+    this.answer,
+    this.explanation,
+  });
+
+  final String question;
+  final String? answer;
+  final String? explanation;
+
+  @override
+  List<Object?> get props => [question, answer, explanation];
 }
 
 /// Input for [DeepSeekClient.canonicalizeQuestions].

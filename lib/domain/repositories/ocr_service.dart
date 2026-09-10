@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-/// Request sent to the local OCR worker.
+/// Request sent to the OCR service (Mathpix or future middleware).
 class OcrRequest extends Equatable {
   const OcrRequest({
     this.protocolVersion = 1,
@@ -54,7 +54,7 @@ class OcrRequest extends Equatable {
       ];
 }
 
-/// Streaming events from the OCR worker.
+/// Streaming events from the OCR service.
 sealed class OcrEvent extends Equatable {
   const OcrEvent({required this.jobId});
 
@@ -128,7 +128,7 @@ final class OcrFailedEvent extends OcrEvent {
   List<Object?> get props => [...super.props, code, message];
 }
 
-/// Local OCR worker boundary.
+/// OCR boundary (Mathpix cloud today; middleware-compatible later).
 abstract interface class OcrService {
   Stream<OcrEvent> process(OcrRequest request);
 

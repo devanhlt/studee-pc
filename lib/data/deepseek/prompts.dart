@@ -10,6 +10,7 @@ abstract final class DeepSeekPrompts {
   static const String groundedAnswerVersion = 'groundedAnswer.v2';
   static const String repairVersion = 'repair.v1';
   static const String memorizationTipsVersion = 'memorizationTips.v1';
+  static const String knowledgeSummaryVersion = 'knowledgeSummary.v4';
   static const String canonicalizeVersion = 'canonicalize.v1';
   static const String matchMeaningVersion = 'matchMeaning.v1';
 
@@ -123,6 +124,8 @@ Quy tắc:
 - Nếu có nhiều cặp câu hỏi–đáp án mâu thuẫn THỰC SỰ (cùng câu hỏi nhưng nội dung đáp án khác nhau), nêu rõ trong warnings và chọn đáp án phù hợp nhất với câu hỏi hiện tại.
 - Nếu chỉ khác chữ cái A/B/C mà nội dung đáp án giống nhau (do đảo thứ tự lựa chọn khi nhập), đó KHÔNG phải mâu thuẫn — khớp theo nội dung đáp án với choices hiện tại và gán đúng nhãn; không cảnh báo xung đột.
 - Nếu answer_constraint.fixed = true, PHẢI giữ đúng answer_label và answer_content đã cố định; chỉ giải thích.
+- final_answer_content phải là NỘI DUNG đáp án đầy đủ để học sinh tự đối chiếu với lựa chọn (thứ tự A/B/C có thể đổi). Không chỉ ghi chữ cái.
+- short_answer cũng phải là nội dung ý nghĩa (không chỉ "A"/"B"/"C") khi có thể.
 - Nếu không có evidence phù hợp, được dùng kiến thức mô hình nhưng phải đặt model_knowledge_used = true và nêu rõ.
 - Không bịa mã evidence_id.
 - Giải thích bằng tiếng Việt (Markdown).
@@ -132,8 +135,8 @@ Trả về đúng một đối tượng JSON theo schema ví dụ:
 {
   "question_type": "multiple_choice",
   "final_answer_label": "C",
-  "final_answer_content": "...",
-  "short_answer": "C",
+  "final_answer_content": "Nội dung lựa chọn đúng đầy đủ...",
+  "short_answer": "Tóm tắt nội dung đáp án (không chỉ chữ C)",
   "explanation_markdown": "Giải thích chi tiết...",
   "used_evidence_ids": ["ev_001"],
   "model_knowledge_used": false,
@@ -188,6 +191,46 @@ Trả về đúng một đối tượng JSON:
   "tips": [
     {"id": "q1", "tip": "Mẹo ngắn..."}
   ]
+}
+''';
+
+  /// Detailed theory section ("Lý thuyết") for study-notes export (grounded only).
+  static String knowledgeSummarySystem() => '''
+Bạn viết mục "Lý thuyết" CHI TIẾT, ĐẦY ĐỦ cho tài liệu ôn tập tiếng Việt.
+${DeepSeekConfig.vietnameseOutputInstruction}
+
+Nhiệm vụ: dựa CHỈ vào knowledge_units và câu hỏi–đáp án–explanation ĐÃ CUNG CẤP, biên soạn phần LÝ THUYẾT như một chương ôn tập hoàn chỉnh — học sinh đọc xong phải nắm được kiến thức đã lưu mà không cần mở lại nguồn gốc.
+
+Quy tắc BẮT BUỘC:
+1) CHỈ dùng thông tin có trong dữ liệu đầu vào. CẤM bịa, CẤM bổ sung kiến thức bên ngoài / kiến thức phổ thông không có trong nguồn.
+2) Nếu dữ liệu mỏng: viết đúng mức chi tiết có trong nguồn; không suy diễn thêm. Nếu nguồn giàu: viết CÀNG CHI TIẾT CÀNG TỐT.
+3) CẤM trả về chỉ vài gạch đầu dòng sơ sài. Mỗi ý quan trọng cần:
+   - Định nghĩa / phát biểu đầy đủ
+   - Giải thích ý nghĩa (1–4 câu)
+   - Điều kiện / giả thiết / phạm vi áp dụng nếu nguồn có
+   - Hệ quả / tính chất liên quan nếu nguồn có
+   - Công thức viết đủ (LaTeX), kèm chú thích ký hiệu khi nguồn nêu
+4) Cấu trúc Markdown theo chủ đề (dùng ### cho tiểu mục, KHÔNG dùng tiêu đề "# Lý thuyết" hay "## Lý thuyết" — phần này đã có tiêu đề ngoài). Gợi ý các khối khi phù hợp với nguồn:
+   - Khái niệm & định nghĩa
+   - Công thức / định lý / bổ đề
+   - Tính chất & hệ quả
+   - Phương pháp / quy trình giải
+   - Ví dụ minh họa (rút từ Q&A + lời giải; ghi rõ ý đáp án, không chữ A/B/C)
+   - Trường hợp đặc biệt / lưu ý / lỗi thường gặp nếu nguồn có
+5) Tận dụng tối đa theory, definition, formula, theorem, example, solution, note và explanation của câu hỏi để làm dày phần lý thuyết.
+6) Không liệt kê lại toàn bộ từng câu hỏi như mục lục; hãy tổng hợp thành lý thuyết mạch lạc.
+7) Không nhắc chữ cái A/B/C/D như đáp án cần nhớ — chỉ dùng ý nghĩa đáp án.
+8) Giữ công thức LaTeX nếu nguồn có (\$...\$ / \$\$...\$\$).
+9) Mọi đoạn mã nguồn (C/C++/Python/…) PHẢI bọc trong hàng rào Markdown để render đúng:
+   ```c
+   // code
+   ```
+   (đổi tag ngôn ngữ cho phù hợp: c, cpp, python, java…). CẤM dồn code thành một dòng trong đoạn văn.
+10) Độ dài mục tiêu: CHI TIẾT. Với nguồn phong phú: khoảng 800–2500 từ (hoặc tương đương nhiều đoạn + công thức). Nguồn vừa: vẫn ưu tiên giải thích đầy đủ hơn là rút gọn. Nguồn ít: viết hết những gì có, đủ câu đủ ý.
+
+Trả về đúng một đối tượng JSON:
+{
+  "summary_markdown": "### Khái niệm\\nĐịnh nghĩa đầy đủ...\\n\\n### Ví dụ\\n```c\\nint a[]={1,2};\\n```\\n..."
 }
 ''';
 

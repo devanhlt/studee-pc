@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
+import 'package:studee_pc/core/utils/answer_display.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
@@ -41,10 +42,10 @@ class HistoryList extends ConsumerWidget {
           itemBuilder: (_, i) {
             final item = items[i];
             final preview = (item.preview ?? '').trim();
-            final answer = [
-              if (item.answerLabel != null) item.answerLabel,
-              if (item.answerContent != null) item.answerContent,
-            ].whereType<String>().join(' — ');
+            final answer = AnswerDisplay.contentOnly(
+              label: item.answerLabel,
+              content: item.answerContent,
+            );
             final confidence = item.confidence == null
                 ? null
                 : ConfidenceLevel.fromWire(item.confidence!).labelVi;

@@ -11,6 +11,7 @@ import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/history/presentation/history_list.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
+import 'package:studee_pc/features/subjects/presentation/study_notes_export_dialog.dart';
 
 class SubjectDetailScreen extends ConsumerStatefulWidget {
   const SubjectDetailScreen({super.key, required this.subjectId});
@@ -49,11 +50,14 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
   }
 
   Future<void> _exportStudyNotes(Subject subject) async {
+    final format = await showStudyNotesFormatDialog(context);
+    if (format == null || !mounted) return;
+
     final path = await FilePicker.platform.saveFile(
       dialogTitle: 'Xuất tài liệu',
-      fileName: '${subject.name}-ghi-chu.md',
+      fileName: '${subject.name}-ghi-chu.${format.fileExtension}',
       type: FileType.custom,
-      allowedExtensions: const ['md'],
+      allowedExtensions: [format.fileExtension],
     );
     if (path == null) return;
 
@@ -68,7 +72,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
               SizedBox(width: 20),
               Expanded(
                 child: Text(
-                  'Đang tạo mẹo nhớ bằng AI…\nCó thể mất một lúc.',
+                  'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
                 ),
               ),
             ],
@@ -82,11 +86,12 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
             subjectId: subject.id,
             subjectName: subject.name,
             destinationPath: path,
+            format: format,
           );
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xuất ghi chú: $out')),
+        SnackBar(content: Text('Đã xuất tài liệu: $out')),
       );
     } on Object catch (e) {
       if (!mounted) return;
@@ -179,19 +184,63 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
               body: TabBarView(
                 controller: _tabs,
                 children: [
-                  SolveScreen(
-                    subjectId: widget.subjectId,
-                    embedded: true,
-                    shortcutsActive: _tabs.index == 0,
+                  _TabWithRefresh(
+                    onRefresh: () =>
+                        ref.invalidate(subjectByIdProvider(widget.subjectId)),
+                    child: SolveScreen(
+                      subjectId: widget.subjectId,
+                      embedded: true,
+                      shortcutsActive: _tabs.index == 0,
+                    ),
                   ),
-                  _KnowledgeTab(subjectId: widget.subjectId),
-                  HistoryList(subjectId: widget.subjectId),
+                  _TabWithRefresh(
+                    onRefresh: () => ref.invalidate(
+                      subjectKnowledgeProvider(widget.subjectId),
+                    ),
+                    child: _KnowledgeTab(subjectId: widget.subjectId),
+                  ),
+                  _TabWithRefresh(
+                    onRefresh: () => ref.invalidate(
+                      subjectHistoryProvider(widget.subjectId),
+                    ),
+                    child: HistoryList(subjectId: widget.subjectId),
+                  ),
                 ],
               ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Shared refresh affordance at the top of each subject tab.
+class _TabWithRefresh extends StatelessWidget {
+  const _TabWithRefresh({
+    required this.onRefresh,
+    required this.child,
+  });
+
+  final VoidCallback onRefresh;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: IconButton(
+            tooltip: 'Làm mới',
+            visualDensity: VisualDensity.compact,
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh, size: 20),
+          ),
+        ),
+        Expanded(child: child),
+      ],
     );
   }
 }

@@ -12,6 +12,7 @@ import 'package:studee_pc/app/widgets/app_shortcuts.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/result/result.dart';
+import 'package:studee_pc/core/utils/answer_display.dart';
 import 'package:studee_pc/domain/entities/result_reference.dart';
 import 'package:studee_pc/domain/entities/solve_result.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
@@ -166,6 +167,32 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     _handle(result);
   }
 
+  void _beginSolveAgain() {
+    final r = _service.beginResolveAgain();
+    r.when(
+      success: (_) {
+        _textController.text = _service.current.rawText ?? '';
+        setState(() {});
+      },
+      failure: (f) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(f.userMessage)),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmQuestionAndSolve() async {
+    if (!await _ensureApiKey()) return;
+    setState(() => _busy = true);
+    final result = await _service.solveFromText(
+      subjectId: widget.subjectId,
+      text: _textController.text,
+    );
+    setState(() => _busy = false);
+    _handle(result);
+  }
+
   void _handle(Result<SolveResult> result) {
     result.when(
       success: (_) {
@@ -194,8 +221,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     final async = ref.watch(solveStateProvider);
     final state = async.asData?.value ?? _service.current;
 
-    final showInputForm =
-        state.result == null && !state.needsOcrReview;
+    final showInputForm = state.result == null &&
+        !state.needsOcrReview &&
+        !state.needsQuestionConfirm;
 
     final Widget body;
     if (showInputForm) {
@@ -380,6 +408,41 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             ),
             const SizedBox(height: 24),
           ],
+          if (state.needsQuestionConfirm) ...[
+            const Text(
+              'Xác nhận câu hỏi trước khi giải lại:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _textController,
+              maxLines: 10,
+              decoration: const InputDecoration(
+                labelText: 'Câu hỏi',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton(
+                  onPressed: _busy ? null : _confirmQuestionAndSolve,
+                  child: Text(AppShortcuts.label('Xác nhận và giải', 'G')),
+                ),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          _newQuestion();
+                        },
+                  child: const Text('Hủy'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
           if (_busy || state.stage.isInProgress) ...[
             const SizedBox(height: 24),
             const LinearProgressIndicator(),
@@ -413,15 +476,15 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             ),
           ],
           if (state.result != null) ...[
-            const SizedBox(height: 8),
+            if (state.rawText != null &&
+                state.rawText!.trim().isNotEmpty) ...[
+              CollapsedQuestionTile(text: state.rawText!),
+              const SizedBox(height: 12),
+            ],
             SolveResultView(
               result: state.result!,
               subjectId: widget.subjectId,
-              onSolveAgain: () async {
-                setState(() => _busy = true);
-                await _service.resolveAgain(subjectId: widget.subjectId);
-                setState(() => _busy = false);
-              },
+              onSolveAgain: _beginSolveAgain,
               onReset: _newQuestion,
             ),
           ],
@@ -436,6 +499,8 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                 if (_busy) return;
                 if (state.needsOcrReview) {
                   _continueOcr();
+                } else if (state.needsQuestionConfirm) {
+                  _confirmQuestionAndSolve();
                 } else if (showInputForm) {
                   _solveText();
                 }
@@ -444,6 +509,8 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                 if (_busy) return;
                 if (state.needsOcrReview) {
                   _continueOcr();
+                } else if (state.needsQuestionConfirm) {
+                  _confirmQuestionAndSolve();
                 } else if (showInputForm) {
                   _solveText();
                 }
@@ -486,6 +553,52 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 }
 
+/// Collapsed question preview — tap to expand full text / markdown.
+class CollapsedQuestionTile extends StatelessWidget {
+  const CollapsedQuestionTile({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Material(
+        color: AppColors.elevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: const Text(
+            'Câu hỏi',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            text.replaceAll(RegExp(r'\s+'), ' ').trim(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.secondaryText,
+              fontSize: 13,
+            ),
+          ),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: StudyMarkdown(text),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class SolveResultView extends ConsumerWidget {
   const SolveResultView({
     super.key,
@@ -504,13 +617,11 @@ class SolveResultView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final answer = [
-      if (result.finalAnswerLabel != null) result.finalAnswerLabel,
-      if (result.finalAnswerContent != null) result.finalAnswerContent,
-      if (result.shortAnswer != null &&
-          result.shortAnswer != result.finalAnswerLabel)
-        result.shortAnswer,
-    ].whereType<String>().toSet().join(' — ');
+    final answer = AnswerDisplay.contentOnly(
+      label: result.finalAnswerLabel,
+      content: result.finalAnswerContent,
+      shortAnswer: result.shortAnswer,
+    );
 
     final knowledgeLabel = result.fromImportedKnowledge
         ? 'Từ kiến thức đã nhập'

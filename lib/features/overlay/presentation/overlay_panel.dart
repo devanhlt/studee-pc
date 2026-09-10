@@ -352,10 +352,20 @@ class _ExpandedBody extends StatelessWidget {
         );
       case SolvePipelineStage.partialFailure:
         if (state.result != null && subjectId != null) {
-          return SolveResultView(
-            result: state.result!,
-            subjectId: subjectId!,
-            compact: true,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (state.rawText != null &&
+                  state.rawText!.trim().isNotEmpty) ...[
+                CollapsedQuestionTile(text: state.rawText!),
+                const SizedBox(height: 12),
+              ],
+              SolveResultView(
+                result: state.result!,
+                subjectId: subjectId!,
+                compact: true,
+              ),
+            ],
           );
         }
         return Text(
@@ -364,10 +374,20 @@ class _ExpandedBody extends StatelessWidget {
         );
       case SolvePipelineStage.completed:
         if (state.result != null && subjectId != null) {
-          return SolveResultView(
-            result: state.result!,
-            subjectId: subjectId!,
-            compact: true,
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (state.rawText != null &&
+                  state.rawText!.trim().isNotEmpty) ...[
+                CollapsedQuestionTile(text: state.rawText!),
+                const SizedBox(height: 12),
+              ],
+              SolveResultView(
+                result: state.result!,
+                subjectId: subjectId!,
+                compact: true,
+              ),
+            ],
           );
         }
         return const Text('Hoàn tất');

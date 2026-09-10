@@ -222,6 +222,57 @@ class DeepSeekClientImpl implements DeepSeekClient {
   }
 
   @override
+  Future<String> generateKnowledgeSummary({
+    required String subjectName,
+    required List<KnowledgeSummaryUnit> units,
+    required List<KnowledgeSummaryQa> questions,
+  }) async {
+    if (units.isEmpty && questions.isEmpty) return '';
+
+    final version = DeepSeekPrompts.knowledgeSummaryVersion;
+    final userPayload = {
+      'subject_name': subjectName,
+      'knowledge_units': [
+        for (final u in units)
+          {
+            'type': u.type,
+            'content': u.content,
+          },
+      ],
+      'questions': [
+        for (final q in questions)
+          {
+            'question': q.question,
+            if (q.answer != null && q.answer!.trim().isNotEmpty)
+              'answer': q.answer,
+            if (q.explanation != null && q.explanation!.trim().isNotEmpty)
+              'explanation': q.explanation,
+          },
+      ],
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.knowledgeSummarySystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: version,
+      maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
+    );
+    return _parseKnowledgeSummary(raw);
+  }
+
+  String _parseKnowledgeSummary(String raw) {
+    final map = _requireJsonObject(raw);
+    final md = '${map['summary_markdown'] ?? map['summaryMarkdown'] ?? ''}'
+        .trim();
+    if (md.isEmpty) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi tóm tắt kiến thức trống hoặc không hợp lệ.',
+        code: 'knowledge_summary_schema',
+      );
+    }
+    return md;
+  }
+
+  @override
   Future<Map<String, SemanticCanonicalization>> canonicalizeQuestions(
     List<CanonicalizeItem> items,
   ) async {

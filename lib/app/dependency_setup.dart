@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:studee_pc/data/catalog_database/catalog_database.dart';
 import 'package:studee_pc/data/deepseek/deepseek_client_impl.dart';
 import 'package:studee_pc/data/file_storage/app_paths.dart';
-import 'package:studee_pc/data/file_storage/model_bundle.dart';
 import 'package:studee_pc/data/file_storage/subject_file_store.dart';
+import 'package:studee_pc/data/mathpix/mathpix_client.dart';
+import 'package:studee_pc/data/mathpix/mathpix_ocr_service.dart';
 import 'package:studee_pc/data/repositories/credentials_repository_impl.dart';
 import 'package:studee_pc/data/repositories/knowledge_retriever_impl.dart';
 import 'package:studee_pc/data/repositories/subject_repository_impl.dart';
@@ -22,7 +23,6 @@ import 'package:studee_pc/features/settings/application/settings_service.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/platform/desktop_bootstrap.dart';
 import 'package:studee_pc/platform/desktop_integration_impl.dart';
-import 'package:studee_pc/platform/ocr_worker_client.dart';
 
 /// Application paths (ApplicationData root).
 final appPathsProvider = Provider<AppPaths>((ref) => AppPaths());
@@ -74,20 +74,21 @@ final knowledgeRetrieverProvider = Provider<KnowledgeRetriever>((ref) {
   );
 });
 
+final mathpixClientProvider = Provider<MathpixClient>((ref) {
+  return MathpixClient(
+    credentials: ref.watch(credentialsRepositoryProvider),
+  );
+});
+
 final ocrServiceProvider = Provider<OcrService>((ref) {
-  final paths = ref.watch(appPathsProvider);
-  final bundle = ref.watch(modelBundleProvider);
-  // Real OCR by default; set OCR_FORCE_MOCK=1 in the environment to force mock.
+  // Mathpix cloud OCR. OCR_FORCE_MOCK=1 keeps a local stub for offline tests.
   final forceMock =
       Platform.environment['OCR_FORCE_MOCK']?.trim().toLowerCase() == '1' ||
           Platform.environment['OCR_FORCE_MOCK']?.trim().toLowerCase() ==
               'true';
-  return OcrWorkerClient(
+  return MathpixOcrService(
+    client: ref.watch(mathpixClientProvider),
     forceMock: forceMock,
-    modelDirResolver: () async {
-      await bundle.ensureInstalled();
-      return paths.paddleOcrModelDir();
-    },
   );
 });
 
@@ -97,20 +98,11 @@ final desktopIntegrationProvider = Provider<DesktopIntegration>((ref) {
   return impl;
 });
 
-/// Ensures the bundled PaddleOCR model is present under ApplicationData.
-final modelBundleProvider = Provider<ModelBundle>((ref) {
-  return ModelBundle(paths: ref.watch(appPathsProvider));
-});
-
-final modelBundleInitProvider = FutureProvider<void>((ref) async {
-  final bundle = ref.watch(modelBundleProvider);
-  await bundle.ensureInstalled();
-});
-
 final settingsServiceProvider = Provider<SettingsService>((ref) {
   return SettingsService(
     credentials: ref.watch(credentialsRepositoryProvider),
     deepSeek: ref.watch(deepSeekClientProvider),
+    mathpix: ref.watch(mathpixClientProvider),
   );
 });
 

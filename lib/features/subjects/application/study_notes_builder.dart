@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:studee_pc/domain/entities/question.dart';
+import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
 
 /// Builds a concise Q&A study-notes Markdown document for memorization.
 ///
@@ -24,8 +25,24 @@ abstract final class StudyNotesBuilder {
     return file;
   }
 
+  static Future<File> writePdfToFile({
+    required String destinationPath,
+    required List<int> bytes,
+  }) async {
+    final path = destinationPath.toLowerCase().endsWith('.pdf')
+        ? destinationPath
+        : '$destinationPath.pdf';
+    final file = File(path);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
   /// Resolves the answer as meaning/text — never a bare A/B/C letter.
-  static String? answerMeaning(Question q) {
+  ///
+  /// [compact] flattens/shortens for tips; leave false for Markdown export
+  /// so code blocks stay readable.
+  static String? answerMeaning(Question q, {bool compact = true}) {
     var content = q.answerContent?.trim();
     final label = q.answerLabel?.trim();
 
@@ -44,10 +61,11 @@ abstract final class StudyNotesBuilder {
       }
     }
 
-    if (content != null && content.isNotEmpty && !_isBareLabel(content)) {
-      return _shorten(_oneLine(content), 200);
+    if (content == null || content.isEmpty || _isBareLabel(content)) {
+      return null;
     }
-    return null;
+    if (!compact) return content.trim();
+    return _shorten(_oneLine(content), 200);
   }
 
   static bool _isBareLabel(String value) {
@@ -68,10 +86,12 @@ Trong phạm vi pháp luật cho phép, tác giả không chịu trách nhiệm 
 /// Pure function — easy to unit-test.
 ///
 /// [tipsByQuestionId] maps question id → LLM mnemonic tip.
+/// [knowledgeSummaryMarkdown] is an optional grounded summary section.
 String buildStudyNotesMarkdown({
   required String subjectName,
   required List<Question> questions,
   Map<String, String> tipsByQuestionId = const {},
+  String? knowledgeSummaryMarkdown,
 }) {
   final sorted = List<Question>.from(
     questions.where((q) => q.content.trim().isNotEmpty),
@@ -81,6 +101,17 @@ String buildStudyNotesMarkdown({
   buf.writeln('# ${_oneLine(subjectName)} — nhớ đáp án');
   buf.writeln();
   buf.writeln(StudyNotesBuilder.disclaimerMarkdown);
+  buf.writeln();
+
+  final summary = knowledgeSummaryMarkdown?.trim();
+  if (summary != null && summary.isNotEmpty) {
+    buf.writeln('## Lý thuyết');
+    buf.writeln();
+    buf.writeln(_stripDuplicateTheoryHeading(summary));
+    buf.writeln();
+  }
+
+  buf.writeln('## Danh sách câu hỏi');
   buf.writeln();
 
   if (sorted.isEmpty) {
@@ -93,14 +124,20 @@ String buildStudyNotesMarkdown({
     final heading = q.questionNumber?.trim().isNotEmpty == true
         ? q.questionNumber!.trim()
         : '${i + 1}';
-    final meaning = StudyNotesBuilder.answerMeaning(q);
+    final meaning = StudyNotesBuilder.answerMeaning(q, compact: false);
     final tip = tipsByQuestionId[q.id]?.trim();
 
-    buf.writeln('## $heading');
-    buf.writeln('**Hỏi:** ${_compactStem(q.content)}');
+    buf.writeln('### $heading');
+    buf.writeln('**Hỏi:**');
+    buf.writeln();
+    buf.writeln(StudyNotesMarkdownCode.formatBody(q.content));
+    buf.writeln();
+    buf.writeln('**Đáp:**');
     buf.writeln();
     buf.writeln(
-      '**Đáp:** ${meaning ?? '(chưa có)'}',
+      meaning == null
+          ? '(chưa có)'
+          : StudyNotesMarkdownCode.formatBody(meaning),
     );
     if (tip != null && tip.isNotEmpty) {
       buf.writeln();
@@ -112,13 +149,16 @@ String buildStudyNotesMarkdown({
   return '${buf.toString().trimRight()}\n';
 }
 
-String _compactStem(String raw) {
-  return raw
-      .replaceAll('\r\n', '\n')
-      .split('\n')
-      .map((l) => l.trimRight())
-      .where((l) => l.trim().isNotEmpty)
-      .join(' ');
+String _stripDuplicateTheoryHeading(String markdown) {
+  return markdown
+      .replaceFirst(
+        RegExp(
+          r'^#+\s*(Lý thuyết|Tóm tắt kiến thức)\s*\n+',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .trim();
 }
 
 String _oneLine(String raw) =>

@@ -87,6 +87,7 @@ class SolveSessionState {
     this.rawText,
     this.ocrConfidence,
     this.needsOcrReview = false,
+    this.needsQuestionConfirm = false,
     this.parsedQuestion,
     this.result,
     this.errorMessage,
@@ -98,6 +99,8 @@ class SolveSessionState {
   final String? rawText;
   final double? ocrConfidence;
   final bool needsOcrReview;
+  /// User must confirm/edit question before re-solving ("Giải lại").
+  final bool needsQuestionConfirm;
   final ParsedQuestion? parsedQuestion;
   final SolveResult? result;
   final String? errorMessage;
@@ -109,6 +112,7 @@ class SolveSessionState {
     String? rawText,
     double? ocrConfidence,
     bool? needsOcrReview,
+    bool? needsQuestionConfirm,
     ParsedQuestion? parsedQuestion,
     SolveResult? result,
     String? errorMessage,
@@ -122,6 +126,8 @@ class SolveSessionState {
       rawText: rawText ?? this.rawText,
       ocrConfidence: ocrConfidence ?? this.ocrConfidence,
       needsOcrReview: needsOcrReview ?? this.needsOcrReview,
+      needsQuestionConfirm:
+          needsQuestionConfirm ?? this.needsQuestionConfirm,
       parsedQuestion: parsedQuestion ?? this.parsedQuestion,
       result: clearResult ? null : (result ?? this.result),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -193,6 +199,7 @@ class SolveService {
     );
 
     try {
+      await prepareCredentials();
       await _dbManager.open(subjectId);
       await _insertSession(
         sessionId: sessionId,
@@ -233,6 +240,7 @@ class SolveService {
     );
 
     try {
+      await prepareCredentials();
       await _dbManager.open(subjectId);
       await _insertSession(
         sessionId: sessionId,
@@ -299,11 +307,13 @@ class SolveService {
         stage: SolvePipelineStage.parsing,
         rawText: reviewedText,
         needsOcrReview: false,
+        needsQuestionConfirm: false,
         clearError: true,
         clearResult: true,
       ),
     );
     try {
+      await prepareCredentials();
       await _dbManager.open(subjectId);
       return _runPipeline(
         subjectId: subjectId,
@@ -329,6 +339,40 @@ class SolveService {
       );
     }
     return solveFromText(subjectId: subjectId, text: text);
+  }
+
+  /// Enter edit/confirm mode for "Giải lại" instead of solving immediately.
+  Result<void> beginResolveAgain() {
+    final text = _state.rawText;
+    if (text == null || text.trim().isEmpty) {
+      return const Failure(
+        ValidationFailure(
+          userMessage: 'Không có câu hỏi để giải lại.',
+          code: 'no_question_to_retry',
+        ),
+      );
+    }
+    _emit(
+      _state.copyWith(
+        stage: SolvePipelineStage.idle,
+        needsQuestionConfirm: true,
+        needsOcrReview: false,
+        clearResult: true,
+        clearError: true,
+        rawText: text,
+      ),
+    );
+    return const Success(null);
+  }
+
+  /// Warm Keychain once before OCR / DeepSeek (avoids multiple unlock prompts).
+  Future<void> prepareCredentials() async {
+    try {
+      await _credentials.loadAll();
+    } on Object catch (e) {
+      _log.warning('prepareCredentials failed: ${e.runtimeType}');
+      rethrow;
+    }
   }
 
   Future<Result<void>> markIncorrect({

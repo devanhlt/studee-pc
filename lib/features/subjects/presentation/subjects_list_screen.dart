@@ -7,6 +7,7 @@ import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
+import 'package:studee_pc/features/subjects/presentation/study_notes_export_dialog.dart';
 
 class SubjectsListScreen extends ConsumerWidget {
   const SubjectsListScreen({super.key});
@@ -424,11 +425,14 @@ Future<void> _exportStudyNotes(
   WidgetRef ref,
   Subject subject,
 ) async {
+  final format = await showStudyNotesFormatDialog(context);
+  if (format == null || !context.mounted) return;
+
   final path = await FilePicker.platform.saveFile(
     dialogTitle: 'Xuất tài liệu',
-    fileName: '${subject.name}-ghi-chu.md',
+    fileName: '${subject.name}-ghi-chu.${format.fileExtension}',
     type: FileType.custom,
-    allowedExtensions: const ['md'],
+    allowedExtensions: [format.fileExtension],
   );
   if (path == null) return;
 
@@ -443,7 +447,7 @@ Future<void> _exportStudyNotes(
             SizedBox(width: 20),
             Expanded(
               child: Text(
-                'Đang tạo mẹo nhớ bằng AI…\nCó thể mất một lúc.',
+                'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
               ),
             ),
           ],
@@ -457,11 +461,12 @@ Future<void> _exportStudyNotes(
           subjectId: subject.id,
           subjectName: subject.name,
           destinationPath: path,
+          format: format,
         );
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xuất ghi chú: $out')),
+        SnackBar(content: Text('Đã xuất tài liệu: $out')),
       );
     }
   } on Object catch (e) {

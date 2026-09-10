@@ -31,8 +31,6 @@ class _StudyOverlayAppState extends ConsumerState<StudyOverlayApp> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(modelBundleInitProvider);
-
     final router = ref.watch(goRouterProvider);
 
     return MaterialApp.router(

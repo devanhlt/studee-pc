@@ -13,6 +13,7 @@ import 'package:studee_pc/domain/enums/source_type.dart';
 import 'package:studee_pc/domain/enums/verification_status.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_builder.dart';
+import 'package:studee_pc/features/subjects/application/study_notes_pdf.dart';
 
 final subjectsListProvider =
     FutureProvider.autoDispose<List<Subject>>((ref) async {
@@ -267,24 +268,37 @@ class SubjectsActions {
     return _ref.read(subjectRepositoryProvider).exportSubject(id, destination);
   }
 
-  /// Writes a concise Q&A study-notes Markdown file with LLM mnemonic tips.
-  /// Requires a DeepSeek API key. Returns the path written.
+  /// Writes study-notes as Markdown or PDF (LLM summary + tips).
+  /// Requires a DeepSeek API key.
   Future<String> exportStudyNotes({
     required String subjectId,
     required String subjectName,
     required String destinationPath,
+    StudyNotesExportFormat format = StudyNotesExportFormat.markdown,
   }) async {
-    final questions = await _ref
-        .read(subjectContentProvider)
-        .listQuestionsWithChoices(subjectId);
+    final content = _ref.read(subjectContentProvider);
+    final questions = await content.listQuestionsWithChoices(subjectId);
     if (StudyNotesBuilder.countExportable(questions) == 0) {
-      throw StateError('Môn học chưa có câu hỏi để xuất ghi chú.');
+      throw StateError('Môn học chưa có câu hỏi để xuất tài liệu.');
     }
 
+    final knowledgeUnits = await content.listKnowledge(subjectId);
+    final summaryUnits = _knowledgeUnitsForSummary(knowledgeUnits);
+    final summaryQa = <KnowledgeSummaryQa>[];
     final tipItems = <StudyTipItem>[];
     for (final q in questions) {
       if (q.content.trim().isEmpty) continue;
       final meaning = StudyNotesBuilder.answerMeaning(q);
+      final explanation = q.explanation?.trim();
+      summaryQa.add(
+        KnowledgeSummaryQa(
+          question: _clip(q.content.trim(), 1200),
+          answer: meaning == null ? null : _clip(meaning, 600),
+          explanation: explanation == null || explanation.isEmpty
+              ? null
+              : _clip(explanation, 1200),
+        ),
+      );
       if (meaning == null) continue;
       tipItems.add(
         StudyTipItem(
@@ -298,7 +312,13 @@ class SubjectsActions {
     final deepSeek = _ref.read(deepSeekClientProvider);
     deepSeek.beginCancellableSession();
     Map<String, String> tips = {};
+    String? knowledgeSummary;
     try {
+      knowledgeSummary = await deepSeek.generateKnowledgeSummary(
+        subjectName: subjectName,
+        units: summaryUnits,
+        questions: summaryQa.take(150).toList(),
+      );
       if (tipItems.isNotEmpty) {
         tips = await deepSeek.generateMemorizationTips(tipItems);
       }
@@ -310,12 +330,60 @@ class SubjectsActions {
       subjectName: subjectName,
       questions: questions,
       tipsByQuestionId: tips,
+      knowledgeSummaryMarkdown: knowledgeSummary,
     );
+
+    if (format == StudyNotesExportFormat.pdf) {
+      final bytes = await StudyNotesPdf.buildBytes(markdown);
+      final file = await StudyNotesBuilder.writePdfToFile(
+        destinationPath: destinationPath,
+        bytes: bytes,
+      );
+      return file.path;
+    }
+
     final file = await StudyNotesBuilder.writeToFile(
       destinationPath: destinationPath,
       markdown: markdown,
     );
     return file.path;
+  }
+
+  /// Prefer theory-like units; skip rejected / empty / pure question stems.
+  List<KnowledgeSummaryUnit> _knowledgeUnitsForSummary(
+    List<KnowledgeUnit> units,
+  ) {
+    const preferred = {
+      KnowledgeUnitType.theory,
+      KnowledgeUnitType.definition,
+      KnowledgeUnitType.formula,
+      KnowledgeUnitType.theorem,
+      KnowledgeUnitType.example,
+      KnowledgeUnitType.solution,
+      KnowledgeUnitType.note,
+      KnowledgeUnitType.table,
+    };
+    final out = <KnowledgeSummaryUnit>[];
+    for (final u in units) {
+      if (!u.verificationStatus.isRetrievable) continue;
+      if (!preferred.contains(u.type)) continue;
+      final text = u.content.trim();
+      if (text.isEmpty) continue;
+      out.add(
+        KnowledgeSummaryUnit(
+          type: u.type.wireName,
+          content: _clip(text, 2500),
+        ),
+      );
+      if (out.length >= 120) break;
+    }
+    return out;
+  }
+
+  static String _clip(String text, int maxChars) {
+    final one = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (one.length <= maxChars) return one;
+    return '${one.substring(0, maxChars - 1).trimRight()}…';
   }
 
   Future<Subject> importZip(String zipPath) {

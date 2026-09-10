@@ -28,8 +28,8 @@ Future<bool> ensureDeepSeekPrivacyConsent(
               'Ứng dụng sẽ gửi tới DeepSeek chỉ:\n'
               '• câu hỏi hiện tại (sau OCR/chuẩn hóa), và\n'
               '• một gói bằng chứng nhỏ (3–8 đơn vị kiến thức đã xếp hạng).\n\n'
-              'Tài liệu gốc, PDF, ảnh chụp màn hình và OCR đầy đủ luôn xử lý '
-              'cục bộ trên máy của bạn. Khóa API không bao giờ được ghi nhật ký.\n\n'
+              'Ảnh / PDF dùng cho OCR được gửi tới Mathpix (hoặc middleware OCR '
+              'bạn cấu hình). Khóa API không bao giờ được ghi nhật ký.\n\n'
               'Bạn có muốn tiếp tục không?',
               style: TextStyle(height: 1.45, color: AppColors.primaryText),
             ),
