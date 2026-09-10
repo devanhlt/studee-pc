@@ -74,6 +74,10 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
         _toast('Đã hủy chọn vùng.');
         return;
       }
+      if (captured.bytes.isEmpty) {
+        _toast('Ảnh chụp trống — thử lại.');
+        return;
+      }
       final result = await _solve.solveFromImage(
         subjectId: subjectId,
         bytes: captured.bytes,

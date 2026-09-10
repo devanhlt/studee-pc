@@ -259,28 +259,48 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
   final controller = TextEditingController();
   final name = await showDialog<String>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Thêm môn học'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Tên môn học',
-          hintText: 'Ví dụ: Đại số tuyến tính',
+    builder: (ctx) {
+      String? error;
+      return StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Thêm môn học'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Tên môn học',
+              hintText: 'Ví dụ: Đại số tuyến tính',
+              errorText: error,
+            ),
+            onSubmitted: (v) {
+              final trimmed = v.trim();
+              if (trimmed.isEmpty) {
+                setLocal(() => error = 'Tên không được trống.');
+                return;
+              }
+              Navigator.of(ctx).pop(trimmed);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final trimmed = controller.text.trim();
+                if (trimmed.isEmpty) {
+                  setLocal(() => error = 'Tên không được trống.');
+                  return;
+                }
+                Navigator.of(ctx).pop(trimmed);
+              },
+              child: const Text('Tạo'),
+            ),
+          ],
         ),
-        onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Hủy'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-          child: const Text('Tạo'),
-        ),
-      ],
-    ),
+      );
+    },
   );
   if (name == null || name.isEmpty) return;
   try {
@@ -312,24 +332,47 @@ Future<void> _showRenameDialog(
   final controller = TextEditingController(text: subject.name);
   final name = await showDialog<String>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Đổi tên môn học'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: 'Tên mới'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Hủy'),
+    builder: (ctx) {
+      String? error;
+      return StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Đổi tên môn học'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Tên mới',
+              errorText: error,
+            ),
+            onSubmitted: (v) {
+              final trimmed = v.trim();
+              if (trimmed.isEmpty) {
+                setLocal(() => error = 'Tên không được trống.');
+                return;
+              }
+              Navigator.of(ctx).pop(trimmed);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final trimmed = controller.text.trim();
+                if (trimmed.isEmpty) {
+                  setLocal(() => error = 'Tên không được trống.');
+                  return;
+                }
+                Navigator.of(ctx).pop(trimmed);
+              },
+              child: const Text('Lưu'),
+            ),
+          ],
         ),
-        FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-          child: const Text('Lưu'),
-        ),
-      ],
-    ),
+      );
+    },
   );
   if (name == null || name.isEmpty || name == subject.name) return;
   await ref.read(subjectsActionsProvider).rename(subject.id, name);

@@ -188,13 +188,23 @@ class SolveService {
     required String text,
     String inputType = 'pasted_text',
   }) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      const f = ValidationFailure(
+        userMessage: 'Câu hỏi không được trống.',
+        code: 'question_empty',
+      );
+      _emitFailure(f);
+      return const Failure(f);
+    }
+
     _cancelled = false;
     final sessionId = _uuid.v4();
     _emit(
       SolveSessionState(
         stage: SolvePipelineStage.parsing,
         sessionId: sessionId,
-        rawText: text,
+        rawText: trimmed,
       ),
     );
 
@@ -204,12 +214,12 @@ class SolveService {
       await _insertSession(
         sessionId: sessionId,
         inputType: inputType,
-        rawText: text,
+        rawText: trimmed,
       );
       return _runPipeline(
         subjectId: subjectId,
         sessionId: sessionId,
-        rawText: text,
+        rawText: trimmed,
       );
     } on AppFailure catch (f) {
       _emitFailure(f);
@@ -230,6 +240,15 @@ class SolveService {
     required Uint8List bytes,
     String inputType = 'image',
   }) async {
+    if (bytes.isEmpty) {
+      const f = ValidationFailure(
+        userMessage: 'Ảnh trống — hãy chọn hoặc chụp lại.',
+        code: 'image_empty',
+      );
+      _emitFailure(f);
+      return const Failure(f);
+    }
+
     _cancelled = false;
     final sessionId = _uuid.v4();
     _emit(
@@ -300,12 +319,22 @@ class SolveService {
     required String subjectId,
     required String reviewedText,
   }) async {
+    final trimmed = reviewedText.trim();
+    if (trimmed.isEmpty) {
+      const f = ValidationFailure(
+        userMessage: 'Nội dung câu hỏi không được trống.',
+        code: 'reviewed_text_empty',
+      );
+      _emitFailure(f);
+      return const Failure(f);
+    }
+
     final sessionId = _state.sessionId ?? _uuid.v4();
     _cancelled = false;
     _emit(
       _state.copyWith(
         stage: SolvePipelineStage.parsing,
-        rawText: reviewedText,
+        rawText: trimmed,
         needsOcrReview: false,
         needsQuestionConfirm: false,
         clearError: true,
@@ -318,7 +347,7 @@ class SolveService {
       return _runPipeline(
         subjectId: subjectId,
         sessionId: sessionId,
-        rawText: reviewedText,
+        rawText: trimmed,
       );
     } on AppFailure catch (f) {
       _emitFailure(f);

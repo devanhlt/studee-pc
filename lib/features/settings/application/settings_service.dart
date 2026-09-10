@@ -108,15 +108,31 @@ class SettingsService {
     if (id.isEmpty || key.isEmpty) {
       return const Failure(
         ValidationFailure(
-          userMessage: 'Nhập Mathpix app_id và app_key',
+          userMessage: 'Nhập App ID và App Key Mathpix.',
           code: 'mathpix_credentials_empty',
         ),
       );
     }
+    final url = baseUrl?.trim();
+    if (url != null && url.isNotEmpty) {
+      final uri = Uri.tryParse(url);
+      if (uri == null ||
+          !uri.hasScheme ||
+          !(uri.scheme == 'http' || uri.scheme == 'https') ||
+          uri.host.isEmpty) {
+        return const Failure(
+          ValidationFailure(
+            userMessage:
+                'Địa chỉ máy chủ không hợp lệ. Dùng http:// hoặc https://…',
+            code: 'mathpix_base_url_invalid',
+          ),
+        );
+      }
+    }
     try {
       await _credentials.setMathpixAppId(id);
       await _credentials.setMathpixAppKey(key);
-      await _credentials.setMathpixBaseUrl(baseUrl);
+      await _credentials.setMathpixBaseUrl(url);
       _log.info('Mathpix credentials saved');
       return const Success(null);
     } on AppFailure catch (f) {

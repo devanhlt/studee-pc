@@ -48,6 +48,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _saveDeepSeek() async {
+    if (_deepSeekController.text.trim().isEmpty) {
+      setState(() => _status = 'Nhập khóa API DeepSeek.');
+      return;
+    }
     setState(() {
       _busy = true;
       _status = null;
@@ -94,6 +98,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _saveMathpix() async {
+    if (_mathpixAppIdController.text.trim().isEmpty ||
+        _mathpixAppKeyController.text.trim().isEmpty) {
+      setState(() => _status = 'Nhập App ID và App Key Mathpix.');
+      return;
+    }
     setState(() {
       _busy = true;
       _status = null;

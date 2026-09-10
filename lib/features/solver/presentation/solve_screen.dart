@@ -82,12 +82,16 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _solveText() async {
-    // Text solve calls DeepSeek immediately.
+    final text = _textController.text.trim();
+    if (text.isEmpty) {
+      _toast('Nhập câu hỏi trước khi giải.');
+      return;
+    }
     if (!await _ensureApiKey()) return;
     setState(() => _busy = true);
     final result = await _service.solveFromText(
       subjectId: widget.subjectId,
-      text: _textController.text,
+      text: text,
     );
     setState(() => _busy = false);
     _handle(result);
@@ -101,6 +105,10 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     );
     final bytes = picked?.files.single.bytes;
     if (bytes == null) return;
+    if (bytes.isEmpty) {
+      _toast('Ảnh trống — hãy chọn file khác.');
+      return;
+    }
     setState(() => _busy = true);
     final result = await _service.solveFromImage(
       subjectId: widget.subjectId,
@@ -130,6 +138,11 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
         }
         return;
       }
+      if (captured.bytes.isEmpty) {
+        setState(() => _busy = false);
+        _toast('Ảnh chụp trống — thử lại.');
+        return;
+      }
       final result = await _service.solveFromImage(
         subjectId: widget.subjectId,
         bytes: captured.bytes,
@@ -153,12 +166,16 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _continueOcr() async {
-    // Continuing after OCR review triggers DeepSeek.
+    final text = _ocrController.text.trim();
+    if (text.isEmpty) {
+      _toast('Nội dung câu hỏi không được trống.');
+      return;
+    }
     if (!await _ensureApiKey()) return;
     setState(() => _busy = true);
     final result = await _service.continueWithReviewedText(
       subjectId: widget.subjectId,
-      reviewedText: _ocrController.text,
+      reviewedText: text,
     );
     setState(() => _busy = false);
     _handle(result);
@@ -180,14 +197,26 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _confirmQuestionAndSolve() async {
+    final text = _textController.text.trim();
+    if (text.isEmpty) {
+      _toast('Câu hỏi không được trống.');
+      return;
+    }
     if (!await _ensureApiKey()) return;
     setState(() => _busy = true);
     final result = await _service.solveFromText(
       subjectId: widget.subjectId,
-      text: _textController.text,
+      text: text,
     );
     setState(() => _busy = false);
     _handle(result);
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   void _handle(Result<SolveResult> result) {

@@ -323,6 +323,15 @@ class IngestionService {
     required String fileName,
     required SourceType type,
   }) async {
+    if (bytes.isEmpty) {
+      return const Failure(
+        ValidationFailure(
+          userMessage: 'Tệp trống — hãy chọn file khác.',
+          code: 'source_bytes_empty',
+        ),
+      );
+    }
+
     _cancelled = false;
     final jobId = _uuid.v4();
     final sourceId = _uuid.v4();
@@ -582,6 +591,15 @@ class IngestionService {
         ),
       );
     }
+    if (reviewedPages.isEmpty ||
+        reviewedPages.every((p) => p.text.trim().isEmpty)) {
+      return const Failure(
+        ValidationFailure(
+          userMessage: 'Nội dung trang không được trống.',
+          code: 'reviewed_pages_empty',
+        ),
+      );
+    }
     if (_cancelled) {
       return const Failure(CancelledFailure(code: 'cancelled'));
     }
@@ -827,6 +845,17 @@ class IngestionService {
       );
     }
 
+    final selectedUnits = units.where((u) => u.selected).toList();
+    final selectedQuestions = questions.where((q) => q.selected).toList();
+    if (selectedUnits.isEmpty && selectedQuestions.isEmpty) {
+      return const Failure(
+        ValidationFailure(
+          userMessage: 'Chọn ít nhất một mục kiến thức hoặc câu hỏi để lưu.',
+          code: 'structure_selection_empty',
+        ),
+      );
+    }
+
     try {
       final db = _dbManager.requireActive();
       _emit(
@@ -841,8 +870,6 @@ class IngestionService {
       await _updateJob(db, current.jobId, IngestionJobStatus.saving);
 
       final now = DateTime.now().toUtc().millisecondsSinceEpoch;
-      final selectedUnits = units.where((u) => u.selected).toList();
-      final selectedQuestions = questions.where((q) => q.selected).toList();
 
       // Canonical semantic keys for selected questions (best-effort).
       Map<String, SemanticCanonicalization> semanticById = {};

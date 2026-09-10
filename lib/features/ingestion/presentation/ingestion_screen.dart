@@ -94,10 +94,17 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     );
     final file = result?.files.single;
     if (file?.bytes == null) return;
+    if (file!.bytes!.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tệp trống — hãy chọn file khác.')),
+      );
+      return;
+    }
     setState(() => _starting = true);
     final r = await _service.startFromImage(
       subjectId: widget.subjectId,
-      bytes: file!.bytes!,
+      bytes: file.bytes!,
       fileName: file.name,
       type: SourceType.image,
     );
@@ -115,6 +122,15 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Đã hủy chọn vùng.')),
+          );
+        }
+        return;
+      }
+      if (captured.bytes.isEmpty) {
+        setState(() => _starting = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ảnh chụp trống — thử lại.')),
           );
         }
         return;
@@ -141,29 +157,42 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     final controller = TextEditingController();
     final text = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Dán văn bản'),
-        content: SizedBox(
-          width: 480,
-          child: TextField(
-            controller: controller,
-            maxLines: 12,
-            decoration: const InputDecoration(
-              hintText: 'Dán nội dung tài liệu tại đây…',
+      builder: (ctx) {
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) => AlertDialog(
+            title: const Text('Dán văn bản'),
+            content: SizedBox(
+              width: 480,
+              child: TextField(
+                controller: controller,
+                maxLines: 12,
+                decoration: InputDecoration(
+                  hintText: 'Dán nội dung tài liệu tại đây…',
+                  errorText: error,
+                ),
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final value = controller.text.trim();
+                  if (value.isEmpty) {
+                    setLocal(() => error = 'Nội dung không được trống.');
+                    return;
+                  }
+                  Navigator.pop(ctx, value);
+                },
+                child: const Text('Tiếp tục'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Tiếp tục'),
-          ),
-        ],
-      ),
+        );
+      },
     );
     if (text == null) return;
     setState(() => _starting = true);
@@ -183,10 +212,17 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     );
     final file = result?.files.single;
     if (file?.bytes == null) return;
+    if (file!.bytes!.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tệp trống — hãy chọn file khác.')),
+      );
+      return;
+    }
     setState(() => _starting = true);
     final r = await _service.startFromPdf(
       subjectId: widget.subjectId,
-      bytes: Uint8List.fromList(file!.bytes!),
+      bytes: Uint8List.fromList(file.bytes!),
       fileName: file.name,
     );
     setState(() => _starting = false);
@@ -227,6 +263,13 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
           ),
         )
         .toList();
+    if (reviewed.every((p) => p.text.trim().isEmpty)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nội dung trang không được trống.')),
+      );
+      return;
+    }
     final result = await _service.submitTextReview(reviewed);
     result.when(
       success: (_) {},
@@ -240,6 +283,17 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   }
 
   Future<void> _submitStructure(IngestionState state) async {
+    final hasSelection = state.draftUnits.any((u) => u.selected) ||
+        state.draftQuestions.any((q) => q.selected);
+    if (!hasSelection) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chọn ít nhất một mục kiến thức hoặc câu hỏi để lưu.'),
+        ),
+      );
+      return;
+    }
     final result = await _service.submitStructureReview(
       units: state.draftUnits,
       questions: state.draftQuestions,
