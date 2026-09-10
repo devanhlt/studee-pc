@@ -111,7 +111,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _mathpixAppIdController.clear();
         _mathpixAppKeyController.clear();
         _refreshCredentials();
-        setState(() => _status = 'Đã lưu Mathpix credentials.');
+        setState(() => _status = 'Đã lưu thông tin Mathpix.');
       },
       failure: (f) => setState(() => _status = f.userMessage),
     );
@@ -128,7 +128,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       success: (_) {
         _mathpixBaseUrlController.clear();
         _refreshCredentials();
-        setState(() => _status = 'Đã xóa Mathpix credentials.');
+        setState(() => _status = 'Đã xóa thông tin Mathpix.');
       },
       failure: (f) => setState(() => _status = f.userMessage),
     );
@@ -217,8 +217,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Khóa lưu trong kho bảo mật hệ thống (Keychain / Credential '
-            'Manager). Không ghi vào CSDL hay nhật ký.',
+            'Khóa được lưu an toàn trên máy (Keychain / Credential Manager), '
+            'không ghi vào cơ sở dữ liệu hay nhật ký.',
             style: TextStyle(color: AppColors.secondaryText, height: 1.4),
           ),
           const SizedBox(height: 16),
@@ -228,15 +228,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.12),
+                color: AppColors.elevated,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.warning.withValues(alpha: 0.4),
-                ),
+                border: Border.all(color: AppColors.border),
               ),
               child: const Text(
-                'Nhập khóa API DeepSeek',
-                style: TextStyle(color: AppColors.warning),
+                'Chưa có khóa DeepSeek — nhập bên dưới để bắt đầu giải bài.',
+                style: TextStyle(color: AppColors.secondaryText, height: 1.35),
               ),
             )
           else
@@ -297,8 +295,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'OCR ảnh/PDF dùng Mathpix API. Lấy app_id và app_key tại '
-            'console.mathpix.com. Có thể đổi Base URL sang middleware sau này.',
+            'Dùng để nhận dạng chữ/công thức từ ảnh hoặc PDF. Lấy App ID và '
+            'App Key tại console.mathpix.com.',
             style: TextStyle(color: AppColors.secondaryText, height: 1.4),
           ),
           const SizedBox(height: 16),
@@ -308,27 +306,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.12),
+                color: AppColors.elevated,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.warning.withValues(alpha: 0.4),
-                ),
+                border: Border.all(color: AppColors.border),
               ),
               child: const Text(
-                'Nhập Mathpix app_id và app_key để dùng OCR',
-                style: TextStyle(color: AppColors.warning),
+                'Chưa cấu hình OCR — nhập App ID và App Key để nhận dạng ảnh.',
+                style: TextStyle(color: AppColors.secondaryText, height: 1.35),
               ),
             )
           else
             Text(
-              'Đã lưu app_id: ${maskedMathpixId ?? '••••'}',
+              'Đã lưu App ID: ${maskedMathpixId ?? '••••'}',
               style: const TextStyle(color: AppColors.success),
             ),
           const SizedBox(height: 16),
           TextField(
             controller: _mathpixAppIdController,
             decoration: const InputDecoration(
-              labelText: 'Mathpix app_id',
+              labelText: 'App ID',
               hintText: 'your_app_id',
             ),
           ),
@@ -337,7 +333,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             controller: _mathpixAppKeyController,
             obscureText: _obscureMathpixKey,
             decoration: InputDecoration(
-              labelText: 'Mathpix app_key',
+              labelText: 'App Key',
               hintText: '••••••••',
               suffixIcon: IconButton(
                 onPressed: () =>
@@ -354,10 +350,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           TextField(
             controller: _mathpixBaseUrlController,
             decoration: InputDecoration(
-              labelText: 'Base URL (tuỳ chọn)',
+              labelText: 'Địa chỉ máy chủ (tuỳ chọn)',
               hintText: mathpixUrl,
               helperText:
-                  'Mặc định ${MathpixConfig.defaultBaseUrl}. Đổi khi dùng middleware.',
+                  'Để trống nếu dùng Mathpix mặc định. Chỉ đổi khi bạn có máy chủ riêng.',
             ),
           ),
           const SizedBox(height: 16),
@@ -367,16 +363,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               FilledButton(
                 onPressed: _busy ? null : _saveMathpix,
-                child: const Text('Lưu Mathpix'),
+                child: const Text('Lưu'),
               ),
               OutlinedButton(
                 onPressed: _busy ? null : _testMathpix,
-                child: const Text('Kiểm tra Mathpix'),
+                child: const Text('Kiểm tra'),
               ),
               TextButton(
                 onPressed: _busy ? null : _deleteMathpix,
                 child: const Text(
-                  'Xóa Mathpix',
+                  'Xóa',
                   style: TextStyle(color: AppColors.error),
                 ),
               ),
@@ -392,9 +388,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _status!,
               style: TextStyle(
                 color: _status!.contains('thành công') ||
-                        _status!.startsWith('Đã')
+                        (_status!.startsWith('Đã') &&
+                            !_status!.contains('Thoát'))
                     ? AppColors.success
-                    : AppColors.error,
+                    : _status!.contains('Thoát') ||
+                            _status!.contains('Đặt lại')
+                        ? AppColors.secondaryText
+                        : AppColors.error,
+                height: 1.4,
               ),
             ),
           ],
@@ -411,10 +412,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Nếu Cài đặt hệ thống hiện đã bật nhưng app vẫn xin quyền / '
-              'không chụp được: quyền bị “kẹt” (thường sau khi cài lại DMG '
-              'hoặc chạy song song bản Debug). Đặt lại quyền bên dưới, '
-              'thoát hẳn Studee, mở lại, rồi cho phép khi được hỏi.',
+              'Nếu đã bật quyền trong Cài đặt hệ thống nhưng vẫn không chụp '
+              'được: nhấn Đặt lại bên dưới, thoát hẳn Studee, mở lại, rồi '
+              'cho phép khi macOS hỏi.',
               style: TextStyle(
                 color: AppColors.secondaryText,
                 height: 1.45,
@@ -430,8 +430,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 final label = ok == null
                     ? 'Đang kiểm tra…'
                     : ok
-                        ? 'Trạng thái API: được phép'
-                        : 'Trạng thái API: chưa được phép';
+                        ? 'Quyền ghi màn hình: đã cho phép'
+                        : 'Quyền ghi màn hình: chưa cho phép';
                 return Text(
                   label,
                   style: TextStyle(
@@ -443,7 +443,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 12),
             OutlinedButton(
               onPressed: _busy ? null : _resetScreenCapture,
-              child: const Text('Đặt lại quyền Ghi màn hình'),
+              child: const Text('Đặt lại quyền ghi màn hình'),
             ),
           ],
           const SizedBox(height: 24),
@@ -458,9 +458,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'OCR: ảnh/PDF được gửi tới Mathpix (hoặc Base URL middleware). '
-            'DeepSeek chỉ nhận câu hỏi hiện tại và một gói bằng chứng nhỏ '
-            '(3–8 đơn vị kiến thức). Khóa API không bao giờ được ghi nhật ký.',
+            'Ảnh/PDF dùng nhận dạng chữ được gửi tới dịch vụ OCR. '
+            'Khi giải bài, DeepSeek chỉ nhận câu hỏi hiện tại và vài đoạn '
+            'kiến thức đã lưu liên quan. Khóa API không ghi vào nhật ký.',
             style: TextStyle(
               color: AppColors.secondaryText,
               height: 1.45,

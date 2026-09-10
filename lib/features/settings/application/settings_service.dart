@@ -124,7 +124,7 @@ class SettingsService {
     } on Object catch (e) {
       return Failure(
         UnknownFailure(
-          userMessage: 'Không lưu được Mathpix credentials.',
+          userMessage: 'Không lưu được thông tin Mathpix.',
           code: 'save_mathpix_failed',
           details: e.runtimeType.toString(),
         ),
@@ -142,7 +142,7 @@ class SettingsService {
     } on Object catch (e) {
       return Failure(
         UnknownFailure(
-          userMessage: 'Không xóa được Mathpix credentials.',
+          userMessage: 'Không xóa được thông tin Mathpix.',
           code: 'delete_mathpix_failed',
           details: e.runtimeType.toString(),
         ),

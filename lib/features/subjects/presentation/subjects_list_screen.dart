@@ -193,7 +193,7 @@ class _SubjectCard extends ConsumerWidget {
                     const SizedBox(height: 4),
                     Text(
                       '${subject.sourceCount} nguồn · '
-                      '${subject.knowledgeCount} KT · '
+                      '${subject.knowledgeCount} mục kiến thức · '
                       '${subject.questionCount} câu',
                       softWrap: true,
                       style: const TextStyle(

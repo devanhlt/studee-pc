@@ -114,12 +114,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
         setState(() => _starting = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Đã hủy chọn vùng — hoặc quyền Ghi màn hình bị kẹt. '
-                'Vào Cài đặt → Đặt lại quyền Ghi màn hình, thoát app rồi mở lại.',
-              ),
-            ),
+            const SnackBar(content: Text('Đã hủy chọn vùng.')),
           );
         }
         return;
@@ -704,13 +699,13 @@ class _StructureReviewState extends State<_StructureReview> {
             padding: const EdgeInsets.all(12),
             children: [
               const Text(
-                'Đơn vị kiến thức',
+                'Mục kiến thức',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               if (units.isEmpty)
                 const Text(
-                  'Không có đơn vị kiến thức.',
+                  'Chưa có mục kiến thức.',
                   style: TextStyle(color: AppColors.secondaryText),
                 ),
               ...units.map(

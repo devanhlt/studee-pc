@@ -48,14 +48,14 @@ enum SolvePipelineStage {
 extension SolvePipelineStageVi on SolvePipelineStage {
   String get labelVi => switch (this) {
         SolvePipelineStage.idle => 'Sẵn sàng',
-        SolvePipelineStage.capturing => 'Đang chụp màn hình',
-        SolvePipelineStage.recognizing => 'Đang nhận dạng văn bản',
-        SolvePipelineStage.parsing => 'Đang phân tích câu hỏi',
-        SolvePipelineStage.retrieving => 'Đang truy xuất kiến thức',
-        SolvePipelineStage.generating => 'Đang tạo câu trả lời',
+        SolvePipelineStage.capturing => 'Đang chụp màn hình…',
+        SolvePipelineStage.recognizing => 'Đang nhận dạng văn bản…',
+        SolvePipelineStage.parsing => 'Đang phân tích câu hỏi…',
+        SolvePipelineStage.retrieving => 'Đang tìm kiến thức liên quan…',
+        SolvePipelineStage.generating => 'Đang tạo câu trả lời…',
         SolvePipelineStage.completed => 'Hoàn tất',
         SolvePipelineStage.partialFailure => 'Hoàn tất một phần',
-        SolvePipelineStage.offlineFailure => 'Lỗi kết nối / API',
+        SolvePipelineStage.offlineFailure => 'Không kết nối được',
       };
 
   /// True while work is in flight (spinner / Hủy should cancel).
@@ -682,7 +682,7 @@ class SolveService {
         _state.copyWith(
           stage: SolvePipelineStage.generating,
           errorMessage:
-              'Phản hồi AI không hợp lệ so với gói bằng chứng. Đang thử sửa…',
+              'Phản hồi AI chưa khớp. Đang thử lại…',
         ),
       );
       try {

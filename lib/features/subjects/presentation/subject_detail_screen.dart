@@ -146,28 +146,41 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
               appBar: AppBar(
                 title: Text(subject.name),
                 actions: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: TextButton.icon(
-                      onPressed: () => _exportStudyNotes(subject),
-                      icon: const Icon(Icons.upload, size: 18),
-                      label: const Text('Xuất tài liệu'),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                      ),
-                    ),
+                  IconButton(
+                    tooltip: 'Làm mới',
+                    onPressed: () {
+                      switch (_tabs.index) {
+                        case 0:
+                          ref.invalidate(
+                            subjectByIdProvider(widget.subjectId),
+                          );
+                        case 1:
+                          ref.invalidate(
+                            subjectKnowledgeProvider(widget.subjectId),
+                          );
+                        case 2:
+                          ref.invalidate(
+                            subjectHistoryProvider(widget.subjectId),
+                          );
+                      }
+                    },
+                    icon: const Icon(Icons.refresh),
+                  ),
+                  IconButton(
+                    tooltip: 'Xuất tài liệu',
+                    onPressed: () => _exportStudyNotes(subject),
+                    icon: const Icon(Icons.upload_outlined),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 8, right: 8),
-                    child: FilledButton.icon(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: IconButton.filled(
+                      tooltip: 'Nhập kiến thức',
                       onPressed: _openImport,
-                      icon: const Icon(Icons.library_add, size: 18),
-                      label: const Text('Nhập kiến thức'),
-                      style: FilledButton.styleFrom(
+                      style: IconButton.styleFrom(
                         backgroundColor: AppColors.accent,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        foregroundColor: const Color(0xFF1A1208),
                       ),
+                      icon: const Icon(Icons.library_add),
                     ),
                   ),
                 ],
@@ -184,63 +197,19 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen>
               body: TabBarView(
                 controller: _tabs,
                 children: [
-                  _TabWithRefresh(
-                    onRefresh: () =>
-                        ref.invalidate(subjectByIdProvider(widget.subjectId)),
-                    child: SolveScreen(
-                      subjectId: widget.subjectId,
-                      embedded: true,
-                      shortcutsActive: _tabs.index == 0,
-                    ),
+                  SolveScreen(
+                    subjectId: widget.subjectId,
+                    embedded: true,
+                    shortcutsActive: _tabs.index == 0,
                   ),
-                  _TabWithRefresh(
-                    onRefresh: () => ref.invalidate(
-                      subjectKnowledgeProvider(widget.subjectId),
-                    ),
-                    child: _KnowledgeTab(subjectId: widget.subjectId),
-                  ),
-                  _TabWithRefresh(
-                    onRefresh: () => ref.invalidate(
-                      subjectHistoryProvider(widget.subjectId),
-                    ),
-                    child: HistoryList(subjectId: widget.subjectId),
-                  ),
+                  _KnowledgeTab(subjectId: widget.subjectId),
+                  HistoryList(subjectId: widget.subjectId),
                 ],
               ),
             ),
           ),
         );
       },
-    );
-  }
-}
-
-/// Shared refresh affordance at the top of each subject tab.
-class _TabWithRefresh extends StatelessWidget {
-  const _TabWithRefresh({
-    required this.onRefresh,
-    required this.child,
-  });
-
-  final VoidCallback onRefresh;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: IconButton(
-            tooltip: 'Làm mới',
-            visualDensity: VisualDensity.compact,
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh, size: 20),
-          ),
-        ),
-        Expanded(child: child),
-      ],
     );
   }
 }
@@ -258,7 +227,7 @@ class _KnowledgeTab extends ConsumerWidget {
       data: (items) {
         if (items.isEmpty) {
           return const _TabEmpty(
-            message: 'Chưa có đơn vị kiến thức. Hãy nhập tài liệu.',
+            message: 'Chưa có kiến thức. Hãy nhập tài liệu để bắt đầu.',
           );
         }
         return ListView.separated(

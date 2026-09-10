@@ -71,10 +71,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
     try {
       final captured = await desktop.captureRegion();
       if (captured == null) {
-        _toast(
-          'Đã hủy chọn vùng — hoặc quyền Ghi màn hình bị kẹt. '
-          'Vào Cài đặt → Đặt lại quyền Ghi màn hình, thoát app rồi mở lại.',
-        );
+        _toast('Đã hủy chọn vùng.');
         return;
       }
       final result = await _solve.solveFromImage(
@@ -336,18 +333,14 @@ class _ExpandedBody extends StatelessWidget {
           style: TextStyle(color: AppColors.secondaryText),
         );
       case SolvePipelineStage.capturing:
-        return const _StatusLine('Đang chụp màn hình…');
       case SolvePipelineStage.recognizing:
-        return const _StatusLine('Đang nhận dạng văn bản');
       case SolvePipelineStage.parsing:
-        return const _StatusLine('Đang phân tích câu hỏi…');
       case SolvePipelineStage.retrieving:
-        return const _StatusLine('Đang truy xuất kiến thức');
       case SolvePipelineStage.generating:
-        return const _StatusLine('Đang tạo câu trả lời');
+        return _StatusLine(state.stage.labelVi);
       case SolvePipelineStage.offlineFailure:
         return Text(
-          state.errorMessage ?? 'Lỗi kết nối / API',
+          state.errorMessage ?? 'Không kết nối được',
           style: const TextStyle(color: AppColors.error),
         );
       case SolvePipelineStage.partialFailure:
@@ -370,7 +363,7 @@ class _ExpandedBody extends StatelessWidget {
         }
         return Text(
           state.errorMessage ?? 'Hoàn tất một phần',
-          style: const TextStyle(color: AppColors.warning),
+          style: const TextStyle(color: AppColors.secondaryText),
         );
       case SolvePipelineStage.completed:
         if (state.result != null && subjectId != null) {

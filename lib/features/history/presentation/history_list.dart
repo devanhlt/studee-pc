@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/core/utils/answer_display.dart';
+import 'package:studee_pc/core/utils/user_facing_copy.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
@@ -49,6 +50,8 @@ class HistoryList extends ConsumerWidget {
             final confidence = item.confidence == null
                 ? null
                 : ConfidenceLevel.fromWire(item.confidence!).labelVi;
+            final statusVi = UserFacingCopy.sessionStatusVi(item.status);
+            final inputVi = UserFacingCopy.inputTypeVi(item.inputType);
 
             return Container(
               decoration: BoxDecoration(
@@ -71,8 +74,8 @@ class HistoryList extends ConsumerWidget {
                   Text(
                     [
                       fmt.format(item.createdAt.toLocal()),
-                      item.inputType,
-                      item.status,
+                      inputVi,
+                      if (statusVi.isNotEmpty) statusVi,
                       if (confidence != null) 'Tin cậy: $confidence',
                     ].join(' · '),
                     style: const TextStyle(
