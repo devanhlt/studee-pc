@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.studee" "\0"
-            VALUE "FileDescription", "studee_pc" "\0"
+            VALUE "FileDescription", "Studee" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "studee_pc" "\0"
+            VALUE "InternalName", "Studee" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.studee. All rights reserved." "\0"
             VALUE "OriginalFilename", "studee_pc.exe" "\0"
-            VALUE "ProductName", "studee_pc" "\0"
+            VALUE "ProductName", "Studee" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

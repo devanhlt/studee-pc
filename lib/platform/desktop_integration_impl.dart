@@ -81,11 +81,24 @@ class DesktopIntegrationImpl implements DesktopIntegration {
 
   @override
   Future<void> openScreenCaptureSettings() async {
-    if (!Platform.isMacOS) return;
-    try {
-      await ScreenCapturer.instance.requestAccess(onlyOpenPrefPane: true);
-    } on Object catch (e) {
-      _log.warning('openScreenCaptureSettings failed: ${e.runtimeType}');
+    if (Platform.isMacOS) {
+      try {
+        await ScreenCapturer.instance.requestAccess(onlyOpenPrefPane: true);
+      } on Object catch (e) {
+        _log.warning('openScreenCaptureSettings failed: ${e.runtimeType}');
+      }
+      return;
+    }
+    if (Platform.isWindows) {
+      try {
+        await Process.start(
+          'explorer.exe',
+          ['ms-settings:privacy'],
+          mode: ProcessStartMode.detached,
+        );
+      } on Object catch (e) {
+        _log.warning('open Windows privacy settings failed: ${e.runtimeType}');
+      }
     }
   }
 
@@ -102,7 +115,10 @@ class DesktopIntegrationImpl implements DesktopIntegration {
 
   @override
   Future<void> resetAndRequestScreenCaptureAccess() async {
-    if (!Platform.isMacOS) return;
+    if (!Platform.isMacOS) {
+      await openScreenCaptureSettings();
+      return;
+    }
     for (final id in _screenCaptureBundleIds) {
       try {
         final result = await Process.run('tccutil', [
@@ -189,6 +205,15 @@ class DesktopIntegrationImpl implements DesktopIntegration {
         throw ScreenCaptureFailure(
           userMessage: _screenCaptureHelp,
           details: e.runtimeType.toString(),
+        );
+      }
+      if (Platform.isWindows) {
+        throw ScreenCaptureFailure(
+          userMessage:
+              'Không chụp được vùng màn hình. Kiểm tra Quyền riêng tư '
+              'Windows (Cài đặt hệ thống → Quyền riêng tư), rồi thử lại.',
+          details: e.runtimeType.toString(),
+          code: 'screen_capture_windows',
         );
       }
       return null;

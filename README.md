@@ -50,9 +50,32 @@ flutter run -d macos
 flutter run -d windows
 ```
 
-### DeepSeek API key
+### DeepSeek / Mathpix API keys
 
-Open **Cài đặt** and paste your DeepSeek API key. Connection test sends no study content.
+Open **Cài đặt** and paste your DeepSeek (and Mathpix, if using image OCR) keys. Connection tests send no study content.
+
+### Windows notes
+
+- Use **Visual Studio** with the “Desktop development with C++” workload.
+- First run: `flutter config --enable-windows-desktop` then `flutter run -d windows`.
+- Camera / screen capture use Windows Privacy settings when prompted.
+- Study data lives under AppData; API keys use Windows Credential Manager.
+- Portable ZIP packaging (on a Windows machine or via GitHub Actions):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package_windows.ps1
+# Output: dist/Studee-<version>-windows.zip
+```
+
+Reuse an existing release build: `$env:SKIP_BUILD=1; .\scripts\package_windows.ps1`
+
+Uninstall data + Credential Manager entries:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall_windows.ps1
+```
+
+CI builds Windows artifacts on every `main` push (see `.github/workflows/windows.yml`).
 
 ### OCR worker (development)
 
@@ -125,6 +148,29 @@ Complete removal (app, study data, prefs, Keychain API key, OCR caches):
 ```
 
 Pass `--yes` to skip the confirmation prompt. See `HOW_TO_UNINSTALL.txt` on the DMG.
+
+## Package Windows ZIP
+
+On a Windows machine (or via GitHub Actions `Windows` workflow):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package_windows.ps1
+# Output: dist/Studee-<version>-windows.zip
+```
+
+The ZIP includes `studee_pc.exe`, Flutter runtime files, `HOW_TO_INSTALL.txt`,
+`HOW_TO_UNINSTALL.txt`, and `uninstall_windows.ps1`.
+
+## Uninstall (Windows)
+
+```powershell
+# From the extracted ZIP folder or repo:
+powershell -ExecutionPolicy Bypass -File .\uninstall_windows.ps1
+# or
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall_windows.ps1
+```
+
+Pass `-Yes` to skip the confirmation prompt.
 
 Note: macOS may leave a tiny `~/Library/Containers/com.studee.studeePc` metadata
 folder unless Terminal has **Full Disk Access** — that leftover is harmless.

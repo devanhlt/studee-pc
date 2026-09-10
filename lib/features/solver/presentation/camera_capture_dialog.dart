@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
@@ -68,7 +69,9 @@ class _CameraCaptureDialogState extends State<_CameraCaptureDialog> {
         _initializing = false;
         _error = e.description?.trim().isNotEmpty == true
             ? e.description!
-            : 'Không mở được camera. Kiểm tra quyền truy cập trong Cài đặt hệ thống.';
+            : (Platform.isWindows
+                ? 'Không mở được camera. Kiểm tra quyền Camera trong Cài đặt Windows (Quyền riêng tư).'
+                : 'Không mở được camera. Kiểm tra quyền truy cập trong Cài đặt hệ thống.');
       });
     } catch (e) {
       if (!mounted) return;
