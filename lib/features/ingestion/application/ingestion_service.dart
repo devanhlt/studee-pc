@@ -188,7 +188,12 @@ class IngestionService {
   Stream<IngestionState?> get states => _states.stream;
   IngestionState? get current => _current;
 
-  Future<bool> hasApiKey() => _credentials.hasDeepSeekApiKey();
+  Future<bool> hasApiKey() async {
+    try {
+      await _credentials.loadAll();
+    } on Object catch (_) {}
+    return _credentials.hasDeepSeekApiKey();
+  }
 
   Future<Result<IngestionState>> startFromImage({
     required String subjectId,
