@@ -28,6 +28,13 @@ abstract interface class CredentialsRepository {
 
   Future<void> setMathpixBaseUrl(String? baseUrl);
 
+  /// Write Mathpix fields in one Keychain update (single unlock).
+  Future<void> setMathpixCredentials({
+    required String appId,
+    required String appKey,
+    String? baseUrl,
+  });
+
   Future<void> deleteMathpixCredentials();
 
   Future<bool> hasMathpixCredentials();

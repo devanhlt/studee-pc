@@ -68,6 +68,17 @@ class _MemCreds implements CredentialsRepository {
 
   @override
   Future<void> setMathpixBaseUrl(String? baseUrl) async => mathpixUrl = baseUrl;
+
+  @override
+  Future<void> setMathpixCredentials({
+    required String appId,
+    required String appKey,
+    String? baseUrl,
+  }) async {
+    mathpixId = appId;
+    mathpixKey = appKey;
+    mathpixUrl = baseUrl;
+  }
 }
 
 void main() {

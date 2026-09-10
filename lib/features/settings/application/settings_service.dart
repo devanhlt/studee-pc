@@ -130,9 +130,11 @@ class SettingsService {
       }
     }
     try {
-      await _credentials.setMathpixAppId(id);
-      await _credentials.setMathpixAppKey(key);
-      await _credentials.setMathpixBaseUrl(url);
+      await _credentials.setMathpixCredentials(
+        appId: id,
+        appKey: key,
+        baseUrl: url,
+      );
       _log.info('Mathpix credentials saved');
       return const Success(null);
     } on AppFailure catch (f) {

@@ -48,6 +48,9 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
   SolveService get _solve => ref.read(solveServiceProvider);
 
   Future<bool> _ensureReady() async {
+    try {
+      await _solve.prepareCredentials();
+    } on Object catch (_) {}
     if (!await _solve.hasApiKey()) {
       _toast('Nhập khóa API DeepSeek');
       if (mounted) context.push('/settings');

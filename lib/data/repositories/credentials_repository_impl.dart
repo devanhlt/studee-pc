@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
@@ -6,8 +8,8 @@ import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
 
 /// Stores API keys in the OS credential store only.
 ///
-/// Uses a single [FlutterSecureStorage.readAll] when possible and keeps an
-/// in-memory cache until the next write/delete.
+/// All secrets live in **one** Keychain item ([_bundleKey]) so macOS typically
+/// prompts once per unlock, then [loadAll] serves an in-memory cache.
 class CredentialsRepositoryImpl implements CredentialsRepository {
   CredentialsRepositoryImpl({FlutterSecureStorage? storage})
       : _storage = storage ??
@@ -25,6 +27,10 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
               wOptions: WindowsOptions(useBackwardCompatibility: false),
             );
 
+  /// Single Keychain item — avoids one unlock prompt per secret.
+  static const String _bundleKey = 'studee_api_credentials_v1';
+
+  // Legacy per-key items (migrated into [_bundleKey] on first read).
   static const String _deepSeekKey = 'deepseek_api_key';
   static const String _mathpixAppIdKey = 'mathpix_app_id';
   static const String _mathpixAppKeyKey = 'mathpix_app_key';
@@ -55,7 +61,7 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
     final pending = _inFlight;
     if (pending != null) return pending;
 
-    final future = _readAllFromStorage();
+    final future = _readFromStorage();
     _inFlight = future;
     try {
       final snapshot = await future;
@@ -68,7 +74,38 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
     }
   }
 
-  Future<StoredApiCredentials> _readAllFromStorage() async {
+  Future<StoredApiCredentials> _readFromStorage() async {
+    try {
+      final raw = await _storage.read(key: _bundleKey);
+      if (raw != null && raw.trim().isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          return StoredApiCredentials.fromJson(decoded);
+        }
+        if (decoded is Map) {
+          return StoredApiCredentials.fromJson(
+            decoded.map((k, v) => MapEntry(k.toString(), v)),
+          );
+        }
+      }
+    } on Object catch (e) {
+      _log.warning('Bundle read failed (${e.runtimeType}); trying legacy keys');
+    }
+
+    final legacy = await _readLegacyKeys();
+    if (legacy.hasAny) {
+      try {
+        await _persistBundle(legacy);
+        await _deleteLegacyKeysBestEffort();
+        _log.info('Migrated legacy Keychain keys into single bundle');
+      } on Object catch (e) {
+        _log.warning('Legacy migration write failed (${e.runtimeType})');
+      }
+    }
+    return legacy;
+  }
+
+  Future<StoredApiCredentials> _readLegacyKeys() async {
     try {
       final all = await _storage.readAll();
       return StoredApiCredentials(
@@ -77,21 +114,12 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
         mathpixAppKey: _trimOrNull(all[_mathpixAppKeyKey]),
         mathpixBaseUrl: _trimOrNull(all[_mathpixBaseUrlKey]),
       );
-    } on Object catch (e) {
-      // macOS Keychain often fails on readAll() while per-key read() works.
-      _log.warning(
-        'readAll failed (${e.runtimeType}); falling back to per-key reads',
-      );
-      return _readKnownKeysIndividually();
+    } on Object catch (_) {
+      // Fall through to sequential reads.
     }
-  }
 
-  /// Per-key reads when [readAll] is unavailable.
-  ///
-  /// Reads are **sequential** so macOS Keychain typically prompts once; the
-  /// first unlock covers following reads in the same session.
-  Future<StoredApiCredentials> _readKnownKeysIndividually() async {
     try {
+      // One sequential pass — still may prompt per item on first migrate.
       final deepSeek = await _storage.read(key: _deepSeekKey);
       final mathpixId = await _storage.read(key: _mathpixAppIdKey);
       final mathpixKey = await _storage.read(key: _mathpixAppKeyKey);
@@ -112,19 +140,16 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
     }
   }
 
-  Future<void> _write(String key, String value, {required String label}) async {
-    final trimmed = value.trim();
+  Future<void> _persistBundle(StoredApiCredentials snapshot) async {
     try {
-      if (trimmed.isEmpty) {
-        await _storage.delete(key: key);
-        _invalidateCache();
-        return;
-      }
-      await _storage.write(key: key, value: trimmed);
-      _invalidateCache();
-      _log.info('$label updated in secure storage');
+      await _storage.write(
+        key: _bundleKey,
+        value: jsonEncode(snapshot.toJson()),
+      );
+      _cache = snapshot;
+      _inFlight = null;
     } on Object catch (e) {
-      _log.severe('Failed to write $key to secure storage', e);
+      _log.severe('Failed to write credentials bundle', e);
       final detail = e.toString();
       final missingEntitlement = detail.contains('-34018') ||
           detail.contains('entitlement') ||
@@ -132,7 +157,7 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
       throw UnknownFailure(
         userMessage: missingEntitlement
             ? 'Không lưu được khóa API: macOS Keychain thiếu quyền. '
-                'Hãy thoát app và chạy lại (flutter run) sau khi cập nhật entitlements.'
+                'Hãy thoát app và chạy lại sau khi cập nhật entitlements.'
             : 'Không lưu được khóa API vào kho bảo mật hệ thống.',
         code: 'secure_storage_write_failed',
         details: e.runtimeType.toString(),
@@ -140,20 +165,49 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
     }
   }
 
+  Future<void> _deleteLegacyKeysBestEffort() async {
+    for (final key in [
+      _deepSeekKey,
+      _mathpixAppIdKey,
+      _mathpixAppKeyKey,
+      _mathpixBaseUrlKey,
+    ]) {
+      try {
+        await _storage.delete(key: key);
+      } on Object catch (_) {}
+    }
+  }
+
+  Future<void> _update(
+    StoredApiCredentials Function(StoredApiCredentials current) transform,
+  ) async {
+    final current = await loadAll();
+    await _persistBundle(transform(current));
+  }
+
   @override
   Future<String?> getDeepSeekApiKey() async =>
       (await loadAll()).deepSeekApiKey;
 
   @override
-  Future<void> setDeepSeekApiKey(String apiKey) =>
-      _write(_deepSeekKey, apiKey, label: 'DeepSeek API key');
+  Future<void> setDeepSeekApiKey(String apiKey) async {
+    final trimmed = apiKey.trim();
+    await _update(
+      (c) => c.copyWith(
+        deepSeekApiKey: trimmed.isEmpty ? null : trimmed,
+        clearDeepSeek: trimmed.isEmpty,
+      ),
+    );
+    _log.info('DeepSeek API key updated in secure storage');
+  }
 
   @override
   Future<void> deleteDeepSeekApiKey() async {
     try {
-      await _storage.delete(key: _deepSeekKey);
-      _invalidateCache();
+      await _update((c) => c.copyWith(clearDeepSeek: true));
       _log.info('DeepSeek API key deleted from secure storage');
+    } on AppFailure {
+      rethrow;
     } on Object catch (e) {
       _log.severe('Failed to delete API key from secure storage', e);
       throw const UnknownFailure(
@@ -178,41 +232,70 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
       (await loadAll()).mathpixBaseUrl;
 
   @override
-  Future<void> setMathpixAppId(String appId) =>
-      _write(_mathpixAppIdKey, appId, label: 'Mathpix app_id');
+  Future<void> setMathpixAppId(String appId) async {
+    final trimmed = appId.trim();
+    await _update(
+      (c) => c.copyWith(
+        mathpixAppId: trimmed.isEmpty ? null : trimmed,
+        clearMathpixAppId: trimmed.isEmpty,
+      ),
+    );
+    _log.info('Mathpix app_id updated in secure storage');
+  }
 
   @override
-  Future<void> setMathpixAppKey(String appKey) =>
-      _write(_mathpixAppKeyKey, appKey, label: 'Mathpix app_key');
+  Future<void> setMathpixAppKey(String appKey) async {
+    final trimmed = appKey.trim();
+    await _update(
+      (c) => c.copyWith(
+        mathpixAppKey: trimmed.isEmpty ? null : trimmed,
+        clearMathpixAppKey: trimmed.isEmpty,
+      ),
+    );
+    _log.info('Mathpix app_key updated in secure storage');
+  }
 
   @override
   Future<void> setMathpixBaseUrl(String? baseUrl) async {
     final trimmed = baseUrl?.trim() ?? '';
-    try {
-      if (trimmed.isEmpty) {
-        await _storage.delete(key: _mathpixBaseUrlKey);
-      } else {
-        await _storage.write(key: _mathpixBaseUrlKey, value: trimmed);
-      }
-      _invalidateCache();
-      _log.info('Mathpix base URL updated in secure storage');
-    } on Object catch (e) {
-      _log.severe('Failed to write Mathpix base URL', e);
-      throw const UnknownFailure(
-        userMessage: 'Không lưu được URL Mathpix.',
-        code: 'secure_storage_write_failed',
-      );
-    }
+    await _update(
+      (c) => c.copyWith(
+        mathpixBaseUrl: trimmed.isEmpty ? null : trimmed,
+        clearMathpixBaseUrl: trimmed.isEmpty,
+      ),
+    );
+    _log.info('Mathpix base URL updated in secure storage');
+  }
+
+  @override
+  Future<void> setMathpixCredentials({
+    required String appId,
+    required String appKey,
+    String? baseUrl,
+  }) async {
+    final id = appId.trim();
+    final key = appKey.trim();
+    final url = baseUrl?.trim() ?? '';
+    await _update(
+      (c) => c.copyWith(
+        mathpixAppId: id.isEmpty ? null : id,
+        mathpixAppKey: key.isEmpty ? null : key,
+        mathpixBaseUrl: url.isEmpty ? null : url,
+        clearMathpixAppId: id.isEmpty,
+        clearMathpixAppKey: key.isEmpty,
+        clearMathpixBaseUrl: url.isEmpty,
+      ),
+    );
+    _log.info('Mathpix credentials updated in secure storage');
   }
 
   @override
   Future<void> deleteMathpixCredentials() async {
     try {
-      await _storage.delete(key: _mathpixAppIdKey);
-      await _storage.delete(key: _mathpixAppKeyKey);
-      await _storage.delete(key: _mathpixBaseUrlKey);
-      _invalidateCache();
+      await _update((c) => c.copyWith(clearMathpix: true));
       _log.info('Mathpix credentials deleted from secure storage');
+    } on AppFailure {
+      rethrow;
     } on Object catch (e) {
       _log.severe('Failed to delete Mathpix credentials', e);
       throw const UnknownFailure(

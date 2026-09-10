@@ -62,6 +62,12 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<bool> _ensureApiKey() async {
+    // Warm Keychain once; later Mathpix/DeepSeek reads hit the in-memory cache.
+    try {
+      await _service.prepareCredentials();
+    } on Object catch (_) {
+      // Still try hasApiKey — it may surface a clearer failure.
+    }
     if (await _service.hasApiKey()) {
       final store = ref.read(privacyConsentStoreProvider);
       return ensureDeepSeekPrivacyConsent(context, store: store);
@@ -109,6 +115,10 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
       _toast('Ảnh trống — hãy chọn file khác.');
       return;
     }
+    // Load DeepSeek + Mathpix in one Keychain unlock before OCR starts.
+    try {
+      await _service.prepareCredentials();
+    } on Object catch (_) {}
     setState(() => _busy = true);
     final result = await _service.solveFromImage(
       subjectId: widget.subjectId,
@@ -143,6 +153,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
         _toast('Ảnh chụp trống — thử lại.');
         return;
       }
+      try {
+        await _service.prepareCredentials();
+      } on Object catch (_) {}
       final result = await _service.solveFromImage(
         subjectId: widget.subjectId,
         bytes: captured.bytes,

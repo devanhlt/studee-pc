@@ -5,11 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
-import 'package:studee_pc/data/mathpix/mathpix_config.dart';
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
 import 'package:studee_pc/features/settings/application/settings_service.dart';
 
-/// Single Keychain read for the settings screen.
 final _settingsCredentialsProvider =
     FutureProvider.autoDispose<StoredApiCredentials>((ref) {
   return ref.watch(settingsServiceProvider).loadCredentials();
@@ -47,9 +45,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.invalidate(_settingsCredentialsProvider);
   }
 
+  Color get _statusColor {
+    final s = _status ?? '';
+    if (s.contains('thành công') ||
+        (s.startsWith('Đã') && !s.contains('Thoát') && !s.contains('Đặt lại'))) {
+      return AppColors.success;
+    }
+    if (s.contains('Thoát') || s.contains('Đặt lại')) {
+      return AppColors.secondaryText;
+    }
+    return AppColors.error;
+  }
+
   Future<void> _saveDeepSeek() async {
     if (_deepSeekController.text.trim().isEmpty) {
-      setState(() => _status = 'Nhập khóa API DeepSeek.');
+      setState(() => _status = 'Nhập khóa DeepSeek.');
       return;
     }
     setState(() {
@@ -100,7 +110,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _saveMathpix() async {
     if (_mathpixAppIdController.text.trim().isEmpty ||
         _mathpixAppKeyController.text.trim().isEmpty) {
-      setState(() => _status = 'Nhập App ID và App Key Mathpix.');
+      setState(() => _status = 'Nhập App ID và App Key.');
       return;
     }
     setState(() {
@@ -120,7 +130,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _mathpixAppIdController.clear();
         _mathpixAppKeyController.clear();
         _refreshCredentials();
-        setState(() => _status = 'Đã lưu thông tin Mathpix.');
+        setState(() => _status = 'Đã lưu Mathpix.');
       },
       failure: (f) => setState(() => _status = f.userMessage),
     );
@@ -137,7 +147,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       success: (_) {
         _mathpixBaseUrlController.clear();
         _refreshCredentials();
-        setState(() => _status = 'Đã xóa thông tin Mathpix.');
+        setState(() => _status = 'Đã xóa Mathpix.');
       },
       failure: (f) => setState(() => _status = f.userMessage),
     );
@@ -168,17 +178,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _status =
-            'Đã đặt lại quyền Ghi màn hình. Thoát hẳn Studee (Dock → Quit), '
-            'mở lại app, thử chụp một lần và cho phép khi được hỏi.';
+        _status = 'Đã đặt lại. Thoát hẳn Studee rồi mở lại để cấp quyền.';
       });
     } on Object catch (_) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _status =
-            'Không đặt lại được tự động. Chạy trong Terminal: '
-            './scripts/reset_screen_capture_permission.sh';
+        _status = 'Không đặt lại được. Thử lại hoặc cấp quyền trong Hệ thống.';
       });
     }
   }
@@ -187,27 +193,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final credsAsync = ref.watch(_settingsCredentialsProvider);
 
-    String? maskedDeepSeek;
-    String? maskedMathpixId;
     var hasKey = false;
     var hasMathpix = false;
-    var mathpixUrl = MathpixConfig.defaultBaseUrl;
+    String? maskedDeepSeek;
+    String? maskedMathpixId;
     credsAsync.whenData((c) {
       hasKey = c.hasDeepSeekApiKey;
       hasMathpix = c.hasMathpixCredentials;
       final key = c.deepSeekApiKey;
       if (key != null && key.isNotEmpty) {
-        maskedDeepSeek =
-            key.length <= 8 ? '••••••••' : '••••••••${key.substring(key.length - 4)}';
+        maskedDeepSeek = key.length <= 8
+            ? '••••••••'
+            : '••••${key.substring(key.length - 4)}';
       }
       final id = c.mathpixAppId;
       if (id != null && id.isNotEmpty) {
-        maskedMathpixId =
-            id.length <= 6 ? '••••••' : '••••${id.substring(id.length - 4)}';
-      }
-      final url = c.mathpixBaseUrl;
-      if (url != null && url.trim().isNotEmpty) {
-        mathpixUrl = url.trim();
+        maskedMathpixId = id.length <= 6
+            ? '••••••'
+            : '••••${id.substring(id.length - 4)}';
       }
     });
 
@@ -216,47 +219,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: AppLayout.pageInsets(context),
         children: [
-          const Text(
-            'DeepSeek API',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primaryText,
-            ),
+          _SectionTitle(
+            'DeepSeek',
+            trailing: credsAsync.isLoading
+                ? null
+                : Text(
+                    hasKey ? 'Đã lưu $maskedDeepSeek' : 'Chưa lưu',
+                    style: TextStyle(
+                      color: hasKey ? AppColors.success : AppColors.secondaryText,
+                      fontSize: 13,
+                    ),
+                  ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Khóa được lưu an toàn trên máy (Keychain / Credential Manager), '
-            'không ghi vào cơ sở dữ liệu hay nhật ký.',
-            style: TextStyle(color: AppColors.secondaryText, height: 1.4),
-          ),
-          const SizedBox(height: 16),
-          if (credsAsync.isLoading)
-            const LinearProgressIndicator()
-          else if (!hasKey)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.elevated,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Text(
-                'Chưa có khóa DeepSeek — nhập bên dưới để bắt đầu giải bài.',
-                style: TextStyle(color: AppColors.secondaryText, height: 1.35),
-              ),
-            )
-          else
-            Text(
-              'Đã lưu: ${maskedDeepSeek ?? '••••••••'}',
-              style: const TextStyle(color: AppColors.success),
-            ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           TextField(
             controller: _deepSeekController,
             obscureText: _obscureDeepSeek,
             decoration: InputDecoration(
-              labelText: 'Khóa API DeepSeek',
+              labelText: 'Khóa API',
               hintText: 'sk-...',
               suffixIcon: IconButton(
                 onPressed: () =>
@@ -269,81 +249,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              FilledButton(
-                onPressed: _busy ? null : _saveDeepSeek,
-                child: const Text('Lưu'),
-              ),
-              OutlinedButton(
-                onPressed: _busy ? null : _testDeepSeek,
-                child: const Text('Kiểm tra kết nối'),
-              ),
-              TextButton(
-                onPressed: _busy ? null : _deleteDeepSeek,
-                child: const Text(
-                  'Xóa khóa',
-                  style: TextStyle(color: AppColors.error),
-                ),
-              ),
-            ],
+          const SizedBox(height: 12),
+          _ActionRow(
+            busy: _busy,
+            onSave: _saveDeepSeek,
+            onTest: _testDeepSeek,
+            onDelete: _deleteDeepSeek,
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
-          const Text(
+          _SectionTitle(
             'Mathpix OCR',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primaryText,
-            ),
+            trailing: credsAsync.isLoading
+                ? null
+                : Text(
+                    hasMathpix ? 'Đã lưu $maskedMathpixId' : 'Chưa lưu',
+                    style: TextStyle(
+                      color: hasMathpix
+                          ? AppColors.success
+                          : AppColors.secondaryText,
+                      fontSize: 13,
+                    ),
+                  ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Dùng để nhận dạng chữ/công thức từ ảnh hoặc PDF. Lấy App ID và '
-            'App Key tại console.mathpix.com.',
-            style: TextStyle(color: AppColors.secondaryText, height: 1.4),
-          ),
-          const SizedBox(height: 16),
-          if (credsAsync.isLoading)
-            const LinearProgressIndicator()
-          else if (!hasMathpix)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.elevated,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Text(
-                'Chưa cấu hình OCR — nhập App ID và App Key để nhận dạng ảnh.',
-                style: TextStyle(color: AppColors.secondaryText, height: 1.35),
-              ),
-            )
-          else
-            Text(
-              'Đã lưu App ID: ${maskedMathpixId ?? '••••'}',
-              style: const TextStyle(color: AppColors.success),
-            ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           TextField(
             controller: _mathpixAppIdController,
-            decoration: const InputDecoration(
-              labelText: 'App ID',
-              hintText: 'your_app_id',
-            ),
+            decoration: const InputDecoration(labelText: 'App ID'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           TextField(
             controller: _mathpixAppKeyController,
             obscureText: _obscureMathpixKey,
             decoration: InputDecoration(
               labelText: 'App Key',
-              hintText: '••••••••',
               suffixIcon: IconButton(
                 onPressed: () =>
                     setState(() => _obscureMathpixKey = !_obscureMathpixKey),
@@ -355,152 +295,138 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _mathpixBaseUrlController,
-            decoration: InputDecoration(
-              labelText: 'Địa chỉ máy chủ (tuỳ chọn)',
-              hintText: mathpixUrl,
-              helperText:
-                  'Để trống nếu dùng Mathpix mặc định. Chỉ đổi khi bạn có máy chủ riêng.',
-            ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              FilledButton(
-                onPressed: _busy ? null : _saveMathpix,
-                child: const Text('Lưu'),
-              ),
-              OutlinedButton(
-                onPressed: _busy ? null : _testMathpix,
-                child: const Text('Kiểm tra'),
-              ),
-              TextButton(
-                onPressed: _busy ? null : _deleteMathpix,
-                child: const Text(
-                  'Xóa',
-                  style: TextStyle(color: AppColors.error),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: const Text(
+                'Nâng cao',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.secondaryText,
                 ),
               ),
-            ],
+              children: [
+                TextField(
+                  controller: _mathpixBaseUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'Máy chủ tuỳ chọn',
+                    hintText: 'https://…',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _ActionRow(
+            busy: _busy,
+            onSave: _saveMathpix,
+            onTest: _testMathpix,
+            onDelete: _deleteMathpix,
           ),
           if (_busy) ...[
             const SizedBox(height: 16),
             const LinearProgressIndicator(),
           ],
           if (_status != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               _status!,
-              style: TextStyle(
-                color: _status!.contains('thành công') ||
-                        (_status!.startsWith('Đã') &&
-                            !_status!.contains('Thoát'))
-                    ? AppColors.success
-                    : _status!.contains('Thoát') ||
-                            _status!.contains('Đặt lại')
-                        ? AppColors.secondaryText
-                        : AppColors.error,
-                height: 1.4,
-              ),
+              style: TextStyle(color: _statusColor, height: 1.35),
             ),
           ],
           if (Platform.isMacOS) ...[
             const SizedBox(height: 24),
             const Divider(),
-            const SizedBox(height: 12),
-            const Text(
-              'Ghi màn hình (macOS)',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Nếu đã bật quyền trong Cài đặt hệ thống nhưng vẫn không chụp '
-              'được: nhấn Đặt lại bên dưới, thoát hẳn Studee, mở lại, rồi '
-              'cho phép khi macOS hỏi.',
-              style: TextStyle(
-                color: AppColors.secondaryText,
-                height: 1.45,
-              ),
-            ),
-            const SizedBox(height: 12),
-            FutureBuilder<bool>(
-              future: ref
-                  .read(desktopIntegrationProvider)
-                  .isScreenCaptureAllowed(),
-              builder: (context, snap) {
-                final ok = snap.data;
-                final label = ok == null
-                    ? 'Đang kiểm tra…'
-                    : ok
-                        ? 'Quyền ghi màn hình: đã cho phép'
-                        : 'Quyền ghi màn hình: chưa cho phép';
-                return Text(
-                  label,
-                  style: TextStyle(
-                    color: ok == true ? AppColors.success : AppColors.secondaryText,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            const _SectionTitle('Ghi màn hình'),
+            const SizedBox(height: 10),
             OutlinedButton(
               onPressed: _busy ? null : _resetScreenCapture,
-              child: const Text('Đặt lại quyền ghi màn hình'),
+              child: const Text('Đặt lại quyền'),
             ),
           ],
           const SizedBox(height: 24),
           const Divider(),
-          const SizedBox(height: 12),
-          const Text(
-            'Quyền riêng tư',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Ảnh/PDF dùng nhận dạng chữ được gửi tới dịch vụ OCR. '
-            'Khi giải bài, DeepSeek chỉ nhận câu hỏi hiện tại và vài đoạn '
-            'kiến thức đã lưu liên quan. Khóa API không ghi vào nhật ký.',
-            style: TextStyle(
-              color: AppColors.secondaryText,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 12),
-          const Text(
-            'Phím tắt',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          const SizedBox(height: 16),
+          const _SectionTitle('Phím tắt'),
           const SizedBox(height: 8),
           Text(
             Platform.isMacOS
-                ? 'Trong môn học:\n'
-                    '  ⌘1 Giải · ⌘2 Kiến thức · ⌘3 Lịch sử\n'
-                    '  ⌘G / ⌘↵ Giải (tab Giải)'
-                : 'Trong môn học:\n'
-                    '  Ctrl+1 Giải · Ctrl+2 Kiến thức · Ctrl+3 Lịch sử\n'
-                    '  Ctrl+G / Ctrl+↵ Giải (tab Giải)',
+                ? '⌘1–3 đổi tab · ⌘G / ⌘↵ giải'
+                : 'Ctrl+1–3 đổi tab · Ctrl+G / Ctrl+↵ giải',
             style: const TextStyle(
               color: AppColors.secondaryText,
-              height: 1.45,
+              height: 1.4,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.title, {this.trailing});
+
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primaryText,
+            ),
+          ),
+        ),
+        if (trailing != null) trailing!,
+      ],
+    );
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.busy,
+    required this.onSave,
+    required this.onTest,
+    required this.onDelete,
+  });
+
+  final bool busy;
+  final VoidCallback onSave;
+  final VoidCallback onTest;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilledButton(
+          onPressed: busy ? null : onSave,
+          child: const Text('Lưu'),
+        ),
+        OutlinedButton(
+          onPressed: busy ? null : onTest,
+          child: const Text('Kiểm tra'),
+        ),
+        TextButton(
+          onPressed: busy ? null : onDelete,
+          child: const Text(
+            'Xóa',
+            style: TextStyle(color: AppColors.error),
+          ),
+        ),
+      ],
     );
   }
 }
