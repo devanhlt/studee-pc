@@ -43,6 +43,8 @@ class IngestionScreen extends ConsumerStatefulWidget {
 
 class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   final Map<int, TextEditingController> _pageControllers = {};
+  final _pasteController = TextEditingController();
+  final _pasteFocus = FocusNode();
   bool _starting = false;
 
   IngestionService get _service => ref.read(ingestionServiceProvider);
@@ -57,11 +59,14 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
       _clearPageControllers();
       _service.prepareForSubject(widget.subjectId);
       setState(() {});
+      _pasteFocus.requestFocus();
     });
   }
 
   @override
   void dispose() {
+    _pasteFocus.dispose();
+    _pasteController.dispose();
     _clearPageControllers();
     super.dispose();
   }
@@ -153,52 +158,19 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     }
   }
 
-  Future<void> _pasteText() async {
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (ctx) {
-        String? error;
-        return StatefulBuilder(
-          builder: (ctx, setLocal) => AlertDialog(
-            title: const Text('Dán văn bản'),
-            content: SizedBox(
-              width: 480,
-              child: TextField(
-                controller: controller,
-                maxLines: 12,
-                decoration: InputDecoration(
-                  hintText: 'Dán nội dung tài liệu tại đây…',
-                  errorText: error,
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Hủy'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final value = controller.text.trim();
-                  if (value.isEmpty) {
-                    setLocal(() => error = 'Nội dung không được trống.');
-                    return;
-                  }
-                  Navigator.pop(ctx, value);
-                },
-                child: const Text('Tiếp tục'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    if (text == null) return;
+  Future<void> _startFromPastedText([String? text]) async {
+    final value = (text ?? _pasteController.text).trim();
+    if (value.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nội dung không được trống.')),
+      );
+      return;
+    }
     setState(() => _starting = true);
     final r = await _service.startFromPastedText(
       subjectId: widget.subjectId,
-      text: text,
+      text: value,
     );
     setState(() => _starting = false);
     _handleStart(r);
@@ -318,36 +290,78 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
 
   void _startAnotherImport() {
     _clearPageControllers();
+    _pasteController.clear();
     _service.reset();
     setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _pasteFocus.requestFocus();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(ingestionStateProvider);
     final state = asyncState.asData?.value ?? _service.current;
+    final choosingSource =
+        state == null || state.status == IngestionJobStatus.queued;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nhập kiến thức'),
         actions: [
-          if (state != null && !state.status.isTerminal)
+          if (choosingSource) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: FilledButton(
+                onPressed: _starting ? null : () => _startFromPastedText(),
+                child: const Text('Bắt đầu'),
+              ),
+            ),
+            PopupMenuButton<_SourceMoreAction>(
+              tooltip: 'Thêm nguồn',
+              enabled: !_starting,
+              onSelected: (action) {
+                switch (action) {
+                  case _SourceMoreAction.image:
+                    _pickImage();
+                  case _SourceMoreAction.screenshot:
+                    _capture();
+                  case _SourceMoreAction.pdf:
+                    _pickPdf();
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: _SourceMoreAction.image,
+                  child: Text('Ảnh'),
+                ),
+                PopupMenuItem(
+                  value: _SourceMoreAction.screenshot,
+                  child: Text('Ảnh chụp màn hình'),
+                ),
+                PopupMenuItem(
+                  value: _SourceMoreAction.pdf,
+                  child: Text('PDF'),
+                ),
+              ],
+              icon: const Icon(Icons.more_horiz),
+            ),
+            const SizedBox(width: 4),
+          ] else if (state != null && !state.status.isTerminal)
             TextButton(
               onPressed: () => _service.cancel(),
               child: const Text('Hủy'),
             ),
         ],
       ),
-      body: state == null || state.status == IngestionJobStatus.queued
+      body: choosingSource
           ? _SourceChooser(
               busy: _starting,
-              onImage: _pickImage,
-              onScreenshot: _capture,
-              onPaste: _pasteText,
-              onPdf: _pickPdf,
+              controller: _pasteController,
+              focusNode: _pasteFocus,
             )
           : _IngestionBody(
-              state: state,
+              state: state!,
               pageControllers: _pageControllers,
               onSubmitText: () => _submitTextReview(state),
               onSubmitStructure: () => _submitStructure(state),
@@ -358,109 +372,46 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   }
 }
 
+enum _SourceMoreAction { image, screenshot, pdf }
+
 class _SourceChooser extends StatelessWidget {
   const _SourceChooser({
     required this.busy,
-    required this.onImage,
-    required this.onScreenshot,
-    required this.onPaste,
-    required this.onPdf,
+    required this.controller,
+    required this.focusNode,
   });
 
   final bool busy;
-  final VoidCallback onImage;
-  final VoidCallback onScreenshot;
-  final VoidCallback onPaste;
-  final VoidCallback onPdf;
+  final TextEditingController controller;
+  final FocusNode focusNode;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: AppLayout.pageInsets(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'Chọn nguồn',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Ảnh, ảnh chụp màn hình, văn bản dán hoặc PDF.',
-            style: TextStyle(color: AppColors.secondaryText),
-          ),
-          const SizedBox(height: 16),
-          if (busy) const LinearProgressIndicator(),
-          if (busy) const SizedBox(height: 12),
-          _SourceTile(
-            icon: Icons.image_outlined,
-            label: 'Ảnh',
-            onTap: busy ? null : onImage,
-          ),
-          const SizedBox(height: 8),
-          _SourceTile(
-            icon: Icons.crop_free,
-            label: 'Ảnh chụp màn hình',
-            onTap: busy ? null : onScreenshot,
-          ),
-          const SizedBox(height: 8),
-          _SourceTile(
-            icon: Icons.content_paste,
-            label: 'Dán văn bản',
-            onTap: busy ? null : onPaste,
-          ),
-          const SizedBox(height: 8),
-          _SourceTile(
-            icon: Icons.picture_as_pdf_outlined,
-            label: 'PDF',
-            onTap: busy ? null : onPdf,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SourceTile extends StatelessWidget {
-  const _SourceTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 56,
-      child: Material(
-        color: AppColors.elevated,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: AppColors.border),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+    final insets = AppLayout.pageInsets(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (busy) const LinearProgressIndicator(),
+        Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Icon(icon, color: AppColors.accent),
-                const SizedBox(width: 12),
-                Expanded(child: Text(label)),
-                const Icon(
-                  Icons.chevron_right,
-                  color: AppColors.secondaryText,
-                ),
-              ],
+            padding: insets,
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              autofocus: true,
+              expands: true,
+              maxLines: null,
+              minLines: null,
+              enabled: !busy,
+              textAlignVertical: TextAlignVertical.top,
+              decoration: const InputDecoration(
+                hintText: 'Dán nội dung tài liệu tại đây…',
+                alignLabelWithHint: true,
+              ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

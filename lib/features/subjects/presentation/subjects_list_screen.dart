@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,49 +19,62 @@ class SubjectsListScreen extends ConsumerWidget {
     final asyncSubjects = ref.watch(subjectsListProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Môn học'),
-        actions: [
-          IconButton(
-            tooltip: 'Nhập từ ZIP',
-            onPressed: () => _importSubjectZip(context, ref),
-            icon: const Icon(Icons.unarchive_outlined),
-          ),
-          IconButton(
-            tooltip: 'Cài đặt',
-            onPressed: () => context.push('/settings'),
-            icon: const Icon(Icons.settings_outlined),
+      backgroundColor: AppColors.background,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const _HomeAtmosphere(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _HomeHeader(
+                onImport: () => _importSubjectZip(context, ref),
+                onSettings: () => context.push('/settings'),
+              ),
+              Expanded(
+                child: asyncSubjects.when(
+                  loading: () => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                  error: (e, _) => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Không tải được danh sách môn học.',
+                        style: TextStyle(color: AppColors.error),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  data: (subjects) {
+                    if (subjects.isEmpty) {
+                      return const _EmptySubjectsState();
+                    }
+                    return RefreshIndicator(
+                      color: AppColors.accent,
+                      onRefresh: () async {
+                        ref.invalidate(subjectsListProvider);
+                        await ref.read(subjectsListProvider.future);
+                      },
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 88),
+                        itemCount: subjects.length + 1,
+                        separatorBuilder: (_, index) =>
+                            SizedBox(height: index == 0 ? 14 : 10),
+                        itemBuilder: (context, index) {
+                          if (index == 0) {
+                            return const _SubjectsSectionLabel();
+                          }
+                          return _SubjectCard(subject: subjects[index - 1]);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-      body: asyncSubjects.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Text(
-            'Không tải được danh sách môn học.',
-            style: TextStyle(color: AppColors.error),
-          ),
-        ),
-        data: (subjects) {
-          if (subjects.isEmpty) {
-            return const _EmptySubjectsState();
-          }
-          return RefreshIndicator(
-            color: AppColors.accent,
-            onRefresh: () async {
-              ref.invalidate(subjectsListProvider);
-              await ref.read(subjectsListProvider.future);
-            },
-            child: ListView.separated(
-              padding: const EdgeInsets.all(12),
-              itemCount: subjects.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                return _SubjectCard(subject: subjects[index]);
-              },
-            ),
-          );
-        },
       ),
       floatingActionButton: asyncSubjects.maybeWhen(
         data: (subjects) => subjects.isEmpty
@@ -77,6 +92,188 @@ class SubjectsListScreen extends ConsumerWidget {
   }
 }
 
+class _HomeAtmosphere extends StatelessWidget {
+  const _HomeAtmosphere();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: CustomPaint(
+        painter: _HomeAtmospherePainter(),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _HomeAtmospherePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final base = Paint()..color = AppColors.background;
+    canvas.drawRect(Offset.zero & size, base);
+
+    final glow = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-0.75, -0.95),
+        radius: 1.15,
+        colors: [
+          AppColors.accent.withValues(alpha: 0.22),
+          AppColors.accent.withValues(alpha: 0.06),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.35, 1.0],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, glow);
+
+    final wash = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFF1A1612).withValues(alpha: 0.55),
+          AppColors.background.withValues(alpha: 0.15),
+          AppColors.background,
+        ],
+        stops: const [0.0, 0.42, 1.0],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, wash);
+
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = AppColors.accent.withValues(alpha: 0.12);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(size.width + 20, -30), radius: 140),
+      0.6,
+      math.pi,
+      false,
+      arcPaint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset(size.width + 20, -30), radius: 176),
+      0.75,
+      math.pi * 0.85,
+      false,
+      arcPaint..color = AppColors.primaryText.withValues(alpha: 0.05),
+    );
+
+    final linePaint = Paint()
+      ..color = AppColors.primaryText.withValues(alpha: 0.035)
+      ..strokeWidth = 1;
+    for (var i = 0; i < 7; i++) {
+      final y = 90.0 + i * 58;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y + i * 2.5), linePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _HomeHeader extends StatelessWidget {
+  const _HomeHeader({
+    required this.onImport,
+    required this.onSettings,
+  });
+
+  final VoidCallback onImport;
+  final VoidCallback onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.paddingOf(context).top;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, top + 14, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'STUDEE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 3.2,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accent.withValues(alpha: 0.95),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Học sâu.\nNhớ chắc.',
+                      style: TextStyle(
+                        fontSize: 28,
+                        height: 1.12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryText,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Mỗi môn một không gian — nhập kiến thức, giải đề, ôn có định hướng.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: AppColors.secondaryText.withValues(alpha: 0.95),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Nhập từ ZIP',
+                onPressed: onImport,
+                icon: const Icon(Icons.unarchive_outlined),
+              ),
+              IconButton(
+                tooltip: 'Cài đặt',
+                onPressed: onSettings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubjectsSectionLabel extends StatelessWidget {
+  const _SubjectsSectionLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 3,
+          height: 14,
+          decoration: BoxDecoration(
+            color: AppColors.accent,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        const Text(
+          'Môn học của bạn',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.secondaryText,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _EmptySubjectsState extends ConsumerWidget {
   const _EmptySubjectsState();
 
@@ -84,49 +281,126 @@ class _EmptySubjectsState extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
+          constraints: const BoxConstraints(maxWidth: 340),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.menu_book_outlined,
-                size: 40,
-                color: AppColors.secondaryText.withValues(alpha: 0.7),
-              ),
-              const SizedBox(height: 16),
+              const _HeroArtCard(),
+              const SizedBox(height: 22),
               const Text(
-                'Chưa có môn học',
+                'Bắt đầu hành trình ôn tập',
                 style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.primaryText,
+                  letterSpacing: -0.2,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
-              const Text(
-                'Tạo môn học đầu tiên để nhập tài liệu và giải câu hỏi '
-                'với kiến thức đã lưu.',
+              Text(
+                'Tạo môn học đầu tiên — nhập tài liệu, giải câu hỏi, '
+                'và xây bộ nhớ kiến thức riêng của bạn.',
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.45,
-                  color: AppColors.secondaryText,
+                  color: AppColors.secondaryText.withValues(alpha: 0.95),
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: () => _showCreateDialog(context, ref),
-                icon: const Icon(Icons.add),
-                label: const Text('Thêm môn học'),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => _showCreateDialog(context, ref),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Thêm môn học'),
+                ),
               ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _importSubjectZip(context, ref),
-                icon: const Icon(Icons.unarchive_outlined),
-                label: const Text('Nhập từ ZIP'),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _importSubjectZip(context, ref),
+                  icon: const Icon(Icons.unarchive_outlined),
+                  label: const Text('Nhập từ ZIP'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroArtCard extends StatelessWidget {
+  const _HeroArtCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 1.15,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: AppColors.accent.withValues(alpha: 0.28),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accent.withValues(alpha: 0.14),
+              blurRadius: 28,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(17),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/images/studee-home-hero.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const ColoredBox(
+                  color: AppColors.elevated,
+                  child: Center(
+                    child: Icon(
+                      Icons.auto_stories_outlined,
+                      size: 48,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                ),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      AppColors.background.withValues(alpha: 0.55),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 12,
+                child: Text(
+                  'Ánh sáng cho từng trang ghi chú',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                    color: AppColors.primaryText.withValues(alpha: 0.92),
+                  ),
+                ),
               ),
             ],
           ),
@@ -150,92 +424,128 @@ class _SubjectCard extends ConsumerWidget {
         .format(subject.updatedAt.toLocal());
 
     return Material(
-      color: AppColors.elevated,
+      color: AppColors.elevated.withValues(alpha: 0.92),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: AppColors.border.withValues(alpha: 0.9)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         onTap: () => context.push('/subjects/${subject.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
+        child: IntrinsicHeight(
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: color.withValues(alpha: 0.4)),
-                ),
-                child: Icon(
-                  _iconFor(subject.icon),
-                  size: 20,
-                  color: color,
-                ),
+                width: 4,
+                color: color.withValues(alpha: 0.85),
               ),
-              const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      subject.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryText,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              color.withValues(alpha: 0.28),
+                              color.withValues(alpha: 0.08),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: color.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Icon(
+                          _iconFor(subject.icon),
+                          size: 20,
+                          color: color,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${subject.sourceCount} nguồn · '
-                      '${subject.knowledgeCount} mục kiến thức · '
-                      '${subject.questionCount} câu',
-                      softWrap: true,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.secondaryText,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              subject.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryText,
+                                letterSpacing: -0.15,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              '${subject.sourceCount} nguồn · '
+                              '${subject.knowledgeCount} mục · '
+                              '${subject.questionCount} câu',
+                              softWrap: true,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.35,
+                                color: AppColors.secondaryText
+                                    .withValues(alpha: 0.95),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Cập nhật $updated',
+                              softWrap: true,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: AppColors.secondaryText
+                                    .withValues(alpha: 0.75),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Cập nhật: $updated',
-                      softWrap: true,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.secondaryText,
+                      PopupMenuButton<String>(
+                        tooltip: 'Thao tác',
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'rename':
+                              await _showRenameDialog(context, ref, subject);
+                            case 'export':
+                              await _exportSubject(context, ref, subject);
+                            case 'export_notes':
+                              await _exportStudyNotes(context, ref, subject);
+                            case 'delete':
+                              await _showDeleteDialog(context, ref, subject);
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: Text('Đổi tên'),
+                          ),
+                          PopupMenuItem(
+                            value: 'export',
+                            child: Text('Xuất ZIP'),
+                          ),
+                          PopupMenuItem(
+                            value: 'export_notes',
+                            child: Text('Xuất tài liệu'),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Xóa'),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuButton<String>(
-                tooltip: 'Thao tác',
-                onSelected: (value) async {
-                  switch (value) {
-                    case 'rename':
-                      await _showRenameDialog(context, ref, subject);
-                    case 'export':
-                      await _exportSubject(context, ref, subject);
-                    case 'export_notes':
-                      await _exportStudyNotes(context, ref, subject);
-                    case 'delete':
-                      await _showDeleteDialog(context, ref, subject);
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'rename', child: Text('Đổi tên')),
-                  PopupMenuItem(value: 'export', child: Text('Xuất ZIP')),
-                  PopupMenuItem(
-                    value: 'export_notes',
-                    child: Text('Xuất tài liệu'),
+                    ],
                   ),
-                  PopupMenuItem(value: 'delete', child: Text('Xóa')),
-                ],
+                ),
               ),
             ],
           ),

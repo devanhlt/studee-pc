@@ -11,6 +11,7 @@ abstract final class DeepSeekPrompts {
   static const String repairVersion = 'repair.v1';
   static const String memorizationTipsVersion = 'memorizationTips.v1';
   static const String knowledgeSummaryVersion = 'knowledgeSummary.v4';
+  static const String studyInsightsVersion = 'studyInsights.v1';
   static const String canonicalizeVersion = 'canonicalize.v1';
   static const String matchMeaningVersion = 'matchMeaning.v1';
 
@@ -194,43 +195,37 @@ Trả về đúng một đối tượng JSON:
 }
 ''';
 
-  /// Detailed theory section ("Lý thuyết") for study-notes export (grounded only).
-  static String knowledgeSummarySystem() => '''
-Bạn viết mục "Lý thuyết" CHI TIẾT, ĐẦY ĐỦ cho tài liệu ôn tập tiếng Việt.
+  /// Detailed theory section ("Lý thuyết") — legacy; prefer [studyInsightsSystem].
+  static String knowledgeSummarySystem() => studyInsightsSystem();
+
+  /// Study-notes export: cluster similar questions → stats, insights, examples.
+  static String studyInsightsSystem() => '''
+Bạn biên soạn tài liệu ôn tập dạng PHÂN TÍCH & THỐNG KÊ cho học sinh tiếng Việt.
 ${DeepSeekConfig.vietnameseOutputInstruction}
 
-Nhiệm vụ: dựa CHỈ vào knowledge_units và câu hỏi–đáp án–explanation ĐÃ CUNG CẤP, biên soạn phần LÝ THUYẾT như một chương ôn tập hoàn chỉnh — học sinh đọc xong phải nắm được kiến thức đã lưu mà không cần mở lại nguồn gốc.
+Nhiệm vụ: dựa CHỈ vào knowledge_units và câu hỏi–đáp án–explanation ĐÃ CUNG CẤP, nhóm các câu hỏi CÙNG DẠNG / CÙNG MẪU, rồi rút thống kê và nhận xét hữu ích — KHÔNG liệt kê lại toàn bộ từng câu hỏi–đáp án.
 
 Quy tắc BẮT BUỘC:
-1) CHỈ dùng thông tin có trong dữ liệu đầu vào. CẤM bịa, CẤM bổ sung kiến thức bên ngoài / kiến thức phổ thông không có trong nguồn.
-2) Nếu dữ liệu mỏng: viết đúng mức chi tiết có trong nguồn; không suy diễn thêm. Nếu nguồn giàu: viết CÀNG CHI TIẾT CÀNG TỐT.
-3) CẤM trả về chỉ vài gạch đầu dòng sơ sài. Mỗi ý quan trọng cần:
-   - Định nghĩa / phát biểu đầy đủ
-   - Giải thích ý nghĩa (1–4 câu)
-   - Điều kiện / giả thiết / phạm vi áp dụng nếu nguồn có
-   - Hệ quả / tính chất liên quan nếu nguồn có
-   - Công thức viết đủ (LaTeX), kèm chú thích ký hiệu khi nguồn nêu
-4) Cấu trúc Markdown theo chủ đề (dùng ### cho tiểu mục, KHÔNG dùng tiêu đề "# Lý thuyết" hay "## Lý thuyết" — phần này đã có tiêu đề ngoài). Gợi ý các khối khi phù hợp với nguồn:
-   - Khái niệm & định nghĩa
-   - Công thức / định lý / bổ đề
-   - Tính chất & hệ quả
-   - Phương pháp / quy trình giải
-   - Ví dụ minh họa (rút từ Q&A + lời giải; ghi rõ ý đáp án, không chữ A/B/C)
-   - Trường hợp đặc biệt / lưu ý / lỗi thường gặp nếu nguồn có
-5) Tận dụng tối đa theory, definition, formula, theorem, example, solution, note và explanation của câu hỏi để làm dày phần lý thuyết.
-6) Không liệt kê lại toàn bộ từng câu hỏi như mục lục; hãy tổng hợp thành lý thuyết mạch lạc.
-7) Không nhắc chữ cái A/B/C/D như đáp án cần nhớ — chỉ dùng ý nghĩa đáp án.
-8) Giữ công thức LaTeX nếu nguồn có (\$...\$ / \$\$...\$\$).
-9) Mọi đoạn mã nguồn (C/C++/Python/…) PHẢI bọc trong hàng rào Markdown để render đúng:
+1) CHỈ dùng thông tin có trong dữ liệu đầu vào. CẤM bịa kiến thức ngoài nguồn.
+2) CẤM xuất mục lục / danh sách đầy đủ từng câu hỏi. Thay vào đó:
+   - Nhóm theo dạng bài / chủ đề / mẫu tư duy (vd. con trỏ–mảng, cấp phát động, đệ quy, tập tin…).
+   - Với mỗi nhóm: nêu số lượng (ước lượng từ nguồn), tỷ lệ nếu đủ dữ liệu, đặc điểm chung, lỗi hay gặp, mẹo nhận dạng dạng bài.
+   - Chọn 1–3 VÍ DỤ MINH HỌA đại diện mỗi nhóm (rút gọn stem + ý đáp án đúng; có thể kèm đoạn code ngắn nếu nguồn có).
+3) Mở đầu bằng tổng quan thống kê toàn môn (tổng số câu dùng được, phân bố theo dạng/nhóm nổi bật).
+4) Sau thống kê: các mục nhận xét / insight theo nhóm (dùng ###). Kết thúc có thể có mục "Ưu tiên ôn" nếu nguồn đủ để xếp.
+5) Không nhắc chữ cái A/B/C/D như đáp án cần nhớ — chỉ dùng ý nghĩa đáp án.
+6) Giữ công thức LaTeX nếu nguồn có (\$...\$ / \$\$...\$\$).
+7) Mọi đoạn mã nguồn PHẢI bọc trong hàng rào Markdown:
    ```c
    // code
    ```
-   (đổi tag ngôn ngữ cho phù hợp: c, cpp, python, java…). CẤM dồn code thành một dòng trong đoạn văn.
-10) Độ dài mục tiêu: CHI TIẾT. Với nguồn phong phú: khoảng 800–2500 từ (hoặc tương đương nhiều đoạn + công thức). Nguồn vừa: vẫn ưu tiên giải thích đầy đủ hơn là rút gọn. Nguồn ít: viết hết những gì có, đủ câu đủ ý.
+   (đổi tag: c, cpp, python, java…). CẤM dồn code thành một dòng.
+8) KHÔNG dùng tiêu đề "# …" hay "## Lý thuyết" / "## Danh sách câu hỏi" — phần ngoài đã có tiêu đề tài liệu. Bắt đầu bằng ### hoặc đoạn văn.
+9) Độ dài: cô đọng nhưng đủ insight. Nguồn phong phú: khoảng 600–1800 từ. Nguồn ít: viết hết mức có, vẫn theo nhóm + ví dụ.
 
 Trả về đúng một đối tượng JSON:
 {
-  "summary_markdown": "### Khái niệm\\nĐịnh nghĩa đầy đủ...\\n\\n### Ví dụ\\n```c\\nint a[]={1,2};\\n```\\n..."
+  "insights_markdown": "### Tổng quan\\n…\\n\\n### Nhóm: Con trỏ và mảng\\n**Thống kê:** …\\n**Nhận xét:** …\\n**Ví dụ:**\\n```c\\n…\\n```\\n..."
 }
 ''';
 

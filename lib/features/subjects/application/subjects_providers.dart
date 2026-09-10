@@ -268,7 +268,7 @@ class SubjectsActions {
     return _ref.read(subjectRepositoryProvider).exportSubject(id, destination);
   }
 
-  /// Writes study-notes as Markdown or PDF (LLM summary + tips).
+  /// Writes study-notes as Markdown or PDF (clustered insights + examples).
   /// Requires a DeepSeek API key.
   Future<String> exportStudyNotes({
     required String subjectId,
@@ -285,7 +285,6 @@ class SubjectsActions {
     final knowledgeUnits = await content.listKnowledge(subjectId);
     final summaryUnits = _knowledgeUnitsForSummary(knowledgeUnits);
     final summaryQa = <KnowledgeSummaryQa>[];
-    final tipItems = <StudyTipItem>[];
     for (final q in questions) {
       if (q.content.trim().isEmpty) continue;
       final meaning = StudyNotesBuilder.answerMeaning(q);
@@ -299,38 +298,24 @@ class SubjectsActions {
               : _clip(explanation, 1200),
         ),
       );
-      if (meaning == null) continue;
-      tipItems.add(
-        StudyTipItem(
-          id: q.id,
-          question: q.content.trim(),
-          answer: meaning,
-        ),
-      );
     }
 
     final deepSeek = _ref.read(deepSeekClientProvider);
     deepSeek.beginCancellableSession();
-    Map<String, String> tips = {};
-    String? knowledgeSummary;
+    String? insights;
     try {
-      knowledgeSummary = await deepSeek.generateKnowledgeSummary(
+      insights = await deepSeek.generateKnowledgeSummary(
         subjectName: subjectName,
         units: summaryUnits,
         questions: summaryQa.take(150).toList(),
       );
-      if (tipItems.isNotEmpty) {
-        tips = await deepSeek.generateMemorizationTips(tipItems);
-      }
     } finally {
       deepSeek.cancelActiveSession();
     }
 
     final markdown = buildStudyNotesMarkdown(
       subjectName: subjectName,
-      questions: questions,
-      tipsByQuestionId: tips,
-      knowledgeSummaryMarkdown: knowledgeSummary,
+      insightsMarkdown: insights,
     );
 
     if (format == StudyNotesExportFormat.pdf) {

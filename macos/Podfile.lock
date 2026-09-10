@@ -1,4 +1,6 @@
 PODS:
+  - camera_desktop (1.2.1):
+    - FlutterMacOS
   - desktop_multi_window (0.0.1):
     - FlutterMacOS
   - file_picker (0.0.1):
@@ -48,6 +50,7 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
+  - camera_desktop (from `Flutter/ephemeral/.symlinks/plugins/camera_desktop/macos`)
   - desktop_multi_window (from `Flutter/ephemeral/.symlinks/plugins/desktop_multi_window/macos`)
   - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
   - flutter_secure_storage_macos (from `Flutter/ephemeral/.symlinks/plugins/flutter_secure_storage_macos/macos`)
@@ -66,6 +69,8 @@ SPEC REPOS:
     - sqlite3
 
 EXTERNAL SOURCES:
+  camera_desktop:
+    :path: Flutter/ephemeral/.symlinks/plugins/camera_desktop/macos
   desktop_multi_window:
     :path: Flutter/ephemeral/.symlinks/plugins/desktop_multi_window/macos
   file_picker:
@@ -90,6 +95,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/window_manager/macos
 
 SPEC CHECKSUMS:
+  camera_desktop: 5c466254897c92cc46f6169d95fe7bd20b50ca1f
   desktop_multi_window: 93667594ccc4b88d91a97972fd3b1b89667fa80a
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
   flutter_secure_storage_macos: 7f45e30f838cf2659862a4e4e3ee1c347c2b3b54

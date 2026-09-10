@@ -20,6 +20,7 @@ import 'package:studee_pc/domain/enums/confidence_level.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
+import 'package:studee_pc/features/solver/presentation/camera_capture_dialog.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 final solveStateProvider = StreamProvider.autoDispose<SolveSessionState>((ref) {
@@ -40,7 +41,7 @@ class SolveScreen extends ConsumerStatefulWidget {
   final bool embedded;
 
   /// When embedded in subject tabs, set true only for the active Giải tab so
-  /// ⌘G / ⌘↵ for Giải — only while the Giải tab is selected.
+  /// When embedded, set true only while Giải is visible so ⌘/Ctrl+↵ works.
   final bool shortcutsActive;
 
   @override
@@ -50,12 +51,24 @@ class SolveScreen extends ConsumerStatefulWidget {
 class _SolveScreenState extends ConsumerState<SolveScreen> {
   final _textController = TextEditingController();
   final _ocrController = TextEditingController();
+  final _textFocusNode = FocusNode();
   bool _busy = false;
 
   SolveService get _service => ref.read(solveServiceProvider);
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.shortcutsActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _textFocusNode.requestFocus();
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    _textFocusNode.dispose();
     _textController.dispose();
     _ocrController.dispose();
     super.dispose();
@@ -103,16 +116,13 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     _handle(result);
   }
 
-  Future<void> _solveImage() async {
-    if (!await _ensurePrivacy()) return;
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
-    final bytes = picked?.files.single.bytes;
-    if (bytes == null) return;
+  Future<void> _solveFromImageBytes(
+    Uint8List bytes, {
+    required String emptyMessage,
+    String inputType = 'image',
+  }) async {
     if (bytes.isEmpty) {
-      _toast('Ảnh trống — hãy chọn file khác.');
+      _toast(emptyMessage);
       return;
     }
     // Load DeepSeek + Mathpix in one Keychain unlock before OCR starts.
@@ -122,7 +132,8 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     setState(() => _busy = true);
     final result = await _service.solveFromImage(
       subjectId: widget.subjectId,
-      bytes: Uint8List.fromList(bytes),
+      bytes: bytes,
+      inputType: inputType,
     );
     setState(() => _busy = false);
     if (result is Failure &&
@@ -131,6 +142,20 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
       return;
     }
     _handle(result);
+  }
+
+  Future<void> _solveImage() async {
+    if (!await _ensurePrivacy()) return;
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    final bytes = picked?.files.single.bytes;
+    if (bytes == null) return;
+    await _solveFromImageBytes(
+      Uint8List.fromList(bytes),
+      emptyMessage: 'Ảnh trống — hãy chọn file khác.',
+    );
   }
 
   Future<void> _capture() async {
@@ -148,26 +173,12 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
         }
         return;
       }
-      if (captured.bytes.isEmpty) {
-        setState(() => _busy = false);
-        _toast('Ảnh chụp trống — thử lại.');
-        return;
-      }
-      try {
-        await _service.prepareCredentials();
-      } on Object catch (_) {}
-      final result = await _service.solveFromImage(
-        subjectId: widget.subjectId,
-        bytes: captured.bytes,
+      setState(() => _busy = false);
+      await _solveFromImageBytes(
+        captured.bytes,
+        emptyMessage: 'Ảnh chụp trống — thử lại.',
         inputType: 'screenshot',
       );
-      setState(() => _busy = false);
-      if (result is Failure &&
-          result.failureOrNull?.code == 'ocr_review_required') {
-        _ocrController.text = _service.current.rawText ?? '';
-        return;
-      }
-      _handle(result);
     } on ScreenCaptureFailure catch (f) {
       setState(() => _busy = false);
       if (mounted) {
@@ -176,6 +187,18 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
         );
       }
     }
+  }
+
+  Future<void> _openCamera() async {
+    if (!await _ensurePrivacy()) return;
+    if (!mounted) return;
+    final bytes = await showCameraCaptureDialog(context);
+    if (bytes == null || !mounted) return;
+    await _solveFromImageBytes(
+      bytes,
+      emptyMessage: 'Ảnh camera trống — thử lại.',
+      inputType: 'camera',
+    );
   }
 
   Future<void> _continueOcr() async {
@@ -253,6 +276,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     _textController.clear();
     _ocrController.clear();
     setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _textFocusNode.requestFocus();
+    });
   }
 
   @override
@@ -300,20 +326,6 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                   ],
                 ),
               ),
-            const Text(
-              'Nhập câu hỏi',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Dán đề, chọn ảnh, hoặc chụp màn hình.',
-              style: TextStyle(
-                color: AppColors.secondaryText,
-                fontSize: 13,
-                height: 1.35,
-              ),
-            ),
-            const SizedBox(height: 12),
             Expanded(
               child: Focus(
                 onKeyEvent: (node, event) {
@@ -323,9 +335,8 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                   final mod = HardwareKeyboard.instance.isMetaPressed ||
                       HardwareKeyboard.instance.isControlPressed;
                   if (!mod) return KeyEventResult.ignored;
-                  // ⌘G / ⌘↵ → Giải (works while typing in the field)
-                  if (event.logicalKey == LogicalKeyboardKey.enter ||
-                      event.logicalKey == LogicalKeyboardKey.keyG) {
+                  // ⌘/Ctrl+↵ → Giải
+                  if (event.logicalKey == LogicalKeyboardKey.enter) {
                     _solveText();
                     return KeyEventResult.handled;
                   }
@@ -333,13 +344,15 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                 },
                 child: TextField(
                   controller: _textController,
+                  focusNode: _textFocusNode,
+                  autofocus: widget.shortcutsActive,
                   expands: true,
                   maxLines: null,
                   minLines: null,
                   textAlignVertical: TextAlignVertical.top,
                   decoration: InputDecoration(
                     hintText:
-                        'Dán nội dung câu hỏi… (${AppShortcuts.chord('G')} để giải)',
+                        'Dán nội dung câu hỏi… (${AppShortcuts.chord('↵')} để giải)',
                     alignLabelWithHint: true,
                   ),
                 ),
@@ -352,20 +365,43 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                   child: FilledButton.icon(
                     onPressed: _busy ? null : _solveText,
                     icon: const Icon(Icons.play_arrow),
-                    label: Text(AppShortcuts.label('Giải', 'G')),
+                    label: Text(AppShortcuts.label('Giải', '↵')),
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton.outlined(
-                  tooltip: 'Chọn ảnh',
-                  onPressed: _busy ? null : _solveImage,
-                  icon: const Icon(Icons.image_outlined),
-                ),
-                const SizedBox(width: 4),
-                IconButton.outlined(
-                  tooltip: 'Chụp màn hình',
-                  onPressed: _busy ? null : _capture,
-                  icon: const Icon(Icons.crop_free),
+                MenuAnchor(
+                  builder: (context, controller, child) {
+                    return IconButton.outlined(
+                      tooltip: 'Ảnh & camera',
+                      onPressed: _busy
+                          ? null
+                          : () {
+                              if (controller.isOpen) {
+                                controller.close();
+                              } else {
+                                controller.open();
+                              }
+                            },
+                      icon: const Icon(Icons.photo_outlined),
+                    );
+                  },
+                  menuChildren: [
+                    MenuItemButton(
+                      leadingIcon: const Icon(Icons.image_outlined),
+                      onPressed: _busy ? null : _solveImage,
+                      child: const Text('Chọn ảnh'),
+                    ),
+                    MenuItemButton(
+                      leadingIcon: const Icon(Icons.crop_free),
+                      onPressed: _busy ? null : _capture,
+                      child: const Text('Chụp màn hình'),
+                    ),
+                    MenuItemButton(
+                      leadingIcon: const Icon(Icons.photo_camera_outlined),
+                      onPressed: _busy ? null : _openCamera,
+                      child: const Text('Camera'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -406,6 +442,82 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             ],
           ],
         ),
+      );
+    } else if (state.result != null) {
+      final insets = AppLayout.pageInsets(context);
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ListView(
+              padding: insets.copyWith(bottom: 8),
+              children: [
+                if (widget.embedded &&
+                    (state.stage.isInProgress ||
+                        state.stage == SolvePipelineStage.offlineFailure ||
+                        state.stage == SolvePipelineStage.partialFailure)) ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      spacing: 8,
+                      children: [
+                        if (state.stage.isInProgress)
+                          TextButton(
+                            onPressed: () async {
+                              await _service.cancel();
+                              if (mounted) setState(() => _busy = false);
+                            },
+                            child: const Text('Hủy'),
+                          ),
+                        if (state.stage == SolvePipelineStage.offlineFailure ||
+                            state.stage == SolvePipelineStage.partialFailure)
+                          TextButton(
+                            onPressed: () {
+                              _service.reset();
+                              setState(() => _busy = false);
+                            },
+                            child: const Text('Đóng'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (state.rawText != null &&
+                    state.rawText!.trim().isNotEmpty) ...[
+                  CollapsedQuestionTile(text: state.rawText!),
+                  const SizedBox(height: 12),
+                ],
+                SolveResultView(
+                  result: state.result!,
+                  subjectId: widget.subjectId,
+                  showActions: false,
+                ),
+              ],
+            ),
+          ),
+          Material(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: Container(
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: AppColors.border),
+                ),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                insets.left,
+                10,
+                insets.right,
+                insets.bottom,
+              ),
+              child: SolveResultActions(
+                result: state.result!,
+                subjectId: widget.subjectId,
+                onSolveAgain: _beginSolveAgain,
+                onReset: _newQuestion,
+              ),
+            ),
+          ),
+        ],
       );
     } else {
       body = ListView(
@@ -457,7 +569,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _busy ? null : _continueOcr,
-              child: Text(AppShortcuts.label('Tiếp tục giải', 'G')),
+              child: Text(AppShortcuts.label('Tiếp tục giải', '↵')),
             ),
             const SizedBox(height: 24),
           ],
@@ -482,7 +594,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
               children: [
                 FilledButton(
                   onPressed: _busy ? null : _confirmQuestionAndSolve,
-                  child: Text(AppShortcuts.label('Xác nhận và giải', 'G')),
+                  child: Text(AppShortcuts.label('Xác nhận và giải', '↵')),
                 ),
                 TextButton(
                   onPressed: _busy ? null : _newQuestion,
@@ -527,19 +639,6 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
               style: const TextStyle(color: AppColors.secondaryText),
             ),
           ],
-          if (state.result != null) ...[
-            if (state.rawText != null &&
-                state.rawText!.trim().isNotEmpty) ...[
-              CollapsedQuestionTile(text: state.rawText!),
-              const SizedBox(height: 12),
-            ],
-            SolveResultView(
-              result: state.result!,
-              subjectId: widget.subjectId,
-              onSolveAgain: _beginSolveAgain,
-              onReset: _newQuestion,
-            ),
-          ],
         ],
       );
     }
@@ -547,16 +646,6 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     final wrapped = CallbackShortcuts(
       bindings: widget.shortcutsActive
           ? <ShortcutActivator, VoidCallback>{
-              AppShortcuts.activator(LogicalKeyboardKey.keyG): () {
-                if (_busy) return;
-                if (state.needsOcrReview) {
-                  _continueOcr();
-                } else if (state.needsQuestionConfirm) {
-                  _confirmQuestionAndSolve();
-                } else if (showInputForm) {
-                  _solveText();
-                }
-              },
               AppShortcuts.activator(LogicalKeyboardKey.enter): () {
                 if (_busy) return;
                 if (state.needsOcrReview) {
@@ -570,7 +659,6 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             }
           : const <ShortcutActivator, VoidCallback>{},
       child: Focus(
-        autofocus: widget.shortcutsActive,
         child: body,
       ),
     );
@@ -659,6 +747,7 @@ class SolveResultView extends ConsumerWidget {
     this.onSolveAgain,
     this.onReset,
     this.compact = false,
+    this.showActions = true,
   });
 
   final SolveResult result;
@@ -666,6 +755,9 @@ class SolveResultView extends ConsumerWidget {
   final VoidCallback? onSolveAgain;
   final VoidCallback? onReset;
   final bool compact;
+
+  /// When false, omit the bottom action row (parent can pin it separately).
+  final bool showActions;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -680,7 +772,7 @@ class SolveResultView extends ConsumerWidget {
         : 'Gợi ý từ AI';
     final notes = UserFacingCopy.friendlyWarnings(result.warnings);
 
-    final column = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
@@ -780,108 +872,140 @@ class SolveResultView extends ConsumerWidget {
             ),
           ),
         ],
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton(
-                onPressed: () async {
-                  final r = await ref
-                      .read(solveServiceProvider)
-                      .saveResultToSubject(subjectId: subjectId);
-                  if (!context.mounted) return;
-                  r.when(
-                    success: (_) {
-                      ref.invalidate(subjectKnowledgeProvider(subjectId));
-                      ref.invalidate(subjectQuestionsProvider(subjectId));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Đã lưu vào môn học.'),
-                        ),
-                      );
-                    },
-                    failure: (f) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(f.userMessage)),
-                      );
-                    },
+        if (showActions) ...[
+          const SizedBox(height: 16),
+          SolveResultActions(
+            result: result,
+            subjectId: subjectId,
+            onSolveAgain: onSolveAgain,
+            onReset: onReset,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Primary result actions — used inline or as a sticky footer.
+class SolveResultActions extends ConsumerWidget {
+  const SolveResultActions({
+    super.key,
+    required this.result,
+    required this.subjectId,
+    this.onSolveAgain,
+    this.onReset,
+  });
+
+  final SolveResult result;
+  final String subjectId;
+  final VoidCallback? onSolveAgain;
+  final VoidCallback? onReset;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final answer = AnswerDisplay.contentOnly(
+      label: result.finalAnswerLabel,
+      content: result.finalAnswerContent,
+      shortAnswer: result.shortAnswer,
+    );
+
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton(
+            onPressed: () async {
+              final r = await ref
+                  .read(solveServiceProvider)
+                  .saveResultToSubject(subjectId: subjectId);
+              if (!context.mounted) return;
+              r.when(
+                success: (_) {
+                  ref.invalidate(subjectKnowledgeProvider(subjectId));
+                  ref.invalidate(subjectQuestionsProvider(subjectId));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Đã lưu vào môn học.'),
+                    ),
                   );
                 },
-                child: const Text('Lưu vào môn học'),
-              ),
+                failure: (f) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(f.userMessage)),
+                  );
+                },
+              );
+            },
+            child: const Text('Lưu vào môn học'),
+          ),
+        ),
+        if (onReset != null) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: onReset,
+              child: const Text('Câu hỏi mới'),
             ),
-            if (onReset != null) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onReset,
-                  child: const Text('Câu hỏi mới'),
-                ),
-              ),
-            ],
-            PopupMenuButton<_ResultMoreAction>(
-              tooltip: 'Thêm',
-              onSelected: (action) async {
-                switch (action) {
-                  case _ResultMoreAction.copy:
-                    final text = [
-                      if (answer.isNotEmpty) answer,
-                      '',
-                      result.explanationMarkdown,
-                    ].join('\n');
-                    await FlutterClipboard.copy(text);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Đã sao chép.')),
-                      );
-                    }
-                  case _ResultMoreAction.solveAgain:
-                    onSolveAgain?.call();
-                  case _ResultMoreAction.markWrong:
-                    final r = await ref.read(solveServiceProvider).markIncorrect(
-                          note: '',
-                          subjectId: subjectId,
-                        );
-                    if (!context.mounted) return;
-                    r.when(
-                      success: (_) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Đã ghi nhận kết quả sai.'),
-                          ),
-                        );
-                      },
-                      failure: (f) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(f.userMessage)),
-                        );
-                      },
-                    );
+          ),
+        ],
+        PopupMenuButton<_ResultMoreAction>(
+          tooltip: 'Thêm',
+          onSelected: (action) async {
+            switch (action) {
+              case _ResultMoreAction.copy:
+                final text = [
+                  if (answer.isNotEmpty) answer,
+                  '',
+                  result.explanationMarkdown,
+                ].join('\n');
+                await FlutterClipboard.copy(text);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Đã sao chép.')),
+                  );
                 }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: _ResultMoreAction.copy,
-                  child: Text('Sao chép'),
-                ),
-                if (onSolveAgain != null)
-                  const PopupMenuItem(
-                    value: _ResultMoreAction.solveAgain,
-                    child: Text('Giải lại'),
-                  ),
-                const PopupMenuItem(
-                  value: _ResultMoreAction.markWrong,
-                  child: Text('Báo kết quả sai'),
-                ),
-              ],
-              icon: const Icon(Icons.more_horiz),
+              case _ResultMoreAction.solveAgain:
+                onSolveAgain?.call();
+              case _ResultMoreAction.markWrong:
+                final r = await ref.read(solveServiceProvider).markIncorrect(
+                      note: '',
+                      subjectId: subjectId,
+                    );
+                if (!context.mounted) return;
+                r.when(
+                  success: (_) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã ghi nhận kết quả sai.'),
+                      ),
+                    );
+                  },
+                  failure: (f) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(f.userMessage)),
+                    );
+                  },
+                );
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: _ResultMoreAction.copy,
+              child: Text('Sao chép'),
+            ),
+            if (onSolveAgain != null)
+              const PopupMenuItem(
+                value: _ResultMoreAction.solveAgain,
+                child: Text('Giải lại'),
+              ),
+            const PopupMenuItem(
+              value: _ResultMoreAction.markWrong,
+              child: Text('Báo kết quả sai'),
             ),
           ],
+          icon: const Icon(Icons.more_horiz),
         ),
       ],
     );
-
-    return column;
   }
 }
 

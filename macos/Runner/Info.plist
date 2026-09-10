@@ -30,6 +30,8 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Studee cần quyền camera để chụp đề bài khi bạn yêu cầu.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Studee cần quyền ghi màn hình để chọn vùng câu hỏi khi bạn yêu cầu.</string>
 	<key>NSAppleEventsUsageDescription</key>

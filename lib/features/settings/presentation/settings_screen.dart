@@ -352,9 +352,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const _SectionTitle('Phím tắt'),
           const SizedBox(height: 8),
           Text(
-            Platform.isMacOS
-                ? '⌘1–3 đổi tab · ⌘G / ⌘↵ giải'
-                : 'Ctrl+1–3 đổi tab · Ctrl+G / Ctrl+↵ giải',
+            Platform.isMacOS ? '⌘↵ giải câu hỏi' : 'Ctrl+Enter giải câu hỏi',
             style: const TextStyle(
               color: AppColors.secondaryText,
               height: 1.4,

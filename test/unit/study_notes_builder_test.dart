@@ -36,124 +36,55 @@ void main() {
     );
   }
 
-  test('uses answer meaning not letter; includes tip; no choice list', () {
+  test('document is title + disclaimer + insights only', () {
     final md = buildStudyNotesMarkdown(
       subjectName: 'Toán',
-      knowledgeSummaryMarkdown: '- Cộng hai số cùng dấu',
-      tipsByQuestionId: const {'1': 'Nhớ: 2 cặp 2 thành 4'},
-      questions: [
-        q(
-          id: '1',
-          number: '2',
-          type: QuestionType.multipleChoice,
-          content: '2 + 2 = ?',
-          answerLabel: 'B',
-          answerContent: 'B',
-          explanation: 'dài — không xuất',
-          choices: const [
-            QuestionChoice(
-              id: 'c1',
-              questionId: '1',
-              label: 'A',
-              content: '3',
-              normalizedContent: '3',
-              sortOrder: 0,
-            ),
-            QuestionChoice(
-              id: 'c2',
-              questionId: '1',
-              label: 'B',
-              content: '4',
-              normalizedContent: '4',
-              sortOrder: 1,
-            ),
-          ],
-        ),
-      ],
+      insightsMarkdown: '''
+### Tổng quan
+Có 12 câu về cộng trừ.
+
+### Nhóm: Cộng hai số
+**Thống kê:** 5 câu.
+**Nhận xét:** Cộng cùng dấu giữ dấu.
+**Ví dụ:** 2 + 2 → 4
+''',
     );
 
-    expect(md, contains('# Toán — nhớ đáp án'));
+    expect(md, contains('# Toán — thống kê & nhận xét'));
     expect(md, contains('**TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM**'));
-    expect(md, contains('## Lý thuyết'));
-    expect(md, contains('- Cộng hai số cùng dấu'));
-    expect(md, contains('## Danh sách câu hỏi'));
-    expect(
-      md.indexOf('## Lý thuyết'),
-      lessThan(md.indexOf('## Danh sách câu hỏi')),
-    );
-    expect(
-      md.indexOf('## Danh sách câu hỏi'),
-      lessThan(md.indexOf('**Hỏi:**')),
-    );
-    expect(md, contains('### 2'));
-    expect(md, contains('**Hỏi:**'));
-    expect(md, contains('2 + 2 = ?'));
-    expect(md, contains('**Đáp:**'));
-    expect(md, contains('4'));
-    expect(md, contains('**Mẹo:** Nhớ: 2 cặp 2 thành 4'));
-    expect(md, isNot(contains('A. 3')));
-    expect(md, isNot(contains('**Đáp:** B')));
-    expect(md, isNot(contains('Loại')));
-    expect(md, isNot(contains('không xuất')));
+    expect(md, contains('### Tổng quan'));
+    expect(md, contains('Có 12 câu về cộng trừ.'));
+    expect(md, contains('**Ví dụ:** 2 + 2 → 4'));
+    expect(md, isNot(contains('## Lý thuyết')));
+    expect(md, isNot(contains('## Danh sách câu hỏi')));
+    expect(md, isNot(contains('**Hỏi:**')));
+    expect(md, isNot(contains('**Đáp:**')));
+    expect(md, isNot(contains('**Mẹo:**')));
   });
 
-  test('wraps C program questions in fenced code blocks', () {
-    final md = buildStudyNotesMarkdown(
-      subjectName: 'KTLT',
-      questions: [
-        q(
-          id: '1',
-          type: QuestionType.textResponse,
-          content:
-              'Khi chạy chương trình sau thì kết quả là gì? #include<stdio.h> int main() { int a[] = {2,1}; printf("%d", *a); return 0; }',
-          answerContent: '2',
-        ),
-      ],
-    );
-
-    expect(md, contains('```c'));
-    expect(md, contains('#include'));
-    expect(md, contains('int main()'));
-    expect(md, contains('```'));
-    expect(md, contains('Khi chạy chương trình sau'));
-  });
-
-  test('text response uses answer content + tip', () {
-    final md = buildStudyNotesMarkdown(
-      subjectName: 'Văn',
-      tipsByQuestionId: const {'t': 'Hà Nội — thủ đô từ lâu'},
-      questions: [
-        q(
-          id: 't',
-          type: QuestionType.textResponse,
-          content: 'Thủ đô Việt Nam?',
-          answerContent: 'Hà Nội',
-        ),
-      ],
-    );
-
-    expect(md, contains('**Đáp:**'));
-    expect(md, contains('Hà Nội'));
-    expect(md, contains('**Mẹo:** Hà Nội — thủ đô từ lâu'));
-  });
-
-  test('omits summary section when markdown empty; still has question list title',
-      () {
+  test('omits body when insights empty; keeps disclaimer', () {
     final md = buildStudyNotesMarkdown(
       subjectName: 'X',
-      knowledgeSummaryMarkdown: '  ',
-      questions: [
-        q(
-          id: 'm',
-          type: QuestionType.textResponse,
-          content: 'Câu hỏi chưa có đáp án',
-        ),
-      ],
+      insightsMarkdown: '  ',
+    );
+    expect(md, contains('# X — thống kê & nhận xét'));
+    expect(md, contains('**TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM**'));
+    expect(md, isNot(contains('## Lý thuyết')));
+    expect(md, isNot(contains('## Danh sách câu hỏi')));
+  });
+
+  test('strips duplicate outer section headings from insights', () {
+    final md = buildStudyNotesMarkdown(
+      subjectName: 'KTLT',
+      insightsMarkdown: '''
+## Lý thuyết
+### Con trỏ
+Insight về *a.
+''',
     );
     expect(md, isNot(contains('## Lý thuyết')));
-    expect(md, contains('## Danh sách câu hỏi'));
-    expect(md, contains('**Đáp:**'));
-    expect(md, contains('(chưa có)'));
+    expect(md, contains('### Con trỏ'));
+    expect(md, contains('Insight về *a.'));
   });
 
   test('answerMeaning resolves label via choices', () {
@@ -176,6 +107,16 @@ void main() {
     expect(
       StudyNotesBuilder.answerMeaning(question),
       'Đáp án đúng chi tiết',
+    );
+  });
+
+  test('countExportable ignores empty stems', () {
+    expect(
+      StudyNotesBuilder.countExportable([
+        q(id: '1', type: QuestionType.textResponse, content: 'Có nội dung'),
+        q(id: '2', type: QuestionType.textResponse, content: '   '),
+      ]),
+      1,
     );
   });
 }

@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  camera_desktop
   desktop_multi_window
   flutter_secure_storage_windows
   hotkey_manager_windows

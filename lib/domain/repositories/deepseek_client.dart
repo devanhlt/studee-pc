@@ -135,8 +135,8 @@ abstract interface class DeepSeekClient {
     List<StudyTipItem> items,
   );
 
-  /// Compact subject knowledge summary grounded only in provided Q&A + units.
-  /// Returns Markdown body (no document title).
+  /// Clustered study insights for export (stats + examples; no full Q&A dump).
+  /// Returns Markdown body (no document title / disclaimer).
   Future<String> generateKnowledgeSummary({
     required String subjectName,
     required List<KnowledgeSummaryUnit> units,

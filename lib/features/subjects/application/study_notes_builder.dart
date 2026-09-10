@@ -1,12 +1,11 @@
 import 'dart:io';
 
 import 'package:studee_pc/domain/entities/question.dart';
-import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
 
-/// Builds a concise Q&A study-notes Markdown document for memorization.
+/// Builds a study-notes Markdown document: disclaimer + clustered insights.
 ///
-/// Tips should help remember answer *meaning*. Never treat A/B/C labels as
-/// the thing to memorize (choice order changes across exams).
+/// The body must not dump every Q&A; insights come from LLM analysis of
+/// similar question types (stats + illustrative examples).
 abstract final class StudyNotesBuilder {
   static int countExportable(List<Question> questions) {
     return questions.where((q) => q.content.trim().isNotEmpty).length;
@@ -40,8 +39,7 @@ abstract final class StudyNotesBuilder {
 
   /// Resolves the answer as meaning/text — never a bare A/B/C letter.
   ///
-  /// [compact] flattens/shortens for tips; leave false for Markdown export
-  /// so code blocks stay readable.
+  /// [compact] flattens/shortens for LLM payloads.
   static String? answerMeaning(Question q, {bool compact = true}) {
     var content = q.answerContent?.trim();
     final label = q.answerLabel?.trim();
@@ -85,75 +83,32 @@ Trong phạm vi pháp luật cho phép, tác giả không chịu trách nhiệm 
 
 /// Pure function — easy to unit-test.
 ///
-/// [tipsByQuestionId] maps question id → LLM mnemonic tip.
-/// [knowledgeSummaryMarkdown] is an optional grounded summary section.
+/// Document shape: title + disclaimer + optional [insightsMarkdown] only.
 String buildStudyNotesMarkdown({
   required String subjectName,
-  required List<Question> questions,
-  Map<String, String> tipsByQuestionId = const {},
-  String? knowledgeSummaryMarkdown,
+  String? insightsMarkdown,
 }) {
-  final sorted = List<Question>.from(
-    questions.where((q) => q.content.trim().isNotEmpty),
-  )..sort(_compareQuestions);
-
   final buf = StringBuffer();
-  buf.writeln('# ${_oneLine(subjectName)} — nhớ đáp án');
+  buf.writeln('# ${_oneLine(subjectName)} — thống kê & nhận xét');
   buf.writeln();
   buf.writeln(StudyNotesBuilder.disclaimerMarkdown);
   buf.writeln();
 
-  final summary = knowledgeSummaryMarkdown?.trim();
-  if (summary != null && summary.isNotEmpty) {
-    buf.writeln('## Lý thuyết');
-    buf.writeln();
-    buf.writeln(_stripDuplicateTheoryHeading(summary));
-    buf.writeln();
-  }
-
-  buf.writeln('## Danh sách câu hỏi');
-  buf.writeln();
-
-  if (sorted.isEmpty) {
-    buf.writeln('_Chưa có câu hỏi._');
-    return buf.toString();
-  }
-
-  for (var i = 0; i < sorted.length; i++) {
-    final q = sorted[i];
-    final heading = q.questionNumber?.trim().isNotEmpty == true
-        ? q.questionNumber!.trim()
-        : '${i + 1}';
-    final meaning = StudyNotesBuilder.answerMeaning(q, compact: false);
-    final tip = tipsByQuestionId[q.id]?.trim();
-
-    buf.writeln('### $heading');
-    buf.writeln('**Hỏi:**');
-    buf.writeln();
-    buf.writeln(StudyNotesMarkdownCode.formatBody(q.content));
-    buf.writeln();
-    buf.writeln('**Đáp:**');
-    buf.writeln();
-    buf.writeln(
-      meaning == null
-          ? '(chưa có)'
-          : StudyNotesMarkdownCode.formatBody(meaning),
-    );
-    if (tip != null && tip.isNotEmpty) {
-      buf.writeln();
-      buf.writeln('**Mẹo:** ${_oneLine(tip)}');
-    }
+  final insights = insightsMarkdown?.trim();
+  if (insights != null && insights.isNotEmpty) {
+    buf.writeln(_stripOuterDocumentHeadings(insights));
     buf.writeln();
   }
 
   return '${buf.toString().trimRight()}\n';
 }
 
-String _stripDuplicateTheoryHeading(String markdown) {
+/// Drop duplicate top-level headings the model may still emit.
+String _stripOuterDocumentHeadings(String markdown) {
   return markdown
       .replaceFirst(
         RegExp(
-          r'^#+\s*(Lý thuyết|Tóm tắt kiến thức)\s*\n+',
+          r'^#+\s*(Lý thuyết|Tóm tắt kiến thức|Danh sách câu hỏi|Thống kê\s*&\s*nhận xét)\s*\n+',
           caseSensitive: false,
         ),
         '',
@@ -168,25 +123,4 @@ String _shorten(String text, int maxChars) {
   final one = _oneLine(text);
   if (one.length <= maxChars) return one;
   return '${one.substring(0, maxChars - 1).trimRight()}…';
-}
-
-int _compareQuestions(Question a, Question b) {
-  final an = _sortKey(a.questionNumber);
-  final bn = _sortKey(b.questionNumber);
-  if (an != null && bn != null) {
-    final byNum = an.compareTo(bn);
-    if (byNum != 0) return byNum;
-  } else if (an != null) {
-    return -1;
-  } else if (bn != null) {
-    return 1;
-  }
-  return a.createdAt.compareTo(b.createdAt);
-}
-
-double? _sortKey(String? number) {
-  if (number == null) return null;
-  final m = RegExp(r'(\d+(?:[.,]\d+)?)').firstMatch(number);
-  if (m == null) return null;
-  return double.tryParse(m.group(1)!.replaceAll(',', '.'));
 }

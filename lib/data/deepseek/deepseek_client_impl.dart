@@ -229,7 +229,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
   }) async {
     if (units.isEmpty && questions.isEmpty) return '';
 
-    final version = DeepSeekPrompts.knowledgeSummaryVersion;
+    final version = DeepSeekPrompts.studyInsightsVersion;
     final userPayload = {
       'subject_name': subjectName,
       'knowledge_units': [
@@ -251,7 +251,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
       ],
     };
     final raw = await _chatJson(
-      systemPrompt: DeepSeekPrompts.knowledgeSummarySystem(),
+      systemPrompt: DeepSeekPrompts.studyInsightsSystem(),
       userContent: jsonEncode(userPayload),
       promptVersion: version,
       maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
@@ -261,12 +261,12 @@ class DeepSeekClientImpl implements DeepSeekClient {
 
   String _parseKnowledgeSummary(String raw) {
     final map = _requireJsonObject(raw);
-    final md = '${map['summary_markdown'] ?? map['summaryMarkdown'] ?? ''}'
+    final md = '${map['insights_markdown'] ?? map['insightsMarkdown'] ?? map['summary_markdown'] ?? map['summaryMarkdown'] ?? ''}'
         .trim();
     if (md.isEmpty) {
       throw const UnknownFailure(
-        userMessage: 'Phản hồi tóm tắt kiến thức trống hoặc không hợp lệ.',
-        code: 'knowledge_summary_schema',
+        userMessage: 'Phản hồi phân tích ôn tập trống hoặc không hợp lệ.',
+        code: 'study_insights_schema',
       );
     }
     return md;
