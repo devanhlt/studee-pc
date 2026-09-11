@@ -8,8 +8,8 @@
       name="description"
       content="Trợ lý học tập cá nhân: nhập kiến thức, giải câu hỏi, ôn tập. Tải Studee cho macOS."
     />
-    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/devanhlt/studee-pc/main/website/app-icon.png" />
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/devanhlt/studee-pc/main/website/app-icon.png" />
+    <link rel="icon" type="image/png" href="/app-icon.png" />
+    <link rel="apple-touch-icon" href="/app-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -19,78 +19,183 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="atmosphere" aria-hidden="true"></div>
+    <div class="atmosphere" aria-hidden="true">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="orb orb-c"></div>
+      <div class="grain"></div>
+    </div>
 
-    <header class="nav">
+    <header class="nav reveal">
       <a class="brand" href="/">
-        <img src="https://raw.githubusercontent.com/devanhlt/studee-pc/main/website/app-icon.png" width="36" height="36" alt="" />
+        <img src="/app-icon.png" width="36" height="36" alt="" />
         <span>STUDEE</span>
       </a>
-      <a class="btn btn-sm" href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.0/Studee-1.0.0-macos.dmg">
+      <a
+        class="btn btn-sm"
+        href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.0/Studee-1.0.0-macos.dmg"
+      >
         Tải xuống
       </a>
     </header>
 
     <main>
       <section class="hero">
-        <p class="badge">macOS · Apple Silicon</p>
-        <h1>
-          <span class="brand-hero">Studee</span>
-          <span class="tagline">Học sâu. Nhớ chắc.</span>
-        </h1>
-        <p class="lede">
-          Trợ lý học tập cá nhân — nhập kiến thức, giải câu hỏi bằng ảnh,
-          ôn theo môn. Tập trung, riêng tư, trên máy của bạn.
-        </p>
+        <div class="hero-stage">
+          <img
+            class="hero-bleed"
+            src="/home-hero.jpg"
+            alt=""
+            width="1280"
+            height="720"
+          />
+          <div class="hero-veil"></div>
 
-        <div class="cta-row">
-          <a
-            class="btn btn-primary"
-            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.0/Studee-1.0.0-macos.dmg"
-          >
-            Tải Studee cho macOS
-            <span class="btn-sub">Free · DMG · v1.0.0</span>
-          </a>
-          <a class="link-quiet" href="#install">Xem hướng dẫn cài đặt</a>
-        </div>
+          <div class="hero-copy reveal">
+            <p class="badge">macOS · Apple Silicon</p>
+            <h1>
+              <span class="brand-hero">Studee</span>
+              <span class="tagline">Học sâu. Nhớ chắc.</span>
+            </h1>
+            <p class="lede">
+              Trợ lý học tập cá nhân — nhập kiến thức, giải câu hỏi bằng ảnh,
+              ôn theo môn. Tập trung, riêng tư, trên máy của bạn.
+            </p>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary glow-pulse"
+                href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.0/Studee-1.0.0-macos.dmg"
+              >
+                Tải Studee cho macOS
+                <span class="btn-sub">Free · DMG · v1.0.0</span>
+              </a>
+              <a class="link-quiet" href="#features">Khám phá ngay</a>
+            </div>
+          </div>
 
-        <div class="hero-visual">
-          <div class="glass-mock">
-            <img
-              class="hero-icon"
-              src="https://raw.githubusercontent.com/devanhlt/studee-pc/main/website/app-icon.png"
-              width="160"
-              height="160"
-              alt="Biểu tượng Studee"
-            />
-            <p class="mock-caption">Studee trên máy Mac của bạn</p>
+          <div class="hero-device reveal delay-1" aria-hidden="false">
+            <div class="mac-window float-y">
+              <div class="mac-chrome">
+                <span></span><span></span><span></span>
+                <p>Studee</p>
+              </div>
+              <div class="mac-body">
+                <img
+                  class="mac-art"
+                  src="/home-hero.jpg"
+                  alt="Giao diện cảm hứng học tập của Studee"
+                  width="1280"
+                  height="720"
+                />
+                <div class="mac-overlay">
+                  <img
+                    class="mac-app-icon spin-soft"
+                    src="/app-icon.png"
+                    alt="Biểu tượng Studee"
+                    width="96"
+                    height="96"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="features" aria-label="Tính năng">
-        <article class="feature glass">
+      <section class="features" id="features" aria-label="Tính năng">
+        <article class="feature glass reveal">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none">
+              <path
+                d="M10 14h28v24H10V14Z"
+                stroke="currentColor"
+                stroke-width="2.2"
+                rx="4"
+              />
+              <path
+                d="M16 22h16M16 28h10"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              />
+              <circle cx="34" cy="14" r="5" fill="currentColor" opacity=".35" />
+            </svg>
+          </div>
           <h3>Nhập kiến thức</h3>
-          <p>Dán văn bản, ảnh hoặc PDF — Studee cấu trúc lại thành kiến thức theo môn.</p>
+          <p>
+            Dán văn bản, ảnh hoặc PDF — Studee cấu trúc lại thành kiến thức theo
+            môn.
+          </p>
         </article>
-        <article class="feature glass">
+        <article class="feature glass reveal delay-1">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect
+                x="12"
+                y="10"
+                width="24"
+                height="28"
+                rx="4"
+                stroke="currentColor"
+                stroke-width="2.2"
+              />
+              <circle cx="24" cy="22" r="6" stroke="currentColor" stroke-width="2.2" />
+              <path
+                d="M18 34h12"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              />
+            </svg>
+          </div>
           <h3>Giải câu hỏi</h3>
-          <p>Chụp đề, chọn ảnh, hoặc dán câu hỏi — nhận lời giải kèm ngữ cảnh môn học.</p>
+          <p>
+            Chụp đề, chọn ảnh, hoặc dán câu hỏi — nhận lời giải kèm ngữ cảnh môn
+            học.
+          </p>
         </article>
-        <article class="feature glass">
+        <article class="feature glass reveal delay-2">
+          <div class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none">
+              <path
+                d="M12 32V16h24v16"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              />
+              <path
+                d="M8 34h32"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+              />
+              <path
+                d="M18 28l5-8 4 5 5-9"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
           <h3>Ôn & xuất ghi chú</h3>
-          <p>Lịch sử giải, thống kê dạng bài, xuất tài liệu ôn tập khi bạn cần.</p>
+          <p>
+            Lịch sử giải, thống kê dạng bài, xuất tài liệu ôn tập khi bạn cần.
+          </p>
         </article>
       </section>
 
-      <section class="feel glass">
-        <p>
-          Không dashboard ồn ào — chỉ không gian học tối giản, amber ấm trên nền than,
-          giữ bạn trong luồng tập trung.
-        </p>
+      <section class="feel reveal">
+        <div class="feel-panel glass">
+          <img src="/app-icon.png" width="56" height="56" alt="" />
+          <p>
+            Không dashboard ồn ào — chỉ không gian học tối giản, amber ấm trên nền
+            than, giữ bạn trong luồng tập trung.
+          </p>
+        </div>
       </section>
 
-      <section class="install" id="install">
+      <section class="install reveal" id="install">
         <h2>Cài đặt trên macOS</h2>
         <ol>
           <li>Tải và mở <code>Studee-1.0.0-macos.dmg</code></li>
@@ -119,7 +224,31 @@
     <footer class="footer">
       <span>Studee v1.0.0</span>
       <span>Dữ liệu học lưu trên máy bạn.</span>
-      <a href="https://github.com/devanhlt/studee-pc/releases/tag/v1.0.0">GitHub Releases</a>
+      <a href="https://github.com/devanhlt/studee-pc/releases/tag/v1.0.0"
+        >GitHub Releases</a
+      >
     </footer>
+
+    <script>
+      const reveals = document.querySelectorAll(".reveal");
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("in");
+              io.unobserve(e.target);
+            }
+          });
+        },
+        { threshold: 0.16, rootMargin: "0px 0px -8% 0px" }
+      );
+      reveals.forEach((el) => io.observe(el));
+      // First paint: mark above-the-fold reveals soon
+      requestAnimationFrame(() => {
+        document.querySelectorAll(".hero .reveal, .nav.reveal").forEach((el) => {
+          el.classList.add("in");
+        });
+      });
+    </script>
   </body>
 </html>
