@@ -8,8 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/app_shortcuts.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
+import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/core/utils/answer_display.dart';
@@ -17,7 +19,6 @@ import 'package:studee_pc/core/utils/user_facing_copy.dart';
 import 'package:studee_pc/domain/entities/result_reference.dart';
 import 'package:studee_pc/domain/entities/solve_result.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
-import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/camera_capture_dialog.dart';
@@ -146,7 +147,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
 
   Future<void> _solveImage() async {
     if (!await _ensurePrivacy()) return;
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.image,
       withData: true,
     );
@@ -342,68 +343,81 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                   }
                   return KeyEventResult.ignored;
                 },
-                child: TextField(
-                  controller: _textController,
-                  focusNode: _textFocusNode,
-                  autofocus: widget.shortcutsActive,
-                  expands: true,
-                  maxLines: null,
-                  minLines: null,
-                  textAlignVertical: TextAlignVertical.top,
-                  decoration: InputDecoration(
-                    hintText:
-                        'Dán nội dung câu hỏi… (${AppShortcuts.chord('↵')} để giải)',
-                    alignLabelWithHint: true,
+                child: StudeeGlass(
+                  borderRadius: 16,
+                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                  child: TextField(
+                    controller: _textController,
+                    focusNode: _textFocusNode,
+                    autofocus: widget.shortcutsActive,
+                    expands: true,
+                    maxLines: null,
+                    minLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    decoration: InputDecoration(
+                      hintText:
+                          'Dán nội dung câu hỏi… (${AppShortcuts.chord('↵')} để giải)',
+                      alignLabelWithHint: true,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: false,
+                      isDense: false,
+                      contentPadding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _busy ? null : _solveText,
-                    icon: const Icon(Icons.play_arrow),
-                    label: Text(AppShortcuts.label('Giải', '↵')),
+            StudeeGlassFooter(
+              padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _solveText,
+                      icon: const Icon(Icons.play_arrow),
+                      label: Text(AppShortcuts.label('Giải', '↵')),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                MenuAnchor(
-                  builder: (context, controller, child) {
-                    return IconButton.outlined(
-                      tooltip: 'Ảnh & camera',
-                      onPressed: _busy
-                          ? null
-                          : () {
-                              if (controller.isOpen) {
-                                controller.close();
-                              } else {
-                                controller.open();
-                              }
-                            },
-                      icon: const Icon(Icons.photo_outlined),
-                    );
-                  },
-                  menuChildren: [
-                    MenuItemButton(
-                      leadingIcon: const Icon(Icons.image_outlined),
-                      onPressed: _busy ? null : _solveImage,
-                      child: const Text('Chọn ảnh'),
-                    ),
-                    MenuItemButton(
-                      leadingIcon: const Icon(Icons.crop_free),
-                      onPressed: _busy ? null : _capture,
-                      child: const Text('Chụp màn hình'),
-                    ),
-                    MenuItemButton(
-                      leadingIcon: const Icon(Icons.photo_camera_outlined),
-                      onPressed: _busy ? null : _openCamera,
-                      child: const Text('Camera'),
-                    ),
-                  ],
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  MenuAnchor(
+                    builder: (context, controller, child) {
+                      return IconButton.outlined(
+                        tooltip: 'Ảnh & camera',
+                        onPressed: _busy
+                            ? null
+                            : () {
+                                if (controller.isOpen) {
+                                  controller.close();
+                                } else {
+                                  controller.open();
+                                }
+                              },
+                        icon: const Icon(Icons.photo_outlined),
+                      );
+                    },
+                    menuChildren: [
+                      MenuItemButton(
+                        leadingIcon: const Icon(Icons.image_outlined),
+                        onPressed: _busy ? null : _solveImage,
+                        child: const Text('Chọn ảnh'),
+                      ),
+                      MenuItemButton(
+                        leadingIcon: const Icon(Icons.crop_free),
+                        onPressed: _busy ? null : _capture,
+                        child: const Text('Chụp màn hình'),
+                      ),
+                      MenuItemButton(
+                        leadingIcon: const Icon(Icons.photo_camera_outlined),
+                        onPressed: _busy ? null : _openCamera,
+                        child: const Text('Camera'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             if (_busy || state.stage.isInProgress) ...[
               const SizedBox(height: 16),
@@ -444,13 +458,12 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
         ),
       );
     } else if (state.result != null) {
-      final insets = AppLayout.pageInsets(context);
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: ListView(
-              padding: insets.copyWith(bottom: 8),
+              padding: AppLayout.pageInsets(context).copyWith(bottom: 8),
               children: [
                 if (widget.embedded &&
                     (state.stage.isInProgress ||
@@ -495,26 +508,12 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
               ],
             ),
           ),
-          Material(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: Container(
-              decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: AppColors.border),
-                ),
-              ),
-              padding: EdgeInsets.fromLTRB(
-                insets.left,
-                10,
-                insets.right,
-                insets.bottom,
-              ),
-              child: SolveResultActions(
-                result: state.result!,
-                subjectId: widget.subjectId,
-                onSolveAgain: _beginSolveAgain,
-                onReset: _newQuestion,
-              ),
+          StudeeGlassFooter(
+            child: SolveResultActions(
+              result: state.result!,
+              subjectId: widget.subjectId,
+              onSolveAgain: _beginSolveAgain,
+              onReset: _newQuestion,
             ),
           ),
         ],
@@ -665,9 +664,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
 
     if (widget.embedded) return wrapped;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Giải câu hỏi'),
+    return StudeePageScaffold(
+      topBar: StudeeGlassAppBar(
+        title: 'Giải câu hỏi',
         actions: [
           if (state.stage.isInProgress)
             TextButton(
@@ -703,13 +702,8 @@ class CollapsedQuestionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: Material(
-        color: AppColors.elevated,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: const BorderSide(color: AppColors.border),
-        ),
-        clipBehavior: Clip.antiAlias,
+      child: StudeeGlass(
+        borderRadius: 14,
         child: ExpansionTile(
           initiallyExpanded: false,
           tilePadding: const EdgeInsets.symmetric(horizontal: 12),

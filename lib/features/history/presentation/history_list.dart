@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
+import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/utils/answer_display.dart';
 import 'package:studee_pc/core/utils/user_facing_copy.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
@@ -53,13 +54,8 @@ class HistoryList extends ConsumerWidget {
             final statusVi = UserFacingCopy.sessionStatusVi(item.status);
             final inputVi = UserFacingCopy.inputTypeVi(item.inputType);
 
-            return Container(
-              decoration: BoxDecoration(
-                color: AppColors.elevated,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.border),
-              ),
-              padding: const EdgeInsets.all(12),
+            return StudeeCard(
+              accentColor: AppColors.accent,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -114,8 +110,8 @@ class HistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = subjectId;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Lịch sử giải')),
+    return StudeePageScaffold(
+      topBar: const StudeeGlassAppBar(title: 'Lịch sử giải'),
       body: id == null
           ? const Center(
               child: Padding(

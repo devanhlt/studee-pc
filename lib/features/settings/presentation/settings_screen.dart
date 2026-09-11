@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
+import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
 import 'package:studee_pc/features/settings/application/settings_service.dart';
 
@@ -214,115 +215,138 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     });
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Cài đặt')),
+    return StudeePageScaffold(
+      topBar: const StudeeGlassAppBar(title: 'Cài đặt'),
       body: ListView(
         padding: AppLayout.pageInsets(context),
         children: [
-          _SectionTitle(
-            'DeepSeek',
-            trailing: credsAsync.isLoading
-                ? null
-                : Text(
-                    hasKey ? 'Đã lưu $maskedDeepSeek' : 'Chưa lưu',
-                    style: TextStyle(
-                      color: hasKey ? AppColors.success : AppColors.secondaryText,
-                      fontSize: 13,
-                    ),
-                  ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _deepSeekController,
-            obscureText: _obscureDeepSeek,
-            decoration: InputDecoration(
-              labelText: 'Khóa API',
-              hintText: 'sk-...',
-              suffixIcon: IconButton(
-                onPressed: () =>
-                    setState(() => _obscureDeepSeek = !_obscureDeepSeek),
-                icon: Icon(
-                  _obscureDeepSeek
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _ActionRow(
-            busy: _busy,
-            onSave: _saveDeepSeek,
-            onTest: _testDeepSeek,
-            onDelete: _deleteDeepSeek,
-          ),
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 16),
-          _SectionTitle(
-            'Mathpix OCR',
-            trailing: credsAsync.isLoading
-                ? null
-                : Text(
-                    hasMathpix ? 'Đã lưu $maskedMathpixId' : 'Chưa lưu',
-                    style: TextStyle(
-                      color: hasMathpix
-                          ? AppColors.success
-                          : AppColors.secondaryText,
-                      fontSize: 13,
-                    ),
-                  ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _mathpixAppIdController,
-            decoration: const InputDecoration(labelText: 'App ID'),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _mathpixAppKeyController,
-            obscureText: _obscureMathpixKey,
-            decoration: InputDecoration(
-              labelText: 'App Key',
-              suffixIcon: IconButton(
-                onPressed: () =>
-                    setState(() => _obscureMathpixKey = !_obscureMathpixKey),
-                icon: Icon(
-                  _obscureMathpixKey
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                ),
-              ),
-            ),
-          ),
-          Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: const Text(
-                'Nâng cao',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.secondaryText,
-                ),
-              ),
+          StudeeGlass(
+            borderRadius: 16,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _SectionTitle(
+                  'DeepSeek',
+                  trailing: credsAsync.isLoading
+                      ? null
+                      : Text(
+                          hasKey ? 'Đã lưu $maskedDeepSeek' : 'Chưa lưu',
+                          style: TextStyle(
+                            color: hasKey
+                                ? AppColors.success
+                                : AppColors.secondaryText,
+                            fontSize: 13,
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 10),
                 TextField(
-                  controller: _mathpixBaseUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Máy chủ tuỳ chọn',
-                    hintText: 'https://…',
+                  controller: _deepSeekController,
+                  obscureText: _obscureDeepSeek,
+                  decoration: InputDecoration(
+                    labelText: 'Khóa API',
+                    hintText: 'sk-...',
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(
+                        () => _obscureDeepSeek = !_obscureDeepSeek,
+                      ),
+                      icon: Icon(
+                        _obscureDeepSeek
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                    ),
                   ),
+                ),
+                const SizedBox(height: 12),
+                _ActionRow(
+                  busy: _busy,
+                  onSave: _saveDeepSeek,
+                  onTest: _testDeepSeek,
+                  onDelete: _deleteDeepSeek,
                 ),
               ],
             ),
           ),
-          _ActionRow(
-            busy: _busy,
-            onSave: _saveMathpix,
-            onTest: _testMathpix,
-            onDelete: _deleteMathpix,
+          const SizedBox(height: 12),
+          StudeeGlass(
+            borderRadius: 16,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _SectionTitle(
+                  'Mathpix OCR',
+                  trailing: credsAsync.isLoading
+                      ? null
+                      : Text(
+                          hasMathpix
+                              ? 'Đã lưu $maskedMathpixId'
+                              : 'Chưa lưu',
+                          style: TextStyle(
+                            color: hasMathpix
+                                ? AppColors.success
+                                : AppColors.secondaryText,
+                            fontSize: 13,
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _mathpixAppIdController,
+                  decoration: const InputDecoration(labelText: 'App ID'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _mathpixAppKeyController,
+                  obscureText: _obscureMathpixKey,
+                  decoration: InputDecoration(
+                    labelText: 'App Key',
+                    suffixIcon: IconButton(
+                      onPressed: () => setState(
+                        () => _obscureMathpixKey = !_obscureMathpixKey,
+                      ),
+                      icon: Icon(
+                        _obscureMathpixKey
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                    ),
+                  ),
+                ),
+                Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 8),
+                    title: const Text(
+                      'Nâng cao',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.secondaryText,
+                      ),
+                    ),
+                    children: [
+                      TextField(
+                        controller: _mathpixBaseUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'Máy chủ tuỳ chọn',
+                          hintText: 'https://…',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _ActionRow(
+                  busy: _busy,
+                  onSave: _saveMathpix,
+                  onTest: _testMathpix,
+                  onDelete: _deleteMathpix,
+                ),
+              ],
+            ),
           ),
           if (_busy) ...[
             const SizedBox(height: 16),
@@ -330,34 +354,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
           if (_status != null) ...[
             const SizedBox(height: 12),
-            Text(
-              _status!,
-              style: TextStyle(color: _statusColor, height: 1.35),
+            StudeeGlass(
+              borderRadius: 12,
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                _status!,
+                style: TextStyle(color: _statusColor, height: 1.35),
+              ),
             ),
           ],
           if (Platform.isMacOS) ...[
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 16),
-            const _SectionTitle('Ghi màn hình'),
-            const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: _busy ? null : _resetScreenCapture,
-              child: const Text('Đặt lại quyền'),
+            const SizedBox(height: 12),
+            StudeeGlass(
+              borderRadius: 16,
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const StudeeSectionLabel('Hệ thống'),
+                  const SizedBox(height: 10),
+                  const _SectionTitle('Ghi màn hình'),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: _busy ? null : _resetScreenCapture,
+                    child: const Text('Đặt lại quyền'),
+                  ),
+                ],
+              ),
             ),
           ],
-          const SizedBox(height: 24),
-          const Divider(),
-          const SizedBox(height: 16),
-          const _SectionTitle('Phím tắt'),
-          const SizedBox(height: 8),
-          Text(
-            Platform.isMacOS ? '⌘↵ giải câu hỏi' : 'Ctrl+Enter giải câu hỏi',
-            style: const TextStyle(
-              color: AppColors.secondaryText,
-              height: 1.4,
+          const SizedBox(height: 12),
+          StudeeGlass(
+            borderRadius: 16,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const StudeeSectionLabel('Phím tắt'),
+                const SizedBox(height: 10),
+                Text(
+                  Platform.isMacOS
+                      ? '⌘↵ giải câu hỏi'
+                      : 'Ctrl+Enter giải câu hỏi',
+                  style: TextStyle(
+                    color: AppColors.secondaryText.withValues(alpha: 0.95),
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: 24),
         ],
       ),
     );

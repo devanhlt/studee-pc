@@ -9,6 +9,7 @@ import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
+import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/domain/enums/ingestion_job_status.dart';
@@ -93,7 +94,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   }
 
   Future<void> _pickImage() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.image,
       withData: true,
     );
@@ -177,7 +178,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   }
 
   Future<void> _pickPdf() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
       withData: true,
@@ -305,13 +306,14 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     final choosingSource =
         state == null || state.status == IngestionJobStatus.queued;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nhập kiến thức'),
+    return StudeePageScaffold(
+      topBar: StudeeGlassAppBar(
+        title: 'Nhập kiến thức',
+        subtitle: choosingSource ? 'Dán văn bản hoặc chọn nguồn' : null,
         actions: [
           if (choosingSource) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 6),
               child: FilledButton(
                 onPressed: _starting ? null : () => _startFromPastedText(),
                 child: const Text('Bắt đầu'),
@@ -346,7 +348,6 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
               ],
               icon: const Icon(Icons.more_horiz),
             ),
-            const SizedBox(width: 4),
           ] else if (state != null && !state.status.isTerminal)
             TextButton(
               onPressed: () => _service.cancel(),
@@ -395,18 +396,28 @@ class _SourceChooser extends StatelessWidget {
         Expanded(
           child: Padding(
             padding: insets,
-            child: TextField(
-              controller: controller,
-              focusNode: focusNode,
-              autofocus: true,
-              expands: true,
-              maxLines: null,
-              minLines: null,
-              enabled: !busy,
-              textAlignVertical: TextAlignVertical.top,
-              decoration: const InputDecoration(
-                hintText: 'Dán nội dung tài liệu tại đây…',
-                alignLabelWithHint: true,
+            child: StudeeGlass(
+              borderRadius: 16,
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                autofocus: true,
+                expands: true,
+                maxLines: null,
+                minLines: null,
+                enabled: !busy,
+                textAlignVertical: TextAlignVertical.top,
+                decoration: const InputDecoration(
+                  hintText: 'Dán nội dung tài liệu tại đây…',
+                  alignLabelWithHint: true,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                  isDense: false,
+                  contentPadding: EdgeInsets.fromLTRB(14, 14, 14, 14),
+                ),
               ),
             ),
           ),
@@ -532,32 +543,35 @@ class _ProgressBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = state.totalPages;
     final current = state.currentPage;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      color: AppColors.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            state.progressMessage ?? state.status.labelVi,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          if (total != null && total > 0) ...[
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: current == null ? null : (current / total).clamp(0.0, 1.0),
-            ),
-            const SizedBox(height: 4),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: StudeeGlass(
+        borderRadius: 12,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text(
-              'Trang ${current ?? 0}/$total',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.secondaryText,
-              ),
+              state.progressMessage ?? state.status.labelVi,
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
+            if (total != null && total > 0) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value:
+                    current == null ? null : (current / total).clamp(0.0, 1.0),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Trang ${current ?? 0}/$total',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.secondaryText,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

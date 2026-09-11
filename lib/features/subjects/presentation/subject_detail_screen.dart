@@ -1,10 +1,16 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
+import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/history/presentation/history_list.dart';
@@ -41,54 +47,67 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
     context.push('/subjects/${widget.subjectId}/import');
   }
 
-  void _setMode(_WorkspaceMode mode) {
+  Future<void> _setMode(_WorkspaceMode mode) async {
     if (_mode == mode) return;
     setState(() => _mode = mode);
+    // Make sure the subject DB is open, then refresh list providers.
+    await ref.read(subjectsActionsProvider).open(widget.subjectId);
+    if (!mounted) return;
+    switch (mode) {
+      case _WorkspaceMode.knowledge:
+        ref.invalidate(subjectKnowledgeProvider(widget.subjectId));
+      case _WorkspaceMode.history:
+        ref.invalidate(subjectHistoryProvider(widget.subjectId));
+      case _WorkspaceMode.solve:
+        break;
+    }
   }
 
   Future<void> _exportStudyNotes(Subject subject) async {
     final format = await showStudyNotesFormatDialog(context);
     if (format == null || !mounted) return;
 
-    final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'Xuất tài liệu',
-      fileName: '${subject.name}-ghi-chu.${format.fileExtension}',
-      type: FileType.custom,
-      allowedExtensions: [format.fileExtension],
-    );
-    if (path == null) return;
-
-    if (mounted) {
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 20),
-              Expanded(
-                child: Text(
-                  'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
-                ),
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
 
     try {
+      final tempDir = await getTemporaryDirectory();
+      final fileName = '${subject.name}-ghi-chu.${format.fileExtension}';
+      final tempPath = p.join(tempDir.path, fileName);
       final out = await ref.read(subjectsActionsProvider).exportStudyNotes(
             subjectId: subject.id,
             subjectName: subject.name,
-            destinationPath: path,
+            destinationPath: tempPath,
             format: format,
           );
+      final bytes = await File(out).readAsBytes();
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
+      final saved = await FilePicker.saveFile(
+        dialogTitle: 'Xuất tài liệu',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: [format.fileExtension],
+        bytes: Uint8List.fromList(bytes),
+      );
+      if (saved == null || !mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xuất tài liệu: $out')),
+        SnackBar(content: Text('Đã xuất tài liệu: $saved')),
       );
     } on Object catch (e) {
       if (!mounted) return;
@@ -118,18 +137,18 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
     final asyncSubject = ref.watch(subjectByIdProvider(widget.subjectId));
 
     return asyncSubject.when(
-      loading: () => const Scaffold(
+      loading: () => const StudeePageScaffold(
         body: Center(child: CircularProgressIndicator()),
       ),
-      error: (_, _) => Scaffold(
-        appBar: AppBar(title: const Text('Môn học')),
+      error: (_, _) => StudeePageScaffold(
+        topBar: const StudeeGlassAppBar(title: 'Môn học'),
         body: const Center(child: Text('Không tải được môn học.')),
       ),
       data: (subject) {
         if (subject == null) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Môn học')),
-            body: const Center(child: Text('Không tìm thấy môn học.')),
+          return const StudeePageScaffold(
+            topBar: StudeeGlassAppBar(title: 'Môn học'),
+            body: Center(child: Text('Không tìm thấy môn học.')),
           );
         }
 
@@ -141,35 +160,21 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
 
         return Focus(
           canRequestFocus: false,
-          child: Scaffold(
-            appBar: AppBar(
+          child: StudeePageScaffold(
+            topBar: StudeeGlassAppBar(
+              title: subject.name,
+              subtitle: subtitle,
               leading: _mode == _WorkspaceMode.solve
-                  ? null
+                  ? IconButton(
+                      tooltip: 'Quay lại',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back),
+                    )
                   : IconButton(
                       tooltip: 'Về Giải',
                       onPressed: () => _setMode(_WorkspaceMode.solve),
                       icon: const Icon(Icons.arrow_back),
                     ),
-              title: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    subject.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.secondaryText,
-                    ),
-                  ),
-                ],
-              ),
               actions: [
                 IconButton(
                   tooltip: 'Nhập kiến thức',
@@ -211,7 +216,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(width: 4),
               ],
             ),
             body: switch (_mode) {
@@ -258,52 +262,65 @@ class _KnowledgePanel extends ConsumerWidget {
       children: [
         Padding(
           padding: AppLayout.pageInsets(context).copyWith(bottom: 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Dùng khi giải câu hỏi',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+          child: StudeeGlass(
+            borderRadius: 14,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const StudeeSectionLabel('Kiến thức'),
+                const SizedBox(height: 10),
+                const Text(
+                  'Dùng khi giải câu hỏi',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Kiến thức đã nhập giúp đáp án bám tài liệu của bạn.',
-                style: TextStyle(
-                  color: AppColors.secondaryText,
-                  fontSize: 13,
-                  height: 1.35,
+                const SizedBox(height: 4),
+                Text(
+                  'Kiến thức đã nhập giúp đáp án bám tài liệu của bạn.',
+                  style: TextStyle(
+                    color: AppColors.secondaryText.withValues(alpha: 0.95),
+                    fontSize: 13,
+                    height: 1.35,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: onImport,
-                      icon: const Icon(Icons.library_add, size: 18),
-                      label: const Text('Nhập thêm'),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: onImport,
+                        icon: const Icon(Icons.library_add, size: 18),
+                        label: const Text('Nhập thêm'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: onBackToSolve,
-                    child: const Text('Giải ngay'),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      onPressed: onBackToSolve,
+                      child: const Text('Giải ngay'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 8),
-        const Divider(height: 1),
+        const SizedBox(height: 10),
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, _) =>
-                const Center(child: Text('Không tải được kiến thức.')),
+            error: (e, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Không tải được kiến thức.\n$e',
+                  style: const TextStyle(color: AppColors.error),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
             data: (items) {
               if (items.isEmpty) {
                 return _SupportEmpty(
@@ -321,13 +338,8 @@ class _KnowledgePanel extends ConsumerWidget {
                 separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
                   final u = items[i];
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.elevated,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.border),
-                    ),
+                  return StudeeCard(
+                    accentColor: AppColors.accent,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -374,39 +386,45 @@ class _HistoryPanel extends StatelessWidget {
       children: [
         Padding(
           padding: AppLayout.pageInsets(context).copyWith(bottom: 8),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Các lần giải trước',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
+          child: StudeeGlass(
+            borderRadius: 14,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      StudeeSectionLabel('Lịch sử'),
+                      SizedBox(height: 10),
+                      Text(
+                        'Các lần giải trước',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Xem lại câu hỏi đã giải trong môn này.',
-                      style: TextStyle(
-                        color: AppColors.secondaryText,
-                        fontSize: 13,
-                        height: 1.35,
+                      SizedBox(height: 4),
+                      Text(
+                        'Xem lại câu hỏi đã giải trong môn này.',
+                        style: TextStyle(
+                          color: AppColors.secondaryText,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              OutlinedButton(
-                onPressed: onBackToSolve,
-                child: const Text('Giải tiếp'),
-              ),
-            ],
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: onBackToSolve,
+                  child: const Text('Giải tiếp'),
+                ),
+              ],
+            ),
           ),
         ),
-        const Divider(height: 1),
         Expanded(child: HistoryList(subjectId: subjectId)),
       ],
     );
@@ -436,21 +454,22 @@ class _SupportEmpty extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 36, color: AppColors.secondaryText),
+            Icon(icon, size: 36, color: AppColors.accent.withValues(alpha: 0.85)),
             const SizedBox(height: 14),
             Text(
               title,
               style: const TextStyle(
                 fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.15,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               message,
-              style: const TextStyle(
-                color: AppColors.secondaryText,
+              style: TextStyle(
+                color: AppColors.secondaryText.withValues(alpha: 0.95),
                 height: 1.4,
               ),
               textAlign: TextAlign.center,

@@ -23,6 +23,7 @@ import 'package:studee_pc/features/settings/application/settings_service.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/platform/desktop_bootstrap.dart';
 import 'package:studee_pc/platform/desktop_integration_impl.dart';
+import 'package:studee_pc/platform/mobile_integration_impl.dart';
 
 /// Application paths (ApplicationData root).
 final appPathsProvider = Provider<AppPaths>((ref) => AppPaths());
@@ -93,6 +94,11 @@ final ocrServiceProvider = Provider<OcrService>((ref) {
 });
 
 final desktopIntegrationProvider = Provider<DesktopIntegration>((ref) {
+  if (Platform.isAndroid || Platform.isIOS) {
+    final impl = MobileIntegrationImpl();
+    ref.onDispose(impl.dispose);
+    return impl;
+  }
   final impl = DesktopIntegrationImpl();
   ref.onDispose(impl.dispose);
   return impl;

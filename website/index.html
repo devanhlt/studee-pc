@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Studee — Học sâu. Nhớ chắc.</title>
+    <meta
+      name="description"
+      content="Trợ lý học tập cá nhân: nhập kiến thức, giải câu hỏi, ôn tập. Tải Studee cho macOS."
+    />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/app-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <header class="nav">
+      <a class="brand" href="/">
+        <img src="/app-icon.png" width="36" height="36" alt="" />
+        <span>STUDEE</span>
+      </a>
+      <a class="btn btn-sm" href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.0/Studee-1.0.0-macos.dmg">
+        Tải xuống
+      </a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="badge">macOS · Apple Silicon</p>
+        <h1>
+          <span class="brand-hero">Studee</span>
+          <span class="tagline">Học sâu. Nhớ chắc.</span>
+        </h1>
+        <p class="lede">
+          Trợ lý học tập cá nhân — nhập kiến thức, giải câu hỏi bằng ảnh,
+          ôn theo môn. Tập trung, riêng tư, trên máy của bạn.
+        </p>
+
+        <div class="cta-row">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.0/Studee-1.0.0-macos.dmg"
+          >
+            Tải Studee cho macOS
+            <span class="btn-sub">Free · DMG · v1.0.0</span>
+          </a>
+          <a class="link-quiet" href="#install">Xem hướng dẫn cài đặt</a>
+        </div>
+
+        <div class="hero-visual">
+          <div class="glass-mock">
+            <img
+              class="hero-icon"
+              src="/app-icon.png"
+              width="160"
+              height="160"
+              alt="Biểu tượng Studee"
+            />
+            <p class="mock-caption">Studee trên máy Mac của bạn</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="features" aria-label="Tính năng">
+        <article class="feature glass">
+          <h3>Nhập kiến thức</h3>
+          <p>Dán văn bản, ảnh hoặc PDF — Studee cấu trúc lại thành kiến thức theo môn.</p>
+        </article>
+        <article class="feature glass">
+          <h3>Giải câu hỏi</h3>
+          <p>Chụp đề, chọn ảnh, hoặc dán câu hỏi — nhận lời giải kèm ngữ cảnh môn học.</p>
+        </article>
+        <article class="feature glass">
+          <h3>Ôn & xuất ghi chú</h3>
+          <p>Lịch sử giải, thống kê dạng bài, xuất tài liệu ôn tập khi bạn cần.</p>
+        </article>
+      </section>
+
+      <section class="feel glass">
+        <p>
+          Không dashboard ồn ào — chỉ không gian học tối giản, amber ấm trên nền than,
+          giữ bạn trong luồng tập trung.
+        </p>
+      </section>
+
+      <section class="install" id="install">
+        <h2>Cài đặt trên macOS</h2>
+        <ol>
+          <li>Tải và mở <code>Studee-1.0.0-macos.dmg</code></li>
+          <li>Kéo <strong>Studee</strong> vào thư mục Applications</li>
+          <li>
+            Nếu macOS báo app “bị hỏng”, mở Terminal và chạy:
+            <pre><code>xattr -cr /Applications/Studee.app</code></pre>
+            rồi mở lại từ Applications.
+          </li>
+        </ol>
+        <p class="warn">
+          Cảnh báo Gatekeeper chỉ chặn bản tải chưa ký — app không thực sự hỏng.
+          Đừng tắt Gatekeeper; chỉ cần lệnh <code>xattr</code> ở trên.
+        </p>
+        <p class="install-cta">
+          <a
+            class="btn btn-primary"
+            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.0/Studee-1.0.0-macos.dmg"
+          >
+            Tải Studee-1.0.0-macos.dmg
+          </a>
+        </p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>Studee v1.0.0</span>
+      <span>Dữ liệu học lưu trên máy bạn.</span>
+      <a href="https://github.com/devanhlt/studee-pc/releases/tag/v1.0.0">GitHub Releases</a>
+    </footer>
+  </body>
+</html>

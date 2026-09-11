@@ -1,11 +1,15 @@
-import 'dart:math' as math;
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
@@ -18,64 +22,8 @@ class SubjectsListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncSubjects = ref.watch(subjectsListProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const _HomeAtmosphere(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _HomeHeader(
-                onImport: () => _importSubjectZip(context, ref),
-                onSettings: () => context.push('/settings'),
-              ),
-              Expanded(
-                child: asyncSubjects.when(
-                  loading: () => const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                  error: (e, _) => const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Không tải được danh sách môn học.',
-                        style: TextStyle(color: AppColors.error),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                  data: (subjects) {
-                    if (subjects.isEmpty) {
-                      return const _EmptySubjectsState();
-                    }
-                    return RefreshIndicator(
-                      color: AppColors.accent,
-                      onRefresh: () async {
-                        ref.invalidate(subjectsListProvider);
-                        await ref.read(subjectsListProvider.future);
-                      },
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 88),
-                        itemCount: subjects.length + 1,
-                        separatorBuilder: (_, index) =>
-                            SizedBox(height: index == 0 ? 14 : 10),
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return const _SubjectsSectionLabel();
-                          }
-                          return _SubjectCard(subject: subjects[index - 1]);
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return StudeePageScaffold(
+      atmosphereIntensity: 1,
       floatingActionButton: asyncSubjects.maybeWhen(
         data: (subjects) => subjects.isEmpty
             ? null
@@ -88,86 +36,51 @@ class SubjectsListScreen extends ConsumerWidget {
               ),
         orElse: () => null,
       ),
-    );
-  }
-}
-
-class _HomeAtmosphere extends StatelessWidget {
-  const _HomeAtmosphere();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: CustomPaint(
-        painter: _HomeAtmospherePainter(),
-        child: const SizedBox.expand(),
+      topBar: _HomeHeader(
+        onImport: () => _importSubjectZip(context, ref),
+        onSettings: () => context.push('/settings'),
+      ),
+      body: asyncSubjects.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(),
+        ),
+        error: (e, _) => const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Không tải được danh sách môn học.',
+              style: TextStyle(color: AppColors.error),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+        data: (subjects) {
+          if (subjects.isEmpty) {
+            return const _EmptySubjectsState();
+          }
+          return RefreshIndicator(
+            color: AppColors.accent,
+            onRefresh: () async {
+              ref.invalidate(subjectsListProvider);
+              await ref.read(subjectsListProvider.future);
+            },
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 88),
+              itemCount: subjects.length + 1,
+              separatorBuilder: (_, index) =>
+                  SizedBox(height: index == 0 ? 14 : 10),
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return const StudeeSectionLabel('Môn học của bạn');
+                }
+                return _SubjectCard(subject: subjects[index - 1]);
+              },
+            ),
+          );
+        },
       ),
     );
   }
-}
-
-class _HomeAtmospherePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final base = Paint()..color = AppColors.background;
-    canvas.drawRect(Offset.zero & size, base);
-
-    final glow = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(-0.75, -0.95),
-        radius: 1.15,
-        colors: [
-          AppColors.accent.withValues(alpha: 0.22),
-          AppColors.accent.withValues(alpha: 0.06),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.35, 1.0],
-      ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, glow);
-
-    final wash = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          const Color(0xFF1A1612).withValues(alpha: 0.55),
-          AppColors.background.withValues(alpha: 0.15),
-          AppColors.background,
-        ],
-        stops: const [0.0, 0.42, 1.0],
-      ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, wash);
-
-    final arcPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = AppColors.accent.withValues(alpha: 0.12);
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(size.width + 20, -30), radius: 140),
-      0.6,
-      math.pi,
-      false,
-      arcPaint,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(size.width + 20, -30), radius: 176),
-      0.75,
-      math.pi * 0.85,
-      false,
-      arcPaint..color = AppColors.primaryText.withValues(alpha: 0.05),
-    );
-
-    final linePaint = Paint()
-      ..color = AppColors.primaryText.withValues(alpha: 0.035)
-      ..strokeWidth = 1;
-    for (var i = 0; i < 7; i++) {
-      final y = 90.0 + i * 58;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y + i * 2.5), linePaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _HomeHeader extends StatelessWidget {
@@ -244,36 +157,6 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-class _SubjectsSectionLabel extends StatelessWidget {
-  const _SubjectsSectionLabel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 3,
-          height: 14,
-          decoration: BoxDecoration(
-            color: AppColors.accent,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        const SizedBox(width: 8),
-        const Text(
-          'Môn học của bạn',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.secondaryText,
-            letterSpacing: 0.2,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _EmptySubjectsState extends ConsumerWidget {
   const _EmptySubjectsState();
 
@@ -289,28 +172,36 @@ class _EmptySubjectsState extends ConsumerWidget {
             children: [
               const _HeroArtCard(),
               const SizedBox(height: 22),
-              const Text(
-                'Bắt đầu hành trình ôn tập',
-                style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryText,
-                  letterSpacing: -0.2,
+              StudeeGlass(
+                borderRadius: 16,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Bắt đầu hành trình ôn tập',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryText,
+                        letterSpacing: -0.2,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tạo môn học đầu tiên — nhập tài liệu, giải câu hỏi, '
+                      'và xây bộ nhớ kiến thức riêng của bạn.',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        height: 1.45,
+                        color: AppColors.secondaryText.withValues(alpha: 0.95),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 10),
-              Text(
-                'Tạo môn học đầu tiên — nhập tài liệu, giải câu hỏi, '
-                'và xây bộ nhớ kiến thức riêng của bạn.',
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.45,
-                  color: AppColors.secondaryText.withValues(alpha: 0.95),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -423,133 +314,108 @@ class _SubjectCard extends ConsumerWidget {
     final updated = DateFormat('dd/MM/yyyy HH:mm')
         .format(subject.updatedAt.toLocal());
 
-    return Material(
-      color: AppColors.elevated.withValues(alpha: 0.92),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: AppColors.border.withValues(alpha: 0.9)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => context.push('/subjects/${subject.id}'),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 4,
-                color: color.withValues(alpha: 0.85),
+    return StudeeCard(
+      accentColor: color,
+      padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+      onTap: () => context.push('/subjects/${subject.id}'),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  color.withValues(alpha: 0.28),
+                  color.withValues(alpha: 0.08),
+                ],
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              color.withValues(alpha: 0.28),
-                              color.withValues(alpha: 0.08),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: color.withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: Icon(
-                          _iconFor(subject.icon),
-                          size: 20,
-                          color: color,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              subject.name,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primaryText,
-                                letterSpacing: -0.15,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              '${subject.sourceCount} nguồn · '
-                              '${subject.knowledgeCount} mục · '
-                              '${subject.questionCount} câu',
-                              softWrap: true,
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                height: 1.35,
-                                color: AppColors.secondaryText
-                                    .withValues(alpha: 0.95),
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              'Cập nhật $updated',
-                              softWrap: true,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: AppColors.secondaryText
-                                    .withValues(alpha: 0.75),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        tooltip: 'Thao tác',
-                        onSelected: (value) async {
-                          switch (value) {
-                            case 'rename':
-                              await _showRenameDialog(context, ref, subject);
-                            case 'export':
-                              await _exportSubject(context, ref, subject);
-                            case 'export_notes':
-                              await _exportStudyNotes(context, ref, subject);
-                            case 'delete':
-                              await _showDeleteDialog(context, ref, subject);
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: 'rename',
-                            child: Text('Đổi tên'),
-                          ),
-                          PopupMenuItem(
-                            value: 'export',
-                            child: Text('Xuất ZIP'),
-                          ),
-                          PopupMenuItem(
-                            value: 'export_notes',
-                            child: Text('Xuất tài liệu'),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Text('Xóa'),
-                          ),
-                        ],
-                      ),
-                    ],
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: color.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Icon(
+              _iconFor(subject.icon),
+              size: 20,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  subject.name,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryText,
+                    letterSpacing: -0.15,
                   ),
                 ),
+                const SizedBox(height: 5),
+                Text(
+                  '${subject.sourceCount} nguồn · '
+                  '${subject.knowledgeCount} mục · '
+                  '${subject.questionCount} câu',
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.35,
+                    color: AppColors.secondaryText.withValues(alpha: 0.95),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Cập nhật $updated',
+                  softWrap: true,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.secondaryText.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Thao tác',
+            onSelected: (value) async {
+              switch (value) {
+                case 'rename':
+                  await _showRenameDialog(context, ref, subject);
+                case 'export':
+                  await _exportSubject(context, ref, subject);
+                case 'export_notes':
+                  await _exportStudyNotes(context, ref, subject);
+                case 'delete':
+                  await _showDeleteDialog(context, ref, subject);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'rename',
+                child: Text('Đổi tên'),
+              ),
+              PopupMenuItem(
+                value: 'export',
+                child: Text('Xuất ZIP'),
+              ),
+              PopupMenuItem(
+                value: 'export_notes',
+                child: Text('Xuất tài liệu'),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text('Xóa'),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -569,46 +435,137 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
   final controller = TextEditingController();
   final name = await showDialog<String>(
     context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.55),
     builder: (ctx) {
       String? error;
+      void submit(void Function(void Function()) setLocal) {
+        final trimmed = controller.text.trim();
+        if (trimmed.isEmpty) {
+          setLocal(() => error = 'Nhập tên môn học.');
+          return;
+        }
+        Navigator.of(ctx).pop(trimmed);
+      }
+
       return StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Thêm môn học'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Tên môn học',
-              hintText: 'Ví dụ: Đại số tuyến tính',
-              errorText: error,
+        builder: (ctx, setLocal) {
+          return Dialog(
+            backgroundColor: AppColors.elevated,
+            surfaceTintColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: AppColors.border.withValues(alpha: 0.85),
+              ),
             ),
-            onSubmitted: (v) {
-              final trimmed = v.trim();
-              if (trimmed.isEmpty) {
-                setLocal(() => error = 'Tên không được trống.');
-                return;
-              }
-              Navigator.of(ctx).pop(trimmed);
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Hủy'),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: AppColors.accent,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Thêm môn học',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: AppColors.primaryText,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Đóng',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(Icons.close, size: 20),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: TextField(
+                        controller: controller,
+                        autofocus: true,
+                        textInputAction: TextInputAction.done,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Tên môn, ví dụ Đại số…',
+                          errorText: error,
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: AppColors.border.withValues(alpha: 0.9),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.accent,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                        onChanged: (_) {
+                          if (error != null) setLocal(() => error = null);
+                        },
+                        onSubmitted: (_) => submit(setLocal),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilledButton(
+                        onPressed: () => submit(setLocal),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(44),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Tạo'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            FilledButton(
-              onPressed: () {
-                final trimmed = controller.text.trim();
-                if (trimmed.isEmpty) {
-                  setLocal(() => error = 'Tên không được trống.');
-                  return;
-                }
-                Navigator.of(ctx).pop(trimmed);
-              },
-              child: const Text('Tạo'),
-            ),
-          ],
-        ),
+          );
+        },
       );
     },
   );
@@ -642,45 +599,137 @@ Future<void> _showRenameDialog(
   final controller = TextEditingController(text: subject.name);
   final name = await showDialog<String>(
     context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.55),
     builder: (ctx) {
       String? error;
+      void submit(void Function(void Function()) setLocal) {
+        final trimmed = controller.text.trim();
+        if (trimmed.isEmpty) {
+          setLocal(() => error = 'Nhập tên môn học.');
+          return;
+        }
+        Navigator.of(ctx).pop(trimmed);
+      }
+
       return StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Đổi tên môn học'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Tên mới',
-              errorText: error,
+        builder: (ctx, setLocal) {
+          return Dialog(
+            backgroundColor: AppColors.elevated,
+            surfaceTintColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: AppColors.border.withValues(alpha: 0.85),
+              ),
             ),
-            onSubmitted: (v) {
-              final trimmed = v.trim();
-              if (trimmed.isEmpty) {
-                setLocal(() => error = 'Tên không được trống.');
-                return;
-              }
-              Navigator.of(ctx).pop(trimmed);
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Hủy'),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: const Icon(
+                            Icons.edit_outlined,
+                            color: AppColors.accent,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Đổi tên',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: AppColors.primaryText,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Đóng',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(Icons.close, size: 20),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: TextField(
+                        controller: controller,
+                        autofocus: true,
+                        textInputAction: TextInputAction.done,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Tên môn học…',
+                          errorText: error,
+                          filled: true,
+                          fillColor: AppColors.surface,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: AppColors.border.withValues(alpha: 0.9),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.accent,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                        onChanged: (_) {
+                          if (error != null) setLocal(() => error = null);
+                        },
+                        onSubmitted: (_) => submit(setLocal),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilledButton(
+                        onPressed: () => submit(setLocal),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(44),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Lưu'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            FilledButton(
-              onPressed: () {
-                final trimmed = controller.text.trim();
-                if (trimmed.isEmpty) {
-                  setLocal(() => error = 'Tên không được trống.');
-                  return;
-                }
-                Navigator.of(ctx).pop(trimmed);
-              },
-              child: const Text('Lưu'),
-            ),
-          ],
-        ),
+          );
+        },
       );
     },
   );
@@ -750,20 +799,25 @@ Future<void> _exportSubject(
   WidgetRef ref,
   Subject subject,
 ) async {
-  final path = await FilePicker.platform.saveFile(
-    dialogTitle: 'Xuất môn học',
-    fileName: '${subject.name}.zip',
-    type: FileType.custom,
-    allowedExtensions: const ['zip'],
-  );
-  if (path == null) return;
   try {
-    final out = await ref.read(subjectsActionsProvider).export(subject.id, path);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xuất: $out')),
-      );
-    }
+    final tempDir = await getTemporaryDirectory();
+    final tempPath = p.join(tempDir.path, '${subject.name}.zip');
+    final out = await ref.read(subjectsActionsProvider).export(
+          subject.id,
+          tempPath,
+        );
+    final bytes = await File(out).readAsBytes();
+    final saved = await FilePicker.saveFile(
+      dialogTitle: 'Xuất môn học',
+      fileName: '${subject.name}.zip',
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+      bytes: Uint8List.fromList(bytes),
+    );
+    if (saved == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Đã xuất: $saved')),
+    );
   } on Object catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -781,47 +835,49 @@ Future<void> _exportStudyNotes(
   final format = await showStudyNotesFormatDialog(context);
   if (format == null || !context.mounted) return;
 
-  final path = await FilePicker.platform.saveFile(
-    dialogTitle: 'Xuất tài liệu',
-    fileName: '${subject.name}-ghi-chu.${format.fileExtension}',
-    type: FileType.custom,
-    allowedExtensions: [format.fileExtension],
-  );
-  if (path == null) return;
-
-  if (context.mounted) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Expanded(
-              child: Text(
-                'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
-              ),
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      content: Row(
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 20),
+          Expanded(
+            child: Text(
+              'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 
   try {
+    final tempDir = await getTemporaryDirectory();
+    final fileName = '${subject.name}-ghi-chu.${format.fileExtension}';
+    final tempPath = p.join(tempDir.path, fileName);
     final out = await ref.read(subjectsActionsProvider).exportStudyNotes(
           subjectId: subject.id,
           subjectName: subject.name,
-          destinationPath: path,
+          destinationPath: tempPath,
           format: format,
         );
+    final bytes = await File(out).readAsBytes();
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xuất tài liệu: $out')),
-      );
     }
+    final saved = await FilePicker.saveFile(
+      dialogTitle: 'Xuất tài liệu',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: [format.fileExtension],
+      bytes: Uint8List.fromList(bytes),
+    );
+    if (saved == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Đã xuất tài liệu: $saved')),
+    );
   } on Object catch (e) {
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
@@ -836,7 +892,7 @@ Future<void> _exportStudyNotes(
 }
 
 Future<void> _importSubjectZip(BuildContext context, WidgetRef ref) async {
-  final picked = await FilePicker.platform.pickFiles(
+  final picked = await FilePicker.pickFiles(
     dialogTitle: 'Nhập môn học từ ZIP',
     type: FileType.custom,
     allowedExtensions: const ['zip'],
