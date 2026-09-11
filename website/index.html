@@ -177,40 +177,15 @@
 
         <div class="demo-stage glass">
           <div class="demo-player" id="demo-player">
-            <img
-              class="demo-poster"
-              src="/home-hero.jpg"
-              alt="Xem trước trải nghiệm Studee"
-              width="1280"
-              height="720"
-            />
-            <button
-              type="button"
-              class="demo-play"
-              id="demo-play"
-              aria-label="Phát video giới thiệu Studee"
-            >
-              <span class="demo-play-ring" aria-hidden="true"></span>
-              <span class="demo-play-core" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M8.5 6.8v10.4L18 12 8.5 6.8Z" />
-                </svg>
-              </span>
-            </button>
-            <p class="demo-fallback" id="demo-fallback" hidden>
-              Video demo sắp sẵn sàng — tải Studee để trải nghiệm ngay.
-            </p>
-            <video
-              id="demo-video"
-              class="demo-video"
-              controls
-              playsinline
-              preload="none"
-              poster="/home-hero.jpg"
-              hidden
-            >
-              <source src="/demo.mp4" type="video/mp4" />
-            </video>
+            <iframe
+              class="demo-embed"
+              src="https://www.youtube-nocookie.com/embed/M7lc1UVf-VE?rel=0&modestbranding=1"
+              title="Video giới thiệu Studee"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
+              loading="lazy"
+            ></iframe>
           </div>
         </div>
       </section>
@@ -350,41 +325,6 @@
         document.querySelectorAll(".hero .reveal, .nav.reveal").forEach((el) => {
           el.classList.add("in");
         });
-      });
-
-      const playBtn = document.getElementById("demo-play");
-      const video = document.getElementById("demo-video");
-      const poster = document.querySelector(".demo-poster");
-      const fallback = document.getElementById("demo-fallback");
-      let videoReady = false;
-
-      fetch("/demo.mp4", { method: "HEAD" })
-        .then((res) => {
-          videoReady = res.ok;
-          if (!videoReady && fallback) fallback.hidden = false;
-        })
-        .catch(() => {
-          videoReady = false;
-          if (fallback) fallback.hidden = false;
-        });
-
-      playBtn?.addEventListener("click", async () => {
-        if (!videoReady) {
-          document.getElementById("download")?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-          return;
-        }
-        poster?.setAttribute("hidden", "");
-        playBtn.setAttribute("hidden", "");
-        if (fallback) fallback.hidden = true;
-        video.hidden = false;
-        try {
-          await video.play();
-        } catch (_) {
-          /* user gesture / autoplay policy */
-        }
       });
     </script>
   </body>

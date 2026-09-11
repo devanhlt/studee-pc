@@ -640,95 +640,12 @@ h1 {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
 }
 
-.demo-poster,
-.demo-video {
+.demo-embed {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.demo-video {
-  background: #000;
-}
-
-.demo-play {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 88px;
-  height: 88px;
   border: 0;
-  background: transparent;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-
-.demo-play-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: rgba(242, 140, 40, 0.18);
-  border: 1px solid rgba(242, 140, 40, 0.45);
-  animation: play-pulse 2.4s ease-out infinite;
-}
-
-.demo-play-core {
-  position: relative;
-  z-index: 1;
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: var(--cta-text);
-  background: linear-gradient(180deg, #ff9f3d 0%, var(--accent) 100%);
-  box-shadow:
-    0 14px 34px rgba(242, 140, 40, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  transition: transform 0.2s ease;
-}
-
-.demo-play-core svg {
-  width: 28px;
-  height: 28px;
-  margin-left: 3px;
-}
-
-.demo-play:hover .demo-play-core {
-  transform: scale(1.06);
-}
-
-.demo-fallback {
-  position: absolute;
-  left: 50%;
-  bottom: 1rem;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 0.45rem 0.85rem;
-  border-radius: 999px;
-  background: rgba(13, 14, 17, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #d5dae2;
-  font-size: 0.84rem;
-  backdrop-filter: blur(10px);
-  white-space: nowrap;
-}
-
-@keyframes play-pulse {
-  0% {
-    transform: scale(0.92);
-    opacity: 0.9;
-  }
-  70% {
-    transform: scale(1.28);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1.28);
-    opacity: 0;
-  }
 }
 
 .feature {
@@ -912,23 +829,6 @@ h1 {
   .download-grid {
     grid-template-columns: 1fr;
   }
-
-  .demo-fallback {
-    white-space: normal;
-    text-align: center;
-    max-width: calc(100% - 1.5rem);
-    bottom: 0.75rem;
-  }
-
-  .demo-play {
-    width: 76px;
-    height: 76px;
-  }
-
-  .demo-play-core {
-    width: 58px;
-    height: 58px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -936,8 +836,7 @@ h1 {
   .hero-bleed,
   .float-y,
   .spin-soft,
-  .glow-pulse,
-  .demo-play-ring {
+  .glow-pulse {
     animation: none !important;
   }
 
