@@ -210,7 +210,7 @@ img {
 /* —— Hero —— */
 .hero {
   position: relative;
-  padding: 0.5rem 0 1rem;
+  padding: 0.75rem 1.25rem 1rem;
 }
 
 .hero-stage {
@@ -222,7 +222,11 @@ img {
   align-items: end;
   padding: 2rem 1.5rem 2.5rem;
   overflow: hidden;
-  border-radius: 0;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .hero-bleed {
@@ -476,6 +480,115 @@ h1 {
   padding: 0 1.5rem;
 }
 
+/* —— Downloads —— */
+.downloads {
+  max-width: 1120px;
+  margin: 2.75rem auto 0;
+  padding: 0 1.5rem;
+}
+
+.downloads-head {
+  margin-bottom: 1.15rem;
+}
+
+.downloads-head h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.75rem;
+}
+
+.downloads-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.85rem;
+}
+
+.download-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 0.85rem;
+  row-gap: 0.85rem;
+  align-items: center;
+  padding: 1.05rem 1.05rem 1rem;
+  border-radius: 18px;
+  text-decoration: none;
+  transition:
+    transform 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.download-card.available:hover {
+  transform: translateY(-3px);
+  border-color: rgba(242, 140, 40, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 40px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(242, 140, 40, 0.15);
+}
+
+.download-card.soon {
+  opacity: 0.72;
+  cursor: default;
+}
+
+.download-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: rgba(242, 140, 40, 0.12);
+  border: 1px solid rgba(242, 140, 40, 0.28);
+}
+
+.download-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.download-meta h3 {
+  margin: 0 0 0.15rem;
+  font-size: 1.02rem;
+}
+
+.download-meta p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.download-action {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.55rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.download-card.available .download-action {
+  background: linear-gradient(180deg, #ff9f3d 0%, var(--accent) 100%);
+  color: var(--cta-text);
+}
+
+.download-card.soon .download-action {
+  background: rgba(50, 54, 61, 0.55);
+  color: var(--muted);
+  border: 1px solid rgba(50, 54, 61, 0.9);
+}
+
 .feature {
   border-radius: var(--radius);
   padding: 1.4rem 1.3rem 1.35rem;
@@ -517,35 +630,6 @@ h1 {
   margin: 0;
   color: var(--muted);
   font-size: 0.95rem;
-}
-
-.feel {
-  max-width: 760px;
-  margin: 2.75rem auto 0;
-  padding: 0 1.5rem;
-}
-
-.feel-panel {
-  display: flex;
-  align-items: center;
-  gap: 1.1rem;
-  padding: 1.35rem 1.5rem;
-  border-radius: var(--radius);
-}
-
-.feel-panel img {
-  border-radius: 14px;
-  flex-shrink: 0;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-}
-
-.feel-panel p {
-  margin: 0;
-  color: #c4cad4;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 1.18rem;
-  line-height: 1.45;
 }
 
 .install {
@@ -637,6 +721,10 @@ h1 {
 }
 
 @media (max-width: 920px) {
+  .hero {
+    padding: 0.5rem 0.85rem 1rem;
+  }
+
   .hero-stage {
     min-height: auto;
     padding-top: 1.5rem;
@@ -644,6 +732,7 @@ h1 {
     display: flex;
     flex-direction: column;
     gap: 1.75rem;
+    border-radius: 22px;
   }
 
   .hero-copy {
@@ -672,9 +761,14 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .feel-panel {
-    flex-direction: column;
-    text-align: center;
+  .download-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .download-grid {
+    grid-template-columns: 1fr;
   }
 }
 
