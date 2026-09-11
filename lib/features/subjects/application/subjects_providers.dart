@@ -280,6 +280,16 @@ class SubjectContentQueries {
       references: references,
     );
   }
+
+  /// Deletes a solve session; results / refs / feedback cascade via FK.
+  Future<void> deleteSolveSession({
+    required String subjectId,
+    required String sessionId,
+  }) async {
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    await (db.delete(db.solveSessions)..where((t) => t.id.equals(sessionId)))
+        .go();
+  }
 }
 
 class SolveHistoryItem {
@@ -523,6 +533,22 @@ class SubjectsActions {
 
   Future<void> open(String id) {
     return _ref.read(subjectRepositoryProvider).openSubject(id);
+  }
+
+  Future<void> deleteSolveSession({
+    required String subjectId,
+    required String sessionId,
+  }) async {
+    await _ref.read(subjectContentProvider).deleteSolveSession(
+          subjectId: subjectId,
+          sessionId: sessionId,
+        );
+    _ref.invalidate(subjectHistoryProvider(subjectId));
+    _ref.invalidate(
+      subjectHistoryDetailProvider(
+        (subjectId: subjectId, sessionId: sessionId),
+      ),
+    );
   }
 
   void refresh() {

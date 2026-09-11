@@ -68,12 +68,37 @@ class HistoryList extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      StudyMarkdown(
-                        preview.isEmpty
-                            ? '(Không có văn bản xem trước)'
-                            : preview,
-                        compact: true,
-                        maxLines: 3,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: StudyMarkdown(
+                              preview.isEmpty
+                                  ? '(Không có văn bản xem trước)'
+                                  : preview,
+                              compact: true,
+                              maxLines: 3,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Xóa',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              // Absorb tap so the card does not open detail.
+                              _confirmDelete(
+                                context,
+                                ref,
+                                subjectId: subjectId,
+                                sessionId: item.sessionId,
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              size: 20,
+                              color: AppColors.secondaryText,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -125,6 +150,44 @@ class HistoryList extends ConsumerWidget {
   }
 }
 
+Future<void> _confirmDelete(
+  BuildContext context,
+  WidgetRef ref, {
+  required String subjectId,
+  required String sessionId,
+  bool popOnSuccess = false,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Xóa lần giải này?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Hủy'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Xóa'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+  await ref.read(subjectsActionsProvider).deleteSolveSession(
+        subjectId: subjectId,
+        sessionId: sessionId,
+      );
+  if (!context.mounted) return;
+  if (popOnSuccess) {
+    Navigator.of(context).maybePop();
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Đã xóa lần giải.')),
+    );
+  }
+}
+
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key, this.subjectId});
 
@@ -171,7 +234,22 @@ class HistoryDetailScreen extends ConsumerWidget {
     final fmt = DateFormat('dd/MM/yyyy HH:mm');
 
     return StudeePageScaffold(
-      topBar: const StudeeGlassAppBar(title: 'Chi tiết lần giải'),
+      topBar: StudeeGlassAppBar(
+        title: 'Chi tiết lần giải',
+        actions: [
+          IconButton(
+            tooltip: 'Xóa',
+            onPressed: () => _confirmDelete(
+              context,
+              ref,
+              subjectId: subjectId,
+              sessionId: sessionId,
+              popOnSuccess: true,
+            ),
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => const Center(

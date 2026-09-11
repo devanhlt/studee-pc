@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:clipboard/clipboard.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -99,6 +97,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
       // Still try hasApiKey — it may surface a clearer failure.
     }
     if (await _service.hasApiKey()) {
+      if (!mounted) return false;
       final store = ref.read(privacyConsentStoreProvider);
       return ensureDeepSeekPrivacyConsent(context, store: store);
     }

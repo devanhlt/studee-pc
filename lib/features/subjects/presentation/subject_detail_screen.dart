@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
@@ -14,6 +15,7 @@ import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/history/presentation/history_list.dart';
+import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 import 'package:studee_pc/features/subjects/presentation/study_notes_export_dialog.dart';
@@ -152,10 +154,22 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
           );
         }
 
+        final solveAsync = ref.watch(solveStateProvider);
+        final solveBusy = (solveAsync.asData?.value ??
+                ref.read(solveServiceProvider).current)
+            .stage
+            .isInProgress;
+
         final subtitle = switch (_mode) {
-          _WorkspaceMode.solve => 'Giải câu hỏi',
-          _WorkspaceMode.knowledge => 'Kiến thức hỗ trợ',
-          _WorkspaceMode.history => 'Lịch sử giải',
+          _WorkspaceMode.solve => solveBusy
+              ? 'Đang giải…'
+              : 'Giải câu hỏi',
+          _WorkspaceMode.knowledge => solveBusy
+              ? 'Kiến thức · đang giải…'
+              : 'Kiến thức hỗ trợ',
+          _WorkspaceMode.history => solveBusy
+              ? 'Lịch sử · đang giải…'
+              : 'Lịch sử giải',
         };
 
         return Focus(
@@ -176,6 +190,16 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                       icon: const Icon(Icons.arrow_back),
                     ),
               actions: [
+                if (solveBusy && _mode != _WorkspaceMode.solve)
+                  IconButton(
+                    tooltip: 'Đang giải — mở Giải',
+                    onPressed: () => _setMode(_WorkspaceMode.solve),
+                    icon: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
                 IconButton(
                   tooltip: 'Nhập kiến thức',
                   onPressed: _openImport,
