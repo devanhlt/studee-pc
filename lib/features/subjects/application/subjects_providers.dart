@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
@@ -196,6 +198,88 @@ class SubjectContentQueries {
     }
     return items;
   }
+
+  Future<SolveHistoryDetail?> getSolveHistoryDetail({
+    required String subjectId,
+    required String sessionId,
+  }) async {
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final session = await (db.select(db.solveSessions)
+          ..where((t) => t.id.equals(sessionId)))
+        .getSingleOrNull();
+    if (session == null) return null;
+
+    final result = await (db.select(db.solveResults)
+          ..where((t) => t.sessionId.equals(sessionId))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+
+    var references = <SolveHistoryReference>[];
+    if (result != null) {
+      final refs = await (db.select(db.resultReferences)
+            ..where((t) => t.resultId.equals(result.id))
+            ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+          .get();
+      references = refs
+          .map(
+            (r) => SolveHistoryReference(
+              localId: r.localId,
+              sourceTitle: r.sourceTitle,
+              page: r.page,
+            ),
+          )
+          .toList();
+    }
+
+    Map<String, dynamic>? parsedQuestion;
+    final rawParsed = session.parsedQuestionJson;
+    if (rawParsed != null && rawParsed.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawParsed);
+        if (decoded is Map) {
+          parsedQuestion = Map<String, dynamic>.from(decoded);
+        }
+      } on Object catch (_) {}
+    }
+
+    List<String> warnings = const [];
+    if (result?.warningsJson != null) {
+      try {
+        final decoded = jsonDecode(result!.warningsJson!);
+        if (decoded is List) {
+          warnings = decoded.map((e) => '$e').where((e) => e.isNotEmpty).toList();
+        }
+      } on Object catch (_) {}
+    }
+
+    return SolveHistoryDetail(
+      sessionId: session.id,
+      inputType: session.inputType,
+      status: session.status,
+      rawInputText: session.rawInputText,
+      parsedQuestion: parsedQuestion,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        session.createdAt,
+        isUtc: true,
+      ),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(
+        session.updatedAt,
+        isUtc: true,
+      ),
+      resultId: result?.id,
+      questionType: result?.questionType,
+      answerLabel: result?.finalAnswerLabel,
+      answerContent: result?.finalAnswerContent,
+      shortAnswer: result?.shortAnswer,
+      explanationMarkdown: result?.explanationMarkdown,
+      confidence: result?.confidenceLevel,
+      modelKnowledgeUsed: (result?.modelKnowledgeUsed ?? 0) == 1,
+      missingInformation: (result?.missingInformation ?? 0) == 1,
+      warnings: warnings,
+      references: references,
+    );
+  }
 }
 
 class SolveHistoryItem {
@@ -218,6 +302,60 @@ class SolveHistoryItem {
   final String? answerContent;
   final String? confidence;
   final DateTime createdAt;
+}
+
+class SolveHistoryReference {
+  const SolveHistoryReference({
+    required this.localId,
+    this.sourceTitle,
+    this.page,
+  });
+
+  final String localId;
+  final String? sourceTitle;
+  final int? page;
+}
+
+class SolveHistoryDetail {
+  const SolveHistoryDetail({
+    required this.sessionId,
+    required this.inputType,
+    required this.status,
+    this.rawInputText,
+    this.parsedQuestion,
+    required this.createdAt,
+    required this.updatedAt,
+    this.resultId,
+    this.questionType,
+    this.answerLabel,
+    this.answerContent,
+    this.shortAnswer,
+    this.explanationMarkdown,
+    this.confidence,
+    this.modelKnowledgeUsed = false,
+    this.missingInformation = false,
+    this.warnings = const [],
+    this.references = const [],
+  });
+
+  final String sessionId;
+  final String inputType;
+  final String status;
+  final String? rawInputText;
+  final Map<String, dynamic>? parsedQuestion;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String? resultId;
+  final String? questionType;
+  final String? answerLabel;
+  final String? answerContent;
+  final String? shortAnswer;
+  final String? explanationMarkdown;
+  final String? confidence;
+  final bool modelKnowledgeUsed;
+  final bool missingInformation;
+  final List<String> warnings;
+  final List<SolveHistoryReference> references;
 }
 
 final subjectContentProvider = Provider<SubjectContentQueries>((ref) {
@@ -243,6 +381,14 @@ final subjectHistoryProvider =
     FutureProvider.autoDispose.family<List<SolveHistoryItem>, String>(
   (ref, subjectId) =>
       ref.watch(subjectContentProvider).listSolveHistory(subjectId),
+);
+
+final subjectHistoryDetailProvider = FutureProvider.autoDispose
+    .family<SolveHistoryDetail?, ({String subjectId, String sessionId})>(
+  (ref, args) => ref.watch(subjectContentProvider).getSolveHistoryDetail(
+        subjectId: args.subjectId,
+        sessionId: args.sessionId,
+      ),
 );
 
 class SubjectsActions {

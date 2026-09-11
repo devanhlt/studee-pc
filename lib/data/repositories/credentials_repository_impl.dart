@@ -186,40 +186,55 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
   }
 
   @override
-  Future<String?> getDeepSeekApiKey() async =>
-      (await loadAll()).deepSeekApiKey;
+  Future<String?> getActivationCode() async =>
+      (await loadAll()).activationCode;
 
   @override
-  Future<void> setDeepSeekApiKey(String apiKey) async {
-    final trimmed = apiKey.trim();
+  Future<void> setActivationCode(String code) async {
+    final trimmed = code.trim();
     await _update(
       (c) => c.copyWith(
-        deepSeekApiKey: trimmed.isEmpty ? null : trimmed,
-        clearDeepSeek: trimmed.isEmpty,
+        activationCode: trimmed.isEmpty ? null : trimmed,
+        clearActivationCode: trimmed.isEmpty,
+        // Clear legacy provider keys when switching to activation codes.
+        clearDeepSeek: true,
+        clearMathpix: true,
       ),
     );
-    _log.info('DeepSeek API key updated in secure storage');
+    _log.info('Activation code updated in secure storage');
   }
 
   @override
-  Future<void> deleteDeepSeekApiKey() async {
+  Future<void> deleteActivationCode() async {
     try {
-      await _update((c) => c.copyWith(clearDeepSeek: true));
-      _log.info('DeepSeek API key deleted from secure storage');
+      await _update((c) => c.copyWith(clearActivationCode: true));
+      _log.info('Activation code deleted from secure storage');
     } on AppFailure {
       rethrow;
     } on Object catch (e) {
-      _log.severe('Failed to delete API key from secure storage', e);
+      _log.severe('Failed to delete activation code', e);
       throw const UnknownFailure(
-        userMessage: 'Không xóa được khóa API khỏi kho bảo mật hệ thống.',
+        userMessage: 'Không xóa được mã kích hoạt khỏi kho bảo mật hệ thống.',
         code: 'secure_storage_delete_failed',
       );
     }
   }
 
   @override
-  Future<bool> hasDeepSeekApiKey() async =>
-      (await loadAll()).hasDeepSeekApiKey;
+  Future<bool> hasActivationCode() async =>
+      (await loadAll()).hasActivationCode;
+
+  @override
+  Future<String?> getDeepSeekApiKey() async => getActivationCode();
+
+  @override
+  Future<void> setDeepSeekApiKey(String apiKey) => setActivationCode(apiKey);
+
+  @override
+  Future<void> deleteDeepSeekApiKey() => deleteActivationCode();
+
+  @override
+  Future<bool> hasDeepSeekApiKey() => hasActivationCode();
 
   @override
   Future<String?> getMathpixAppId() async => (await loadAll()).mathpixAppId;
@@ -306,6 +321,5 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
   }
 
   @override
-  Future<bool> hasMathpixCredentials() async =>
-      (await loadAll()).hasMathpixCredentials;
+  Future<bool> hasMathpixCredentials() async => hasActivationCode();
 }

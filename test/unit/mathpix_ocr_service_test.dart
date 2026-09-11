@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/data/mathpix/mathpix_client.dart';
 import 'package:studee_pc/data/mathpix/mathpix_ocr_service.dart';
 import 'package:studee_pc/domain/repositories/credentials_repository.dart';
@@ -11,13 +12,15 @@ import 'package:studee_pc/domain/repositories/ocr_service.dart';
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
 
 class _MemCreds implements CredentialsRepository {
+  String? activation = 'STU-TEST-CODE';
   String? deepSeek;
-  String? mathpixId = 'test_app';
-  String? mathpixKey = 'test_key';
-  String? mathpixUrl;
+  String? mathpixId;
+  String? mathpixKey;
+  String? mathpixUrl = 'https://mathpix.test';
 
   @override
   Future<StoredApiCredentials> loadAll() async => StoredApiCredentials(
+        activationCode: activation,
         deepSeekApiKey: deepSeek,
         mathpixAppId: mathpixId,
         mathpixAppKey: mathpixKey,
@@ -25,17 +28,31 @@ class _MemCreds implements CredentialsRepository {
       );
 
   @override
-  Future<void> deleteDeepSeekApiKey() async => deepSeek = null;
+  Future<String?> getActivationCode() async => activation;
+
+  @override
+  Future<void> setActivationCode(String code) async => activation = code;
+
+  @override
+  Future<void> deleteActivationCode() async => activation = null;
+
+  @override
+  Future<bool> hasActivationCode() async =>
+      activation != null && activation!.isNotEmpty;
+
+  @override
+  Future<void> deleteDeepSeekApiKey() async => activation = null;
 
   @override
   Future<void> deleteMathpixCredentials() async {
+    activation = null;
     mathpixId = null;
     mathpixKey = null;
     mathpixUrl = null;
   }
 
   @override
-  Future<String?> getDeepSeekApiKey() async => deepSeek;
+  Future<String?> getDeepSeekApiKey() async => activation;
 
   @override
   Future<String?> getMathpixAppId() async => mathpixId;
@@ -47,18 +64,13 @@ class _MemCreds implements CredentialsRepository {
   Future<String?> getMathpixBaseUrl() async => mathpixUrl;
 
   @override
-  Future<bool> hasDeepSeekApiKey() async =>
-      deepSeek != null && deepSeek!.isNotEmpty;
+  Future<bool> hasDeepSeekApiKey() async => hasActivationCode();
 
   @override
-  Future<bool> hasMathpixCredentials() async =>
-      mathpixId != null &&
-      mathpixId!.isNotEmpty &&
-      mathpixKey != null &&
-      mathpixKey!.isNotEmpty;
+  Future<bool> hasMathpixCredentials() async => hasActivationCode();
 
   @override
-  Future<void> setDeepSeekApiKey(String apiKey) async => deepSeek = apiKey;
+  Future<void> setDeepSeekApiKey(String apiKey) async => activation = apiKey;
 
   @override
   Future<void> setMathpixAppId(String appId) async => mathpixId = appId;
@@ -119,7 +131,6 @@ void main() {
     test('image path calls /v3/text and maps response', () async {
       final dir = await Directory.systemTemp.createTemp('mathpix_ocr_');
       final image = File('${dir.path}/shot.png');
-      // Minimal PNG header-ish bytes; client will base64 them.
       await image.writeAsBytes(
         base64Decode(
           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -129,10 +140,8 @@ void main() {
 
       final mockHttp = MockClient((request) async {
         expect(request.url.path, '/v3/text');
-        expect(request.headers['app_id'], 'test_app');
-        expect(request.headers['app_key'], 'test_key');
+        expect(request.headers['authorization'], 'Bearer STU-TEST-CODE');
         expect(request.method, 'POST');
-        // Multipart file upload (guide: file + options_json).
         final contentType = request.headers['content-type'] ?? '';
         expect(contentType, contains('multipart/form-data'));
         return http.Response(
@@ -259,8 +268,7 @@ void main() {
       final mockHttp = MockClient((request) async {
         expect(request.method, 'GET');
         expect(request.url.path, '/v3/ocr-usage');
-        expect(request.headers['app_id'], 'test_app');
-        expect(request.headers['app_key'], 'test_key');
+        expect(request.headers['authorization'], 'Bearer STU-TEST-CODE');
         return http.Response(
           jsonEncode({
             'ocr_usage': <Map<String, dynamic>>[],
@@ -275,6 +283,60 @@ void main() {
         httpClient: mockHttp,
       );
       await client.testConnection();
+    });
+
+    test('surfaces mathpix_not_configured from middleware JSON', () async {
+      final mockHttp = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'error': {
+              'message':
+                  'Mathpix is not configured. Set MATHPIX_APP_ID and MATHPIX_APP_KEY in env or paste them at /admin/keys.',
+              'code': 'mathpix_not_configured',
+            },
+          }),
+          503,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final client = MathpixClient(
+        credentials: _MemCreds(),
+        httpClient: mockHttp,
+      );
+
+      expect(
+        () => client.testConnection(),
+        throwsA(
+          isA<OcrFailure>().having(
+            (e) => e.userMessage,
+            'userMessage',
+            contains('chưa cấu hình Mathpix'),
+          ),
+        ),
+      );
+    });
+
+    test('empty HTTP 500 body hints at missing Mathpix config', () async {
+      final mockHttp = MockClient((request) async {
+        return http.Response('', 500);
+      });
+
+      final client = MathpixClient(
+        credentials: _MemCreds(),
+        httpClient: mockHttp,
+      );
+
+      expect(
+        () => client.testConnection(),
+        throwsA(
+          isA<OcrFailure>().having(
+            (e) => e.userMessage,
+            'userMessage',
+            contains('chưa cấu hình Mathpix'),
+          ),
+        ),
+      );
     });
   });
 }

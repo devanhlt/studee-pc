@@ -22,21 +22,15 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  final _deepSeekController = TextEditingController();
-  final _mathpixAppIdController = TextEditingController();
-  final _mathpixAppKeyController = TextEditingController();
-  final _mathpixBaseUrlController = TextEditingController();
-  bool _obscureDeepSeek = true;
-  bool _obscureMathpixKey = true;
+  final _codeController = TextEditingController();
+  bool _obscureCode = true;
   bool _busy = false;
   String? _status;
+  EntitlementInfo? _entitlement;
 
   @override
   void dispose() {
-    _deepSeekController.dispose();
-    _mathpixAppIdController.dispose();
-    _mathpixAppKeyController.dispose();
-    _mathpixBaseUrlController.dispose();
+    _codeController.dispose();
     super.dispose();
   }
 
@@ -49,6 +43,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Color get _statusColor {
     final s = _status ?? '';
     if (s.contains('thành công') ||
+        s.contains('còn') ||
         (s.startsWith('Đã') && !s.contains('Thoát') && !s.contains('Đặt lại'))) {
       return AppColors.success;
     }
@@ -58,112 +53,64 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return AppColors.error;
   }
 
-  Future<void> _saveDeepSeek() async {
-    if (_deepSeekController.text.trim().isEmpty) {
-      setState(() => _status = 'Nhập khóa DeepSeek.');
+  Future<void> _saveCode() async {
+    if (_codeController.text.trim().isEmpty) {
+      setState(() => _status = 'Nhập mã kích hoạt.');
       return;
     }
     setState(() {
       _busy = true;
       _status = null;
+      _entitlement = null;
     });
-    final result = await _service.saveApiKey(_deepSeekController.text);
+    final result = await _service.saveActivationCode(_codeController.text);
     setState(() => _busy = false);
     result.when(
       success: (_) {
-        _deepSeekController.clear();
+        _codeController.clear();
         _refreshCredentials();
-        setState(() => _status = 'Đã lưu khóa DeepSeek.');
+        setState(() => _status = 'Đã lưu mã kích hoạt.');
       },
       failure: (f) => setState(() => _status = f.userMessage),
     );
   }
 
-  Future<void> _deleteDeepSeek() async {
+  Future<void> _deleteCode() async {
     setState(() {
       _busy = true;
       _status = null;
+      _entitlement = null;
     });
-    final result = await _service.deleteApiKey();
+    final result = await _service.deleteActivationCode();
     setState(() => _busy = false);
     result.when(
       success: (_) {
         _refreshCredentials();
-        setState(() => _status = 'Đã xóa khóa DeepSeek.');
+        setState(() => _status = 'Đã xóa mã kích hoạt.');
       },
       failure: (f) => setState(() => _status = f.userMessage),
     );
   }
 
-  Future<void> _testDeepSeek() async {
+  Future<void> _testCode() async {
     setState(() {
       _busy = true;
       _status = null;
     });
-    final result = await _service.testConnection();
+    final result = await _service.fetchEntitlement();
     setState(() => _busy = false);
     result.when(
-      success: (_) => setState(() => _status = 'Kết nối DeepSeek thành công.'),
-      failure: (f) => setState(() => _status = f.userMessage),
-    );
-  }
-
-  Future<void> _saveMathpix() async {
-    if (_mathpixAppIdController.text.trim().isEmpty ||
-        _mathpixAppKeyController.text.trim().isEmpty) {
-      setState(() => _status = 'Nhập App ID và App Key.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _status = null;
-    });
-    final result = await _service.saveMathpix(
-      appId: _mathpixAppIdController.text,
-      appKey: _mathpixAppKeyController.text,
-      baseUrl: _mathpixBaseUrlController.text.trim().isEmpty
-          ? null
-          : _mathpixBaseUrlController.text.trim(),
-    );
-    setState(() => _busy = false);
-    result.when(
-      success: (_) {
-        _mathpixAppIdController.clear();
-        _mathpixAppKeyController.clear();
-        _refreshCredentials();
-        setState(() => _status = 'Đã lưu Mathpix.');
+      success: (info) {
+        setState(() {
+          _entitlement = info;
+          _status =
+              'Kết nối thành công · ${info.plan} · còn ${info.remaining}/${info.maxSolves} lượt giải';
+        });
       },
-      failure: (f) => setState(() => _status = f.userMessage),
-    );
-  }
-
-  Future<void> _deleteMathpix() async {
-    setState(() {
-      _busy = true;
-      _status = null;
-    });
-    final result = await _service.deleteMathpix();
-    setState(() => _busy = false);
-    result.when(
-      success: (_) {
-        _mathpixBaseUrlController.clear();
-        _refreshCredentials();
-        setState(() => _status = 'Đã xóa Mathpix.');
-      },
-      failure: (f) => setState(() => _status = f.userMessage),
-    );
-  }
-
-  Future<void> _testMathpix() async {
-    setState(() {
-      _busy = true;
-      _status = null;
-    });
-    final result = await _service.testMathpixConnection();
-    setState(() => _busy = false);
-    result.when(
-      success: (_) => setState(() => _status = 'Kết nối Mathpix thành công.'),
-      failure: (f) => setState(() => _status = f.userMessage),
+      failure: (f) => setState(() {
+        _entitlement = null;
+        _status = f.userMessage;
+      }),
     );
   }
 
@@ -194,24 +141,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final credsAsync = ref.watch(_settingsCredentialsProvider);
 
-    var hasKey = false;
-    var hasMathpix = false;
-    String? maskedDeepSeek;
-    String? maskedMathpixId;
+    var hasCode = false;
+    String? maskedCode;
     credsAsync.whenData((c) {
-      hasKey = c.hasDeepSeekApiKey;
-      hasMathpix = c.hasMathpixCredentials;
-      final key = c.deepSeekApiKey;
-      if (key != null && key.isNotEmpty) {
-        maskedDeepSeek = key.length <= 8
+      hasCode = c.hasActivationCode;
+      final code = c.activationCode;
+      if (code != null && code.isNotEmpty) {
+        maskedCode = code.length <= 8
             ? '••••••••'
-            : '••••${key.substring(key.length - 4)}';
-      }
-      final id = c.mathpixAppId;
-      if (id != null && id.isNotEmpty) {
-        maskedMathpixId = id.length <= 6
-            ? '••••••'
-            : '••••${id.substring(id.length - 4)}';
+            : '••••${code.substring(code.length - 4)}';
       }
     });
 
@@ -227,32 +165,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _SectionTitle(
-                  'DeepSeek',
+                  'Mã kích hoạt',
                   trailing: credsAsync.isLoading
                       ? null
                       : Text(
-                          hasKey ? 'Đã lưu $maskedDeepSeek' : 'Chưa lưu',
+                          hasCode ? 'Đã lưu $maskedCode' : 'Chưa lưu',
                           style: TextStyle(
-                            color: hasKey
+                            color: hasCode
                                 ? AppColors.success
                                 : AppColors.secondaryText,
                             fontSize: 13,
                           ),
                         ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
+                Text(
+                  'Nhập mã bạn nhận sau khi đăng ký gói. Studee dùng mã này '
+                  'để gọi máy chủ (không cần khóa DeepSeek/Mathpix riêng).',
+                  style: TextStyle(
+                    color: AppColors.secondaryText.withValues(alpha: 0.95),
+                    height: 1.4,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 TextField(
-                  controller: _deepSeekController,
-                  obscureText: _obscureDeepSeek,
+                  controller: _codeController,
+                  obscureText: _obscureCode,
                   decoration: InputDecoration(
-                    labelText: 'Khóa API',
-                    hintText: 'sk-...',
+                    labelText: 'Mã kích hoạt',
+                    hintText: 'STU-XXXX-XXXX-XXXX',
                     suffixIcon: IconButton(
-                      onPressed: () => setState(
-                        () => _obscureDeepSeek = !_obscureDeepSeek,
-                      ),
+                      onPressed: () =>
+                          setState(() => _obscureCode = !_obscureCode),
                       icon: Icon(
-                        _obscureDeepSeek
+                        _obscureCode
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined,
                       ),
@@ -262,89 +209,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 12),
                 _ActionRow(
                   busy: _busy,
-                  onSave: _saveDeepSeek,
-                  onTest: _testDeepSeek,
-                  onDelete: _deleteDeepSeek,
+                  onSave: _saveCode,
+                  onTest: _testCode,
+                  onDelete: _deleteCode,
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          StudeeGlass(
-            borderRadius: 16,
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SectionTitle(
-                  'Mathpix OCR',
-                  trailing: credsAsync.isLoading
-                      ? null
-                      : Text(
-                          hasMathpix
-                              ? 'Đã lưu $maskedMathpixId'
-                              : 'Chưa lưu',
-                          style: TextStyle(
-                            color: hasMathpix
-                                ? AppColors.success
-                                : AppColors.secondaryText,
-                            fontSize: 13,
-                          ),
-                        ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _mathpixAppIdController,
-                  decoration: const InputDecoration(labelText: 'App ID'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _mathpixAppKeyController,
-                  obscureText: _obscureMathpixKey,
-                  decoration: InputDecoration(
-                    labelText: 'App Key',
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(
-                        () => _obscureMathpixKey = !_obscureMathpixKey,
-                      ),
-                      icon: Icon(
-                        _obscureMathpixKey
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
+                if (_entitlement != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Gói ${_entitlement!.plan} · '
+                    '${_entitlement!.solvesUsed}/${_entitlement!.maxSolves} đã dùng · '
+                    'trạng thái ${_entitlement!.status}',
+                    style: const TextStyle(
+                      color: AppColors.secondaryText,
+                      fontSize: 13,
+                      height: 1.35,
                     ),
                   ),
-                ),
-                Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(bottom: 8),
-                    title: const Text(
-                      'Nâng cao',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.secondaryText,
-                      ),
-                    ),
-                    children: [
-                      TextField(
-                        controller: _mathpixBaseUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'Máy chủ tuỳ chọn',
-                          hintText: 'https://…',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _ActionRow(
-                  busy: _busy,
-                  onSave: _saveMathpix,
-                  onTest: _testMathpix,
-                  onDelete: _deleteMathpix,
-                ),
+                ],
               ],
             ),
           ),
@@ -427,7 +308,6 @@ class _SectionTitle extends StatelessWidget {
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w600,
-              color: AppColors.primaryText,
             ),
           ),
         ),
@@ -466,10 +346,7 @@ class _ActionRow extends StatelessWidget {
         ),
         TextButton(
           onPressed: busy ? null : onDelete,
-          child: const Text(
-            'Xóa',
-            style: TextStyle(color: AppColors.error),
-          ),
+          child: const Text('Xóa'),
         ),
       ],
     );

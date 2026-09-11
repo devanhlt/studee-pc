@@ -53,14 +53,29 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   final _textController = TextEditingController();
   final _ocrController = TextEditingController();
   final _textFocusNode = FocusNode();
-  bool _busy = false;
+
+  /// Region picker only — pipeline busy comes from [SolveSessionState.stage].
+  bool _pickingRegion = false;
 
   SolveService get _service => ref.read(solveServiceProvider);
+
+  bool get _isProcessing => _service.current.stage.isInProgress;
 
   @override
   void initState() {
     super.initState();
-    if (widget.shortcutsActive) {
+    final current = _service.current;
+    final raw = current.rawText?.trim();
+    if (raw != null && raw.isNotEmpty) {
+      if (current.needsOcrReview) {
+        _ocrController.text = raw;
+      } else if (current.needsQuestionConfirm || current.result == null) {
+        _textController.text = raw;
+      }
+    }
+    if (widget.shortcutsActive &&
+        !current.stage.isInProgress &&
+        current.result == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _textFocusNode.requestFocus();
       });
@@ -69,6 +84,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
 
   @override
   void dispose() {
+    // Do not cancel the solve pipeline — it keeps running in SolveService.
     _textFocusNode.dispose();
     _textController.dispose();
     _ocrController.dispose();
@@ -88,7 +104,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nhập khóa API DeepSeek')),
+        const SnackBar(
+          content: Text('Nhập mã kích hoạt trong Cài đặt'),
+        ),
       );
       context.push('/settings');
     }
@@ -102,18 +120,18 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _solveText() async {
+    if (_isProcessing || _pickingRegion) return;
     final text = _textController.text.trim();
     if (text.isEmpty) {
       _toast('Nhập câu hỏi trước khi giải.');
       return;
     }
     if (!await _ensureApiKey()) return;
-    setState(() => _busy = true);
+    if (_isProcessing) return;
     final result = await _service.solveFromText(
       subjectId: widget.subjectId,
       text: text,
     );
-    setState(() => _busy = false);
     _handle(result);
   }
 
@@ -122,6 +140,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     required String emptyMessage,
     String inputType = 'image',
   }) async {
+    if (_isProcessing) return;
     if (bytes.isEmpty) {
       _toast(emptyMessage);
       return;
@@ -130,22 +149,25 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     try {
       await _service.prepareCredentials();
     } on Object catch (_) {}
-    setState(() => _busy = true);
+    if (_isProcessing) return;
     final result = await _service.solveFromImage(
       subjectId: widget.subjectId,
       bytes: bytes,
       inputType: inputType,
     );
-    setState(() => _busy = false);
     if (result is Failure &&
         result.failureOrNull?.code == 'ocr_review_required') {
-      _ocrController.text = _service.current.rawText ?? '';
+      if (mounted) {
+        _ocrController.text = _service.current.rawText ?? '';
+        setState(() {});
+      }
       return;
     }
     _handle(result);
   }
 
   Future<void> _solveImage() async {
+    if (_isProcessing || _pickingRegion) return;
     if (!await _ensurePrivacy()) return;
     final picked = await FilePicker.pickFiles(
       type: FileType.image,
@@ -160,29 +182,28 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _capture() async {
+    if (_isProcessing || _pickingRegion) return;
     if (!await _ensurePrivacy()) return;
-    setState(() => _busy = true);
+    setState(() => _pickingRegion = true);
     try {
       final captured =
           await ref.read(desktopIntegrationProvider).captureRegion();
+      if (!mounted) return;
+      setState(() => _pickingRegion = false);
       if (captured == null) {
-        setState(() => _busy = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Đã hủy chọn vùng.')),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã hủy chọn vùng.')),
+        );
         return;
       }
-      setState(() => _busy = false);
       await _solveFromImageBytes(
         captured.bytes,
         emptyMessage: 'Ảnh chụp trống — thử lại.',
         inputType: 'screenshot',
       );
     } on ScreenCaptureFailure catch (f) {
-      setState(() => _busy = false);
       if (mounted) {
+        setState(() => _pickingRegion = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(f.userMessage)),
         );
@@ -191,6 +212,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _openCamera() async {
+    if (_isProcessing || _pickingRegion) return;
     if (!await _ensurePrivacy()) return;
     if (!mounted) return;
     final bytes = await showCameraCaptureDialog(context);
@@ -203,22 +225,23 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _continueOcr() async {
+    if (_isProcessing || _pickingRegion) return;
     final text = _ocrController.text.trim();
     if (text.isEmpty) {
       _toast('Nội dung câu hỏi không được trống.');
       return;
     }
     if (!await _ensureApiKey()) return;
-    setState(() => _busy = true);
+    if (_isProcessing) return;
     final result = await _service.continueWithReviewedText(
       subjectId: widget.subjectId,
       reviewedText: text,
     );
-    setState(() => _busy = false);
     _handle(result);
   }
 
   void _beginSolveAgain() {
+    if (_isProcessing) return;
     final r = _service.beginResolveAgain();
     r.when(
       success: (_) {
@@ -234,19 +257,23 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _confirmQuestionAndSolve() async {
+    if (_isProcessing || _pickingRegion) return;
     final text = _textController.text.trim();
     if (text.isEmpty) {
       _toast('Câu hỏi không được trống.');
       return;
     }
     if (!await _ensureApiKey()) return;
-    setState(() => _busy = true);
+    if (_isProcessing) return;
     final result = await _service.solveFromText(
       subjectId: widget.subjectId,
       text: text,
     );
-    setState(() => _busy = false);
     _handle(result);
+  }
+
+  Future<void> _cancelSolve() async {
+    await _service.cancel();
   }
 
   void _toast(String message) {
@@ -259,12 +286,18 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   void _handle(Result<SolveResult> result) {
     result.when(
       success: (_) {
+        if (!mounted) return;
         ref.invalidate(subjectHistoryProvider(widget.subjectId));
       },
       failure: (f) {
+        if (!mounted) return;
         if (f is CancelledFailure || f.code == 'cancelled') return;
         if (f is MissingApiKeyFailure) context.push('/settings');
-        if (f.code == 'ocr_review_required') return;
+        if (f.code == 'ocr_review_required') {
+          _ocrController.text = _service.current.rawText ?? '';
+          setState(() {});
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(f.userMessage)),
         );
@@ -273,6 +306,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   void _newQuestion() {
+    if (_isProcessing) return;
     _service.reset();
     _textController.clear();
     _ocrController.clear();
@@ -282,49 +316,150 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     });
   }
 
+  Widget _processingPanel(SolveSessionState state) {
+    return Padding(
+      padding: AppLayout.pageInsets(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: StudeeGlass(
+                  borderRadius: 16,
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        state.stage.labelVi,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Bạn có thể quay lại — tiến trình vẫn chạy nền.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppColors.secondaryText,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      ),
+                      if (state.errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          state.errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: AppColors.secondaryText,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      OutlinedButton(
+                        onPressed: _cancelSolve,
+                        child: const Text('Hủy'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(solveStateProvider);
     final state = async.asData?.value ?? _service.current;
+    final isProcessing = state.stage.isInProgress;
+    final inputsLocked = isProcessing || _pickingRegion;
 
-    final showInputForm = state.result == null &&
+    final showInputForm = !isProcessing &&
+        state.result == null &&
         !state.needsOcrReview &&
         !state.needsQuestionConfirm;
 
     final Widget body;
-    if (showInputForm) {
+    if (isProcessing) {
+      body = _processingPanel(state);
+    } else if (state.result != null) {
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ListView(
+              padding: AppLayout.pageInsets(context).copyWith(bottom: 8),
+              children: [
+                if (widget.embedded &&
+                    (state.stage == SolvePipelineStage.offlineFailure ||
+                        state.stage == SolvePipelineStage.partialFailure)) ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        _service.reset();
+                        setState(() {});
+                      },
+                      child: const Text('Đóng'),
+                    ),
+                  ),
+                ],
+                if (state.rawText != null &&
+                    state.rawText!.trim().isNotEmpty) ...[
+                  CollapsedQuestionTile(text: state.rawText!),
+                  const SizedBox(height: 12),
+                ],
+                SolveResultView(
+                  result: state.result!,
+                  subjectId: widget.subjectId,
+                  showActions: false,
+                ),
+              ],
+            ),
+          ),
+          StudeeGlassFooter(
+            child: SolveResultActions(
+              result: state.result!,
+              subjectId: widget.subjectId,
+              onSolveAgain: _beginSolveAgain,
+              onReset: _newQuestion,
+            ),
+          ),
+        ],
+      );
+    } else if (showInputForm) {
       body = Padding(
         padding: AppLayout.pageInsets(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (widget.embedded &&
-                (state.stage.isInProgress ||
-                    state.stage == SolvePipelineStage.offlineFailure ||
+                (state.stage == SolvePipelineStage.offlineFailure ||
                     state.stage == SolvePipelineStage.partialFailure))
               Align(
                 alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    if (state.stage.isInProgress)
-                      TextButton(
-                        onPressed: () async {
-                          await _service.cancel();
-                          if (mounted) setState(() => _busy = false);
-                        },
-                        child: const Text('Hủy'),
-                      ),
-                    if (state.stage == SolvePipelineStage.offlineFailure ||
-                        state.stage == SolvePipelineStage.partialFailure)
-                      TextButton(
-                        onPressed: () {
-                          _service.reset();
-                          setState(() => _busy = false);
-                        },
-                        child: const Text('Đóng'),
-                      ),
-                  ],
+                child: TextButton(
+                  onPressed: () {
+                    _service.reset();
+                    setState(() {});
+                  },
+                  child: const Text('Đóng'),
                 ),
               ),
             Expanded(
@@ -332,11 +467,12 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                 onKeyEvent: (node, event) {
                   if (!widget.shortcutsActive) return KeyEventResult.ignored;
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                  if (_busy || !showInputForm) return KeyEventResult.ignored;
+                  if (inputsLocked || !showInputForm) {
+                    return KeyEventResult.ignored;
+                  }
                   final mod = HardwareKeyboard.instance.isMetaPressed ||
                       HardwareKeyboard.instance.isControlPressed;
                   if (!mod) return KeyEventResult.ignored;
-                  // ⌘/Ctrl+↵ → Giải
                   if (event.logicalKey == LogicalKeyboardKey.enter) {
                     _solveText();
                     return KeyEventResult.handled;
@@ -349,6 +485,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                   child: TextField(
                     controller: _textController,
                     focusNode: _textFocusNode,
+                    enabled: !inputsLocked,
                     autofocus: widget.shortcutsActive,
                     expands: true,
                     maxLines: null,
@@ -376,7 +513,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: _busy ? null : _solveText,
+                      onPressed: inputsLocked ? null : _solveText,
                       icon: const Icon(Icons.play_arrow),
                       label: Text(AppShortcuts.label('Giải', '↵')),
                     ),
@@ -386,7 +523,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                     builder: (context, controller, child) {
                       return IconButton.outlined(
                         tooltip: 'Ảnh & camera',
-                        onPressed: _busy
+                        onPressed: inputsLocked
                             ? null
                             : () {
                                 if (controller.isOpen) {
@@ -401,17 +538,17 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                     menuChildren: [
                       MenuItemButton(
                         leadingIcon: const Icon(Icons.image_outlined),
-                        onPressed: _busy ? null : _solveImage,
+                        onPressed: inputsLocked ? null : _solveImage,
                         child: const Text('Chọn ảnh'),
                       ),
                       MenuItemButton(
                         leadingIcon: const Icon(Icons.crop_free),
-                        onPressed: _busy ? null : _capture,
+                        onPressed: inputsLocked ? null : _capture,
                         child: const Text('Chụp màn hình'),
                       ),
                       MenuItemButton(
                         leadingIcon: const Icon(Icons.photo_camera_outlined),
-                        onPressed: _busy ? null : _openCamera,
+                        onPressed: inputsLocked ? null : _openCamera,
                         child: const Text('Camera'),
                       ),
                     ],
@@ -419,18 +556,16 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                 ],
               ),
             ),
-            if (_busy || state.stage.isInProgress) ...[
+            if (_pickingRegion) ...[
               const SizedBox(height: 16),
               const LinearProgressIndicator(),
               const SizedBox(height: 8),
-              Text(
-                state.stage.labelVi,
-                style: const TextStyle(color: AppColors.secondaryText),
+              const Text(
+                'Đang chọn vùng chụp…',
+                style: TextStyle(color: AppColors.secondaryText),
               ),
             ],
-            if (state.errorMessage != null &&
-                state.result == null &&
-                !state.stage.isInProgress) ...[
+            if (state.errorMessage != null && state.result == null) ...[
               const SizedBox(height: 12),
               Text(
                 state.errorMessage!,
@@ -440,115 +575,29 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
               OutlinedButton(
                 onPressed: () {
                   _service.reset();
-                  setState(() => _busy = false);
+                  setState(() {});
                 },
                 child: const Text('Thử lại'),
               ),
             ],
-            if (state.errorMessage != null &&
-                state.result == null &&
-                state.stage.isInProgress) ...[
-              const SizedBox(height: 12),
-              Text(
-                state.errorMessage!,
-                style: const TextStyle(color: AppColors.secondaryText),
-              ),
-            ],
           ],
         ),
-      );
-    } else if (state.result != null) {
-      body = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: ListView(
-              padding: AppLayout.pageInsets(context).copyWith(bottom: 8),
-              children: [
-                if (widget.embedded &&
-                    (state.stage.isInProgress ||
-                        state.stage == SolvePipelineStage.offlineFailure ||
-                        state.stage == SolvePipelineStage.partialFailure)) ...[
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Wrap(
-                      spacing: 8,
-                      children: [
-                        if (state.stage.isInProgress)
-                          TextButton(
-                            onPressed: () async {
-                              await _service.cancel();
-                              if (mounted) setState(() => _busy = false);
-                            },
-                            child: const Text('Hủy'),
-                          ),
-                        if (state.stage == SolvePipelineStage.offlineFailure ||
-                            state.stage == SolvePipelineStage.partialFailure)
-                          TextButton(
-                            onPressed: () {
-                              _service.reset();
-                              setState(() => _busy = false);
-                            },
-                            child: const Text('Đóng'),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-                if (state.rawText != null &&
-                    state.rawText!.trim().isNotEmpty) ...[
-                  CollapsedQuestionTile(text: state.rawText!),
-                  const SizedBox(height: 12),
-                ],
-                SolveResultView(
-                  result: state.result!,
-                  subjectId: widget.subjectId,
-                  showActions: false,
-                ),
-              ],
-            ),
-          ),
-          StudeeGlassFooter(
-            child: SolveResultActions(
-              result: state.result!,
-              subjectId: widget.subjectId,
-              onSolveAgain: _beginSolveAgain,
-              onReset: _newQuestion,
-            ),
-          ),
-        ],
       );
     } else {
       body = ListView(
         padding: AppLayout.pageInsets(context),
         children: [
           if (widget.embedded &&
-              (state.stage.isInProgress ||
-                  state.stage == SolvePipelineStage.offlineFailure ||
+              (state.stage == SolvePipelineStage.offlineFailure ||
                   state.stage == SolvePipelineStage.partialFailure)) ...[
             Align(
               alignment: Alignment.centerRight,
-              child: Wrap(
-                spacing: 8,
-                children: [
-                  if (state.stage.isInProgress)
-                    TextButton(
-                      onPressed: () async {
-                        await _service.cancel();
-                        if (mounted) setState(() => _busy = false);
-                      },
-                      child: const Text('Hủy'),
-                    ),
-                  if (state.stage == SolvePipelineStage.offlineFailure ||
-                      state.stage == SolvePipelineStage.partialFailure)
-                    TextButton(
-                      onPressed: () {
-                        _service.reset();
-                        setState(() => _busy = false);
-                      },
-                      child: const Text('Đóng'),
-                    ),
-                ],
+              child: TextButton(
+                onPressed: () {
+                  _service.reset();
+                  setState(() {});
+                },
+                child: const Text('Đóng'),
               ),
             ),
           ],
@@ -560,6 +609,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: _ocrController,
+              enabled: !inputsLocked,
               maxLines: 8,
               decoration: const InputDecoration(
                 labelText: 'Nội dung câu hỏi',
@@ -567,7 +617,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             ),
             const SizedBox(height: 12),
             FilledButton(
-              onPressed: _busy ? null : _continueOcr,
+              onPressed: inputsLocked ? null : _continueOcr,
               child: Text(AppShortcuts.label('Tiếp tục giải', '↵')),
             ),
             const SizedBox(height: 24),
@@ -580,6 +630,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             const SizedBox(height: 8),
             TextField(
               controller: _textController,
+              enabled: !inputsLocked,
               maxLines: 10,
               decoration: const InputDecoration(
                 labelText: 'Câu hỏi',
@@ -592,29 +643,18 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
               runSpacing: 8,
               children: [
                 FilledButton(
-                  onPressed: _busy ? null : _confirmQuestionAndSolve,
+                  onPressed: inputsLocked ? null : _confirmQuestionAndSolve,
                   child: Text(AppShortcuts.label('Xác nhận và giải', '↵')),
                 ),
                 TextButton(
-                  onPressed: _busy ? null : _newQuestion,
+                  onPressed: inputsLocked ? null : _newQuestion,
                   child: const Text('Câu hỏi mới'),
                 ),
               ],
             ),
             const SizedBox(height: 24),
           ],
-          if (_busy || state.stage.isInProgress) ...[
-            const SizedBox(height: 8),
-            const LinearProgressIndicator(),
-            const SizedBox(height: 8),
-            Text(
-              state.stage.labelVi,
-              style: const TextStyle(color: AppColors.secondaryText),
-            ),
-          ],
-          if (state.errorMessage != null &&
-              state.result == null &&
-              !state.stage.isInProgress) ...[
+          if (state.errorMessage != null && state.result == null) ...[
             const SizedBox(height: 16),
             Text(
               state.errorMessage!,
@@ -624,18 +664,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             OutlinedButton(
               onPressed: () {
                 _service.reset();
-                setState(() => _busy = false);
+                setState(() {});
               },
               child: const Text('Thử lại'),
-            ),
-          ],
-          if (state.errorMessage != null &&
-              state.result == null &&
-              state.stage.isInProgress) ...[
-            const SizedBox(height: 16),
-            Text(
-              state.errorMessage!,
-              style: const TextStyle(color: AppColors.secondaryText),
             ),
           ],
         ],
@@ -646,7 +677,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
       bindings: widget.shortcutsActive
           ? <ShortcutActivator, VoidCallback>{
               AppShortcuts.activator(LogicalKeyboardKey.enter): () {
-                if (_busy) return;
+                if (inputsLocked) return;
                 if (state.needsOcrReview) {
                   _continueOcr();
                 } else if (state.needsQuestionConfirm) {
@@ -668,12 +699,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
       topBar: StudeeGlassAppBar(
         title: 'Giải câu hỏi',
         actions: [
-          if (state.stage.isInProgress)
+          if (isProcessing)
             TextButton(
-              onPressed: () async {
-                await _service.cancel();
-                if (mounted) setState(() => _busy = false);
-              },
+              onPressed: _cancelSolve,
               child: const Text('Hủy'),
             ),
           if (state.stage == SolvePipelineStage.offlineFailure ||
@@ -681,7 +709,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             TextButton(
               onPressed: () {
                 _service.reset();
-                setState(() => _busy = false);
+                setState(() {});
               },
               child: const Text('Đóng'),
             ),

@@ -113,7 +113,7 @@ final class ConflictFailure extends AppFailure {
 final class MissingApiKeyFailure extends AppFailure {
   const MissingApiKeyFailure({
     super.userMessage =
-        'Chưa có khóa API DeepSeek. Thêm khóa trong Cài đặt để tiếp tục.',
+        'Chưa có mã kích hoạt. Nhập mã trong Cài đặt để tiếp tục.',
     super.code = 'missing_api_key',
     super.details,
   });

@@ -1,223 +1,215 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
+import 'package:studee_pc/data/backend/backend_config.dart';
 import 'package:studee_pc/data/mathpix/mathpix_client.dart';
-import 'package:studee_pc/data/mathpix/mathpix_config.dart';
 import 'package:studee_pc/domain/repositories/credentials_repository.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
 
-/// Settings workflow: DeepSeek + Mathpix credentials and connection tests.
+/// Activation entitlement returned by the middleware.
+class EntitlementInfo {
+  const EntitlementInfo({
+    required this.plan,
+    required this.maxSolves,
+    required this.solvesUsed,
+    required this.remaining,
+    required this.status,
+  });
+
+  final String plan;
+  final int maxSolves;
+  final int solvesUsed;
+  final int remaining;
+  final String status;
+
+  factory EntitlementInfo.fromJson(Map<String, dynamic> json) {
+    int asInt(Object? v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse('$v') ?? 0;
+    }
+
+    return EntitlementInfo(
+      plan: '${json['plan'] ?? ''}',
+      maxSolves: asInt(json['max_solves']),
+      solvesUsed: asInt(json['solves_used']),
+      remaining: asInt(json['remaining']),
+      status: '${json['status'] ?? ''}',
+    );
+  }
+}
+
+/// Settings workflow: activation code + entitlement check.
 class SettingsService {
   SettingsService({
     required CredentialsRepository credentials,
     required DeepSeekClient deepSeek,
     required MathpixClient mathpix,
+    http.Client? httpClient,
   })  : _credentials = credentials,
         _deepSeek = deepSeek,
-        _mathpix = mathpix;
+        _mathpix = mathpix,
+        _http = httpClient ?? http.Client();
 
   final CredentialsRepository _credentials;
+  // Kept for DI compatibility with existing providers.
+  // ignore: unused_field
   final DeepSeekClient _deepSeek;
+  // ignore: unused_field
   final MathpixClient _mathpix;
+  final http.Client _http;
   final AppLogger _log = AppLogger('SettingsService');
 
   Future<StoredApiCredentials> loadCredentials() => _credentials.loadAll();
 
-  Future<bool> hasKey() async => (await loadCredentials()).hasDeepSeekApiKey;
+  Future<bool> hasKey() async => (await loadCredentials()).hasActivationCode;
 
-  Future<bool> hasMathpix() async =>
-      (await loadCredentials()).hasMathpixCredentials;
+  Future<bool> hasMathpix() async => hasKey();
 
-  /// Returns a masked preview (`sk-••••1234`) or null when unset.
-  Future<String?> maskedKeyPreview() async {
-    final key = (await loadCredentials()).deepSeekApiKey;
-    if (key == null || key.isEmpty) return null;
-    if (key.length <= 8) return '••••••••';
-    final suffix = key.substring(key.length - 4);
-    return '••••••••$suffix';
+  Future<String?> maskedActivationPreview() async {
+    final code = (await loadCredentials()).activationCode;
+    if (code == null || code.isEmpty) return null;
+    if (code.length <= 8) return '••••••••';
+    return '••••${code.substring(code.length - 4)}';
   }
 
-  Future<String?> maskedMathpixAppIdPreview() async {
-    final id = (await loadCredentials()).mathpixAppId;
-    if (id == null || id.isEmpty) return null;
-    if (id.length <= 6) return '••••••';
-    return '••••${id.substring(id.length - 4)}';
-  }
+  Future<String?> maskedKeyPreview() => maskedActivationPreview();
 
-  Future<String?> mathpixBaseUrlPreview() async {
-    final url = (await loadCredentials()).mathpixBaseUrl;
-    if (url == null || url.trim().isEmpty) {
-      return MathpixConfig.defaultBaseUrl;
-    }
-    return url.trim();
-  }
-
-  Future<Result<void>> saveApiKey(String apiKey) async {
-    final trimmed = apiKey.trim();
+  Future<Result<void>> saveActivationCode(String code) async {
+    final trimmed = code.trim();
     if (trimmed.isEmpty) {
       return const Failure(
         ValidationFailure(
-          userMessage: 'Nhập khóa API DeepSeek',
-          code: 'api_key_empty',
+          userMessage: 'Nhập mã kích hoạt',
+          code: 'activation_code_empty',
         ),
       );
     }
     try {
-      await _credentials.setDeepSeekApiKey(trimmed);
-      _log.info('API key saved');
+      await _credentials.setActivationCode(trimmed);
+      _log.info('Activation code saved');
       return const Success(null);
     } on AppFailure catch (f) {
       return Failure(f);
     } on Object catch (e) {
       return Failure(
         UnknownFailure(
-          userMessage: 'Không lưu được khóa API.',
-          code: 'save_api_key_failed',
+          userMessage: 'Không lưu được mã kích hoạt.',
+          code: 'save_activation_code_failed',
           details: e.runtimeType.toString(),
         ),
       );
     }
   }
 
-  Future<Result<void>> deleteApiKey() async {
+  Future<Result<void>> saveApiKey(String apiKey) => saveActivationCode(apiKey);
+
+  Future<Result<void>> deleteActivationCode() async {
     try {
-      await _credentials.deleteDeepSeekApiKey();
-      _log.info('API key deleted');
+      await _credentials.deleteActivationCode();
+      _log.info('Activation code deleted');
       return const Success(null);
     } on AppFailure catch (f) {
       return Failure(f);
     } on Object catch (e) {
       return Failure(
         UnknownFailure(
-          userMessage: 'Không xóa được khóa API.',
-          code: 'delete_api_key_failed',
+          userMessage: 'Không xóa được mã kích hoạt.',
+          code: 'delete_activation_code_failed',
           details: e.runtimeType.toString(),
         ),
       );
     }
   }
 
-  Future<Result<void>> saveMathpix({
-    required String appId,
-    required String appKey,
-    String? baseUrl,
-  }) async {
-    final id = appId.trim();
-    final key = appKey.trim();
-    if (id.isEmpty || key.isEmpty) {
+  Future<Result<void>> deleteApiKey() => deleteActivationCode();
+
+  Future<Result<void>> deleteMathpix() => deleteActivationCode();
+
+  Future<Result<EntitlementInfo>> fetchEntitlement() async {
+    final code = (await loadCredentials()).activationCode;
+    if (code == null || code.isEmpty) {
       return const Failure(
-        ValidationFailure(
-          userMessage: 'Nhập App ID và App Key Mathpix.',
-          code: 'mathpix_credentials_empty',
+        MissingApiKeyFailure(
+          userMessage: 'Nhập mã kích hoạt',
         ),
       );
     }
-    final url = baseUrl?.trim();
-    if (url != null && url.isNotEmpty) {
-      final uri = Uri.tryParse(url);
-      if (uri == null ||
-          !uri.hasScheme ||
-          !(uri.scheme == 'http' || uri.scheme == 'https') ||
-          uri.host.isEmpty) {
+    try {
+      final uri = Uri.parse(
+        '${BackendConfig.baseUrl}${BackendConfig.entitlementPath}',
+      );
+      final response = await _http
+          .get(
+            uri,
+            headers: {'Authorization': 'Bearer $code'},
+          )
+          .timeout(const Duration(seconds: 20));
+      if (response.statusCode == 401 || response.statusCode == 403) {
         return const Failure(
-          ValidationFailure(
-            userMessage:
-                'Địa chỉ máy chủ không hợp lệ. Dùng http:// hoặc https://…',
-            code: 'mathpix_base_url_invalid',
+          AuthFailure(
+            userMessage: 'Mã kích hoạt không hợp lệ hoặc đã bị thu hồi.',
+            code: 'activation_invalid',
           ),
         );
       }
-    }
-    try {
-      await _credentials.setMathpixCredentials(
-        appId: id,
-        appKey: key,
-        baseUrl: url,
+      if (response.statusCode == 402) {
+        return const Failure(
+          QuotaFailure(
+            userMessage: 'Đã hết lượt giải của mã này.',
+            code: 'quota_exhausted',
+          ),
+        );
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return Failure(
+          NetworkFailure(
+            userMessage: 'Không kiểm tra được mã (HTTP ${response.statusCode}).',
+            code: 'entitlement_http',
+          ),
+        );
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        return const Failure(
+          UnknownFailure(
+            userMessage: 'Phản hồi entitlement không hợp lệ.',
+            code: 'entitlement_bad_json',
+          ),
+        );
+      }
+      return Success(
+        EntitlementInfo.fromJson(Map<String, dynamic>.from(decoded)),
       );
-      _log.info('Mathpix credentials saved');
-      return const Success(null);
     } on AppFailure catch (f) {
       return Failure(f);
     } on Object catch (e) {
       return Failure(
-        UnknownFailure(
-          userMessage: 'Không lưu được thông tin Mathpix.',
-          code: 'save_mathpix_failed',
+        NetworkFailure(
+          userMessage: 'Không kiểm tra được mã kích hoạt.',
+          code: 'entitlement_failed',
           details: e.runtimeType.toString(),
         ),
       );
     }
   }
 
-  Future<Result<void>> deleteMathpix() async {
-    try {
-      await _credentials.deleteMathpixCredentials();
-      _log.info('Mathpix credentials deleted');
-      return const Success(null);
-    } on AppFailure catch (f) {
-      return Failure(f);
-    } on Object catch (e) {
-      return Failure(
-        UnknownFailure(
-          userMessage: 'Không xóa được thông tin Mathpix.',
-          code: 'delete_mathpix_failed',
-          details: e.runtimeType.toString(),
-        ),
-      );
-    }
-  }
-
-  /// Connectivity check that must not send study content.
   Future<Result<void>> testConnection() async {
-    final has = await hasKey();
-    if (!has) {
-      return const Failure(
-        MissingApiKeyFailure(
-          userMessage: 'Nhập khóa API DeepSeek',
-        ),
-      );
-    }
-    try {
-      await _deepSeek.testConnection();
-      _log.info('DeepSeek connection OK');
-      return const Success(null);
-    } on AppFailure catch (f) {
-      return Failure(f);
-    } on Object catch (e) {
-      return Failure(
-        NetworkFailure(
-          userMessage: 'Không kiểm tra được kết nối DeepSeek.',
-          code: 'connection_test_failed',
-          details: e.runtimeType.toString(),
-        ),
-      );
-    }
+    final result = await fetchEntitlement();
+    return result.when(
+      success: (info) {
+        _log.info(
+          'Entitlement OK plan=${info.plan} remaining=${info.remaining}',
+        );
+        return const Success(null);
+      },
+      failure: Failure.new,
+    );
   }
 
-  Future<Result<void>> testMathpixConnection() async {
-    final has = await hasMathpix();
-    if (!has) {
-      return const Failure(
-        MissingApiKeyFailure(
-          userMessage: 'Nhập Mathpix app_id và app_key',
-          code: 'mathpix_credentials_missing',
-        ),
-      );
-    }
-    try {
-      await _mathpix.testConnection();
-      return const Success(null);
-    } on AppFailure catch (f) {
-      return Failure(f);
-    } on Object catch (e) {
-      return Failure(
-        NetworkFailure(
-          userMessage: 'Không kiểm tra được kết nối Mathpix.',
-          code: 'mathpix_connection_test_failed',
-          details: e.runtimeType.toString(),
-        ),
-      );
-    }
-  }
+  Future<Result<void>> testMathpixConnection() => testConnection();
 }

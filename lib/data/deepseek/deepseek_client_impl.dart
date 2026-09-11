@@ -23,10 +23,11 @@ class DeepSeekClientImpl implements DeepSeekClient {
   DeepSeekClientImpl({
     required CredentialsRepository credentials,
     http.Client? httpClient,
-    this.baseUrl = DeepSeekConfig.baseUrl,
+    String? baseUrl,
     this.model = DeepSeekConfig.model,
   })  : _credentials = credentials,
-        _http = httpClient ?? http.Client();
+        _http = httpClient ?? http.Client(),
+        baseUrl = baseUrl ?? DeepSeekConfig.baseUrl;
 
   final CredentialsRepository _credentials;
   final http.Client _http;

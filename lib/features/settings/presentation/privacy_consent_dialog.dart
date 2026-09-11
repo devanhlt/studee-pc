@@ -23,14 +23,14 @@ Future<bool> ensureDeepSeekPrivacyConsent(
             maxWidth: size.width * 0.9,
             maxHeight: size.height * 0.5,
           ),
-          child: const SingleChildScrollView(
+            child: const SingleChildScrollView(
             child: Text(
-              'Để giải câu hỏi, Studee sẽ gửi:\n'
-              '• câu hỏi bạn đang xem, và\n'
-              '• vài đoạn kiến thức đã lưu liên quan.\n\n'
-              'Ảnh hoặc PDF dùng nhận dạng chữ được gửi tới dịch vụ OCR '
-              '(Mathpix hoặc máy chủ bạn cấu hình).\n\n'
-              'Khóa API được lưu trên máy bạn và không ghi vào nhật ký.\n\n'
+              'Để giải câu hỏi và nhận dạng chữ, Studee sẽ gửi dữ liệu tới '
+              'máy chủ Studee (proxy DeepSeek / OCR):\n'
+              '• câu hỏi bạn đang xem,\n'
+              '• vài đoạn kiến thức đã lưu liên quan, và\n'
+              '• ảnh hoặc PDF khi bạn dùng OCR.\n\n'
+              'Mã kích hoạt được lưu trên máy bạn và không ghi vào nhật ký.\n\n'
               'Bạn có muốn tiếp tục không?',
               style: TextStyle(height: 1.45, color: AppColors.primaryText),
             ),

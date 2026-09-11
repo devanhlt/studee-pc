@@ -61,6 +61,8 @@ ocr_worker/__pycache__/
 
 # Local secrets / model weights (never commit real weights if large)
 .env
+.env.*
+!.env.example
 *.pem
 assets/models/paddleocr-vl-1.6/**
 !assets/models/paddleocr-vl-1.6/MANIFEST.json

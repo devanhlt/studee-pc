@@ -52,7 +52,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
       await _solve.prepareCredentials();
     } on Object catch (_) {}
     if (!await _solve.hasApiKey()) {
-      _toast('Nhập khóa API DeepSeek');
+      _toast('Nhập mã kích hoạt trong Cài đặt');
       if (mounted) context.push('/settings');
       return false;
     }
@@ -62,12 +62,14 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
   }
 
   Future<void> _capture() async {
+    if (_solve.current.stage.isInProgress) return;
     final subjectId = ref.read(overlaySubjectIdProvider);
     if (subjectId == null) {
       _toast('Chọn môn học trong cửa sổ chính trước.');
       return;
     }
     if (!await _ensureReady()) return;
+    if (_solve.current.stage.isInProgress) return;
 
     ref.read(overlayModeProvider.notifier).state = OverlayDisplayMode.expanded;
     final desktop = ref.read(desktopIntegrationProvider);
@@ -81,6 +83,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
         _toast('Ảnh chụp trống — thử lại.');
         return;
       }
+      if (_solve.current.stage.isInProgress) return;
       final result = await _solve.solveFromImage(
         subjectId: subjectId,
         bytes: captured.bytes,
@@ -99,12 +102,14 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
   }
 
   Future<void> _paste() async {
+    if (_solve.current.stage.isInProgress) return;
     final subjectId = ref.read(overlaySubjectIdProvider);
     if (subjectId == null) {
       _toast('Chọn môn học trong cửa sổ chính trước.');
       return;
     }
     if (!await _ensureReady()) return;
+    if (_solve.current.stage.isInProgress) return;
 
     final text = await FlutterClipboard.paste();
     if (text.trim().isEmpty) {
@@ -125,6 +130,8 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
     );
   }
 
+  Future<void> _cancel() => _solve.cancel();
+
   void _toast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -140,6 +147,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
     ) {
       if (next == null) return;
       ref.read(overlayShortcutActionProvider.notifier).state = null;
+      if (_solve.current.stage.isInProgress) return;
       switch (next) {
         case OverlayShortcutAction.capture:
           _capture();
@@ -184,6 +192,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
                     stage: state.stage,
                     onCapture: _capture,
                     onPaste: _paste,
+                    onCancel: _cancel,
                     onExpand: () {
                       ref.read(overlayModeProvider.notifier).state =
                           OverlayDisplayMode.expanded;
@@ -194,7 +203,9 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
                     subjectId: ref.watch(overlaySubjectIdProvider),
                     onCapture: _capture,
                     onPaste: _paste,
+                    onCancel: _cancel,
                     onCollapse: () {
+                      // Collapsing must not cancel the in-flight solve.
                       ref.read(overlayModeProvider.notifier).state =
                           OverlayDisplayMode.compact;
                     },
@@ -211,20 +222,19 @@ class _CompactBar extends StatelessWidget {
     required this.stage,
     required this.onCapture,
     required this.onPaste,
+    required this.onCancel,
     required this.onExpand,
   });
 
   final SolvePipelineStage stage;
   final VoidCallback onCapture;
   final VoidCallback onPaste;
+  final VoidCallback onCancel;
   final VoidCallback onExpand;
 
   @override
   Widget build(BuildContext context) {
-    final busy = stage != SolvePipelineStage.idle &&
-        stage != SolvePipelineStage.completed &&
-        stage != SolvePipelineStage.partialFailure &&
-        stage != SolvePipelineStage.offlineFailure;
+    final busy = stage.isInProgress;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -249,15 +259,22 @@ class _CompactBar extends StatelessWidget {
             onPressed: onExpand,
             icon: const Icon(Icons.open_in_full),
           ),
-          if (busy)
+          if (busy) ...[
             const Padding(
-              padding: EdgeInsets.only(right: 8),
+              padding: EdgeInsets.only(right: 4),
               child: SizedBox(
                 width: 16,
                 height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
+            IconButton(
+              tooltip: 'Hủy',
+              visualDensity: VisualDensity.compact,
+              onPressed: onCancel,
+              icon: const Icon(Icons.close, color: AppColors.error),
+            ),
+          ],
         ],
       ),
     );
@@ -270,6 +287,7 @@ class _ExpandedBody extends StatelessWidget {
     required this.subjectId,
     required this.onCapture,
     required this.onPaste,
+    required this.onCancel,
     required this.onCollapse,
   });
 
@@ -277,10 +295,13 @@ class _ExpandedBody extends StatelessWidget {
   final String? subjectId;
   final VoidCallback onCapture;
   final VoidCallback onPaste;
+  final VoidCallback onCancel;
   final VoidCallback onCollapse;
 
   @override
   Widget build(BuildContext context) {
+    final busy = state.stage.isInProgress;
+
     return ConstrainedBox(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.7,
@@ -299,16 +320,21 @@ class _ExpandedBody extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
+                if (busy)
+                  TextButton(
+                    onPressed: onCancel,
+                    child: const Text('Hủy'),
+                  ),
                 IconButton(
                   tooltip: 'Chụp',
                   visualDensity: VisualDensity.compact,
-                  onPressed: onCapture,
+                  onPressed: busy ? null : onCapture,
                   icon: const Icon(Icons.crop_free),
                 ),
                 IconButton(
                   tooltip: 'Dán',
                   visualDensity: VisualDensity.compact,
-                  onPressed: onPaste,
+                  onPressed: busy ? null : onPaste,
                   icon: const Icon(Icons.content_paste),
                 ),
                 IconButton(
@@ -344,7 +370,31 @@ class _ExpandedBody extends StatelessWidget {
       case SolvePipelineStage.parsing:
       case SolvePipelineStage.retrieving:
       case SolvePipelineStage.generating:
-        return _StatusLine(state.stage.labelVi);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _StatusLine(state.stage.labelVi),
+            const SizedBox(height: 12),
+            const Text(
+              'Tiến trình vẫn chạy nếu bạn thu gọn overlay.',
+              style: TextStyle(
+                color: AppColors.secondaryText,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            if (state.errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                state.errorMessage!,
+                style: const TextStyle(
+                  color: AppColors.secondaryText,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ],
+        );
       case SolvePipelineStage.offlineFailure:
         return Text(
           state.errorMessage ?? 'Không kết nối được',
@@ -409,7 +459,12 @@ class _StatusLine extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
         const SizedBox(width: 12),
-        Expanded(child: Text(text)),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
       ],
     );
   }

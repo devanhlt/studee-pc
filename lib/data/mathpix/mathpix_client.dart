@@ -4,14 +4,15 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
+import 'package:studee_pc/data/backend/backend_config.dart';
 import 'package:studee_pc/data/mathpix/mathpix_config.dart';
 import 'package:studee_pc/data/mathpix/mathpix_credentials.dart';
 import 'package:studee_pc/domain/repositories/credentials_repository.dart';
 
-/// Low-level Mathpix HTTP client.
+/// Low-level OCR HTTP client via Studee middleware (Mathpix-compatible paths).
 ///
-/// Speaks Mathpix `/v3/text` and `/v3/pdf`. Point [MathpixCredentials.baseUrl]
-/// at a middleware later if it proxies the same paths and JSON shapes.
+/// Speaks `/v3/text` and `/v3/pdf` against [BackendConfig.baseUrl] with
+/// `Authorization: Bearer <activation_code>`.
 class MathpixClient {
   MathpixClient({
     required CredentialsRepository credentials,
@@ -28,44 +29,33 @@ class MathpixClient {
   final AppLogger _log = AppLogger('MathpixClient');
 
   Future<MathpixCredentials> loadCredentials() async {
-    final envId = Platform.environment['MATHPIX_APP_ID']?.trim();
-    final envKey = Platform.environment['MATHPIX_APP_KEY']?.trim();
-    final envUrl = Platform.environment['MATHPIX_BASE_URL']?.trim();
-
+    final envUrl = Platform.environment['MATHPIX_BASE_URL']?.trim() ??
+        Platform.environment['STUDEE_BACKEND_URL']?.trim();
     final stored = await _credentials.loadAll();
-    final appId = (envId != null && envId.isNotEmpty)
-        ? envId
-        : stored.mathpixAppId;
-    final appKey = (envKey != null && envKey.isNotEmpty)
-        ? envKey
-        : stored.mathpixAppKey;
-    final baseUrl = (envUrl != null && envUrl.isNotEmpty)
-        ? envUrl
-        : stored.mathpixBaseUrl;
-
-    if (appId == null ||
-        appId.isEmpty ||
-        appKey == null ||
-        appKey.isEmpty) {
+    final code = stored.activationCode?.trim();
+    if (code == null || code.isEmpty) {
       throw const MissingApiKeyFailure(
-        userMessage:
-            'Nhập Mathpix app_id và app_key trong Cài đặt (hoặc biến môi trường MATHPIX_APP_ID / MATHPIX_APP_KEY).',
-        code: 'mathpix_credentials_missing',
+        userMessage: 'Nhập mã kích hoạt trong Cài đặt.',
+        code: 'activation_code_missing',
       );
     }
 
+    final baseUrl = (envUrl != null && envUrl.isNotEmpty)
+        ? envUrl
+        : (stored.mathpixBaseUrl != null &&
+                stored.mathpixBaseUrl!.trim().isNotEmpty)
+            ? stored.mathpixBaseUrl!.trim()
+            : BackendConfig.baseUrl;
+
     return MathpixCredentials(
-      appId: appId,
-      appKey: appKey,
-      baseUrl: (baseUrl == null || baseUrl.isEmpty)
-          ? MathpixConfig.defaultBaseUrl
-          : baseUrl,
+      appId: code,
+      appKey: code,
+      baseUrl: baseUrl,
     );
   }
 
   Map<String, String> _headers(MathpixCredentials creds) => {
-        'app_id': creds.appId,
-        'app_key': creds.appKey,
+        'Authorization': 'Bearer ${creds.appId}',
       };
 
   /// Connectivity probe — validates app_id/app_key without OCR content.
@@ -197,7 +187,7 @@ class MathpixClient {
     final map = _decodeObject(response);
     final pdfId = map['pdf_id'] as String?;
     if (pdfId == null || pdfId.isEmpty) {
-      final err = map['error'] as String? ??
+      final err = _extractErrorMessage(map) ??
           map['error_info']?.toString() ??
           'missing pdf_id';
       throw OcrFailure(
@@ -263,7 +253,7 @@ class MathpixClient {
 
   MathpixTextResult _parseTextResponse(http.Response response) {
     final map = _decodeObject(response);
-    final error = map['error'] as String?;
+    final error = _extractErrorMessage(map);
     if (error != null && error.isNotEmpty) {
       return MathpixTextResult(
         text: '',
@@ -284,9 +274,17 @@ class MathpixClient {
   }
 
   Map<String, dynamic> _decodeObject(http.Response response) {
+    final body = utf8.decode(response.bodyBytes);
+    if (body.trim().isEmpty) {
+      throw OcrFailure(
+        userMessage: _messageForEmptyBody(response.statusCode),
+        code: 'mathpix_empty_response',
+      );
+    }
+
     Map<String, dynamic> map;
     try {
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      final decoded = jsonDecode(body);
       if (decoded is! Map) {
         throw FormatException('expected object');
       }
@@ -299,23 +297,68 @@ class MathpixClient {
       );
     }
 
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      throw const MissingApiKeyFailure(
+    final errCode = _extractErrorCode(map);
+    final errMsg = _extractErrorMessage(map);
+
+    if (errCode == 'mathpix_not_configured' || response.statusCode == 503) {
+      throw OcrFailure(
         userMessage:
-            'Mathpix từ chối khóa (app_id/app_key). Kiểm tra lại trong Cài đặt.',
-        code: 'mathpix_unauthorized',
+            'Máy chủ chưa cấu hình Mathpix. Admin cần dán khóa tại /admin/keys.',
+        code: errCode ?? 'mathpix_not_configured',
+      );
+    }
+
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw MissingApiKeyFailure(
+        userMessage: errMsg != null && errMsg.isNotEmpty
+            ? errMsg
+            : 'Mathpix từ chối khóa máy chủ. Admin kiểm tra app_id/app_key tại /admin/keys.',
+        code: errCode ?? 'mathpix_unauthorized',
       );
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final err = map['error'] as String? ??
+      final err = errMsg ??
           map['error_info']?.toString() ??
           'HTTP ${response.statusCode}';
       throw OcrFailure(
         userMessage: 'Mathpix lỗi: $err',
-        code: 'mathpix_http_${response.statusCode}',
+        code: errCode ?? 'mathpix_http_${response.statusCode}',
       );
     }
     return map;
+  }
+
+  static String _messageForEmptyBody(int statusCode) {
+    if (statusCode == 503 || statusCode == 500) {
+      return 'Máy chủ chưa cấu hình Mathpix (HTTP $statusCode). Admin cần dán khóa tại /admin/keys.';
+    }
+    return 'Máy chủ OCR không trả dữ liệu (HTTP $statusCode).';
+  }
+
+  /// Supports Mathpix `{error: string}` and middleware `{error: {message, code}}`.
+  static String? _extractErrorMessage(Map<String, dynamic> map) {
+    final error = map['error'];
+    if (error is String && error.trim().isNotEmpty) return error.trim();
+    if (error is Map) {
+      final message = error['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        return message.trim();
+      }
+    }
+    final top = map['message'];
+    if (top is String && top.trim().isNotEmpty) return top.trim();
+    return null;
+  }
+
+  static String? _extractErrorCode(Map<String, dynamic> map) {
+    final error = map['error'];
+    if (error is Map) {
+      final code = error['code'];
+      if (code is String && code.isNotEmpty) return code;
+    }
+    final top = map['code'];
+    if (top is String && top.isNotEmpty) return top;
+    return null;
   }
 
   static String? _pageRanges(List<int>? pages) {

@@ -1,11 +1,13 @@
-/// Hardcoded DeepSeek client configuration.
+import 'package:studee_pc/data/backend/backend_config.dart';
+
+/// DeepSeek-compatible client configuration (via Studee middleware).
 ///
-/// Users configure **only** the API key in Settings (OS credential store).
-/// Base URL, model id, timeouts, and token budgets are not user settings.
+/// Users configure an activation code in Settings. Requests go to
+/// [BackendConfig.baseUrl] which proxies DeepSeek with server keys.
 abstract final class DeepSeekConfig {
-  static const String baseUrl = 'https://api.deepseek.com';
+  static String get baseUrl => BackendConfig.baseUrl;
   static const String model = 'deepseek-chat';
-  static const String chatCompletionsPath = '/chat/completions';
+  static const String chatCompletionsPath = '/v1/chat/completions';
 
   /// Connect timeout for establishing the HTTP connection.
   static const Duration connectTimeout = Duration(seconds: 20);

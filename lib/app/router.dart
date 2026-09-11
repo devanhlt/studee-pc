@@ -45,6 +45,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               return SolveScreen(subjectId: id);
             },
           ),
+          GoRoute(
+            path: 'history/:sessionId',
+            name: 'historyDetail',
+            builder: (context, state) {
+              final id = state.pathParameters['id']!;
+              final sessionId = state.pathParameters['sessionId']!;
+              return HistoryDetailScreen(
+                subjectId: id,
+                sessionId: sessionId,
+              );
+            },
+          ),
         ],
       ),
       GoRoute(

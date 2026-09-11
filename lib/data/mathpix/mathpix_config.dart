@@ -1,9 +1,8 @@
-/// Mathpix OCR HTTP configuration.
-///
-/// Default [baseUrl] talks to Mathpix directly. Later a middleware backend can
-/// expose the same `/v3/text` and `/v3/pdf` paths (or be swapped via settings).
+import 'package:studee_pc/data/backend/backend_config.dart';
+
+/// Mathpix-compatible OCR HTTP configuration (via Studee middleware).
 abstract final class MathpixConfig {
-  static const String defaultBaseUrl = 'https://api.mathpix.com';
+  static String get defaultBaseUrl => BackendConfig.baseUrl;
 
   static const String usagePath = '/v3/ocr-usage';
   static const String textPath = '/v3/text';

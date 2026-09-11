@@ -1,12 +1,14 @@
 import 'package:studee_pc/data/mathpix/mathpix_config.dart';
 
-/// Resolved Mathpix credentials + endpoint.
+/// Resolved OCR credentials + endpoint (activation code as Bearer identity).
 class MathpixCredentials {
-  const MathpixCredentials({
+  MathpixCredentials({
     required this.appId,
     required this.appKey,
-    this.baseUrl = MathpixConfig.defaultBaseUrl,
-  });
+    String? baseUrl,
+  }) : baseUrl = (baseUrl == null || baseUrl.trim().isEmpty)
+            ? MathpixConfig.defaultBaseUrl
+            : baseUrl.trim();
 
   final String appId;
   final String appKey;

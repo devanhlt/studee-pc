@@ -11,6 +11,7 @@ import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/core/utils/fingerprints.dart';
 import 'package:studee_pc/core/utils/text_normalizer.dart';
+import 'package:studee_pc/data/backend/backend_quota_client.dart';
 import 'package:studee_pc/data/deepseek/response_validator.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/data/subject_database/subject_database_manager.dart';
@@ -148,6 +149,7 @@ class SolveService {
     EvidenceBuilder evidenceBuilder = const EvidenceBuilder(),
     ConfidenceCalculator confidenceCalculator = const ConfidenceCalculator(),
     ResponseValidator validator = const ResponseValidator(),
+    BackendQuotaClient? quota,
     Uuid? uuid,
   })  : _credentials = credentials,
         _deepSeek = deepSeek,
@@ -158,6 +160,7 @@ class SolveService {
         _evidenceBuilder = evidenceBuilder,
         _confidence = confidenceCalculator,
         _validator = validator,
+        _quota = quota ?? BackendQuotaClient(credentials: credentials),
         _uuid = uuid ?? const Uuid();
 
   final CredentialsRepository _credentials;
@@ -169,6 +172,7 @@ class SolveService {
   final EvidenceBuilder _evidenceBuilder;
   final ConfidenceCalculator _confidence;
   final ResponseValidator _validator;
+  final BackendQuotaClient _quota;
   final Uuid _uuid;
   final AppLogger _log = AppLogger('SolveService');
 
@@ -581,6 +585,13 @@ class SolveService {
     if (gate != null) {
       _emitFailure(gate);
       return Failure(gate);
+    }
+
+    // One solve = one question pipeline (OCR hops + N LLM calls count as 1).
+    final quotaFailure = await _quota.consumeOneSolve();
+    if (quotaFailure != null) {
+      _emitFailure(quotaFailure);
+      return Failure(quotaFailure);
     }
 
     _cancelled = false;
@@ -1218,9 +1229,9 @@ class SolveService {
   }
 
   Future<AppFailure?> _requireApiKey() async {
-    if (!await _credentials.hasDeepSeekApiKey()) {
+    if (!await _credentials.hasActivationCode()) {
       return const MissingApiKeyFailure(
-        userMessage: 'Nhập khóa API DeepSeek',
+        userMessage: 'Nhập mã kích hoạt trong Cài đặt.',
       );
     }
     return null;
