@@ -17,7 +17,6 @@ import 'package:studee_pc/core/utils/answer_display.dart';
 import 'package:studee_pc/core/utils/user_facing_copy.dart';
 import 'package:studee_pc/domain/entities/result_reference.dart';
 import 'package:studee_pc/domain/entities/solve_result.dart';
-import 'package:studee_pc/domain/enums/confidence_level.dart';
 import 'package:studee_pc/features/practice/application/practice_service.dart';
 import 'package:studee_pc/features/practice/presentation/practice_chat_panel.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
@@ -541,92 +540,94 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     final question = _textController.text.trim();
     final hasQuestion = question.isNotEmpty;
 
-    return Padding(
-      padding: AppLayout.pageInsets(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: AppLayout.cardBorder,
-                      onTap: inputsLocked ? null : _openQuestionEditor,
-                      child: StudeeGlass(
-                        padding: const EdgeInsets.all(AppLayout.cardPadding),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Câu hỏi',
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: AppLayout.pageInsets(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: AppLayout.cardBorder,
+                    onTap: inputsLocked ? null : _openQuestionEditor,
+                    child: StudeeGlass(
+                      padding: const EdgeInsets.all(AppLayout.cardPadding),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Câu hỏi',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Sửa',
+                                onPressed: inputsLocked
+                                    ? null
+                                    : _openQuestionEditor,
+                                icon: const Icon(AppIcons.edit),
+                              ),
+                              _inputSourceMenu(inputsLocked: inputsLocked),
+                            ],
+                          ),
+                          if (!hasQuestion)
+                            Text(
+                              'Chạm để nhập hoặc dán đề bài…',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: AppColors.secondaryText,
+                                    height: 1.4,
                                   ),
-                                ),
-                                IconButton(
-                                  tooltip: 'Sửa',
-                                  onPressed: inputsLocked
-                                      ? null
-                                      : _openQuestionEditor,
-                                  icon: const Icon(AppIcons.edit),
-                                ),
-                                _inputSourceMenu(inputsLocked: inputsLocked),
-                              ],
-                            ),
-                            if (!hasQuestion)
-                              Text(
-                                'Chạm để nhập hoặc dán đề bài…',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      color: AppColors.secondaryText,
-                                      height: 1.4,
-                                    ),
-                              )
-                            else
-                              StudyMarkdown(question),
-                          ],
-                        ),
+                            )
+                          else
+                            StudyMarkdown(question),
+                        ],
                       ),
                     ),
                   ),
-                  if (_pickingRegion) ...[
-                    const SizedBox(height: AppLayout.gapMd),
-                    const LinearProgressIndicator(),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Đang chọn vùng chụp… kéo khung quanh câu hỏi',
-                      style: TextStyle(color: AppColors.secondaryText),
-                    ),
-                  ],
+                ),
+                if (_pickingRegion) ...[
+                  const SizedBox(height: AppLayout.gapMd),
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Đang chọn vùng chụp… kéo khung quanh câu hỏi',
+                    style: TextStyle(color: AppColors.secondaryText),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
-          if (hasQuestion) ...[
-            const SizedBox(height: AppLayout.gapMd),
-            StudeeGlassFooter(
-              padding: AppLayout.footerInsets,
-              child: StudeeGradientButton(
-                onPressed: inputsLocked ? null : _solveText,
-                icon: isPractice ? AppIcons.practice : AppIcons.solve,
-                label: isPractice
-                    ? AppShortcuts.label('Bắt đầu luyện', '↵')
-                    : AppShortcuts.label('Giải', '↵'),
-              ),
+        ),
+        if (hasQuestion)
+          StudeeGlassFooter(
+            padding: AppLayout.footerInsets,
+            child: StudeeGradientButton(
+              onPressed: inputsLocked ? null : _solveText,
+              icon: isPractice ? AppIcons.practice : AppIcons.solve,
+              label: isPractice
+                  ? AppShortcuts.label('Bắt đầu luyện', '↵')
+                  : AppShortcuts.label('Giải', '↵'),
             ),
-          ],
-          ...belowFooter,
-        ],
-      ),
+          ),
+        if (belowFooter.isNotEmpty)
+          Padding(
+            padding: AppLayout.pageInsets(context).copyWith(top: 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: belowFooter,
+            ),
+          ),
+      ],
     );
   }
 
@@ -1051,82 +1052,92 @@ class SolveResultView extends ConsumerWidget {
 
     final knowledgeLabel = result.fromImportedKnowledge
         ? 'Từ tài liệu bạn đã nhập'
-        : 'Gợi ý từ AI';
+        : 'Gợi ý từ Trợ lý Stud';
     final notes = UserFacingCopy.friendlyWarnings(result.warnings);
-
-    final confidenceLevel = switch (result.confidence) {
-      ConfidenceLevel.high => 2,
-      ConfidenceLevel.medium => 1,
-      ConfidenceLevel.low || ConfidenceLevel.conflict => 0,
-    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        StudeeGlass(
-          gradientBorder: true,
-          padding: EdgeInsets.fromLTRB(
-            compact ? 14 : 16,
-            compact ? 14 : 16,
-            compact ? 14 : 16,
-            compact ? 14 : 16,
+        DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: AppLayout.cardBorder,
+            gradient: AppColors.intelligence,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Đáp án gợi ý',
-                style: TextStyle(
-                  fontSize: compact ? 13.5 : 14.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.secondaryText,
-                  letterSpacing: 0.2,
+          child: Padding(
+            padding: const EdgeInsets.all(1.5),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(
+                  AppLayout.radiusCard - 1.5,
                 ),
               ),
-              const SizedBox(height: 10),
-              if (answer.isEmpty)
-                Text(
-                  '(Chưa có đáp án ngắn, xem phần giải thích bên dưới)',
-                  style: TextStyle(
-                    fontSize: compact ? 17 : 19,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primaryText,
-                    height: 1.35,
-                  ),
-                )
-              else
-                StudyMarkdown(
-                  answer,
-                  compact: compact,
-                  style: TextStyle(
-                    fontSize: compact ? 20 : 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primaryText,
-                    height: 1.35,
-                  ),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 14 : 16,
+                  compact ? 14 : 16,
+                  compact ? 14 : 16,
+                  compact ? 14 : 16,
                 ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  StudeeConfidenceMeter(
-                    level: confidenceLevel,
-                    label: 'Tin cậy: ${result.confidence.labelVi}',
-                  ),
-                  StudeePill(
-                    label: knowledgeLabel,
-                    color: result.fromImportedKnowledge
-                        ? AppColors.success
-                        : AppColors.violet,
-                    icon: result.fromImportedKnowledge
-                        ? AppIcons.book
-                        : AppIcons.sparkle,
-                  ),
-                ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          result.fromImportedKnowledge
+                              ? AppIcons.book
+                              : AppIcons.sparkle,
+                          size: compact ? 18 : 20,
+                          color: AppColors.accent,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Đáp án gợi ý',
+                          style: TextStyle(
+                            fontSize: compact ? 13 : 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryText,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (answer.isEmpty)
+                      Text(
+                        '(Chưa có đáp án ngắn, xem phần giải thích bên dưới)',
+                        style: TextStyle(
+                          fontSize: compact ? 17 : 19,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryText,
+                          height: 1.35,
+                        ),
+                      )
+                    else
+                      StudyMarkdown(
+                        answer,
+                        compact: compact,
+                        style: TextStyle(
+                          fontSize: compact ? 20 : 22,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primaryText,
+                          height: 1.35,
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Tin cậy: ${result.confidence.labelVi} · $knowledgeLabel',
+                      style: TextStyle(
+                        fontSize: compact ? 12 : 13,
+                        color: AppColors.secondaryText,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
         if (notes.isNotEmpty) ...[
@@ -1210,54 +1221,13 @@ class SolveResultActions extends ConsumerWidget {
     return Row(
       children: [
         Expanded(
-          flex: 5,
           child: StudeeGradientButton(
-            onPressed: () async {
-              final r = await ref
-                  .read(solveServiceProvider)
-                  .saveResultToSubject(subjectId: subjectId);
-              if (!context.mounted) return;
-              r.when(
-                success: (_) {
-                  ref.invalidate(subjectKnowledgeProvider(subjectId));
-                  ref.invalidate(subjectQuestionsProvider(subjectId));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã lưu vào môn học.'),
-                    ),
-                  );
-                },
-                failure: (f) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(f.userMessage)),
-                  );
-                },
-              );
-            },
-            label: 'Lưu vào môn học',
-            icon: AppIcons.bookmarkAdd,
+            onPressed: onReset,
+            label: 'Câu hỏi mới',
+            icon: AppIcons.add,
           ),
         ),
-        if (onReset != null) ...[
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 4,
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              onPressed: onReset,
-              child: const Text(
-                'Câu hỏi mới',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-              ),
-            ),
-          ),
-        ],
+        const SizedBox(width: 8),
         PopupMenuButton<_ResultMoreAction>(
           tooltip: 'Thêm',
           padding: EdgeInsets.zero,

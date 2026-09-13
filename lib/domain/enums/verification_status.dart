@@ -28,7 +28,7 @@ enum VerificationStatus {
         VerificationStatus.official => 'Chính thức',
         VerificationStatus.reviewed => 'Đã duyệt',
         VerificationStatus.unreviewed => 'Chưa duyệt',
-        VerificationStatus.inferred => 'Suy luận AI',
+        VerificationStatus.inferred => 'Suy luận Trợ lý Stud',
         VerificationStatus.conflicted => 'Mâu thuẫn',
         VerificationStatus.rejected => 'Từ chối',
       };

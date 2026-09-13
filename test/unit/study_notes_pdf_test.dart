@@ -7,8 +7,8 @@ void main() {
 
   test('StudyNotesPdf embeds LaTeX formulas as images', () async {
     final regular =
-        await rootBundle.load('assets/fonts/Roboto-Regular.ttf');
-    final bold = await rootBundle.load('assets/fonts/Roboto-Bold.ttf');
+        await rootBundle.load('assets/fonts/BeVietnamPro-Regular.ttf');
+    final bold = await rootBundle.load('assets/fonts/BeVietnamPro-Bold.ttf');
     expect(regular.lengthInBytes, greaterThan(1000));
     expect(bold.lengthInBytes, greaterThan(1000));
 

@@ -56,6 +56,7 @@ class StudyMarkdown extends StatelessWidget {
                 )) ??
         TextStyle(
           fontFamily: AppTypography.fontFamily,
+          fontFamilyFallback: AppTypography.fontFamilyFallback,
           color: AppColors.primaryText,
           height: 1.55,
           fontSize: compact ? 15 : 16,

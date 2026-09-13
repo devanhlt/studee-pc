@@ -605,14 +605,14 @@ class DeepSeekClientImpl implements DeepSeekClient {
             DeepSeekConfig.readTimeout,
             onTimeout: () {
               throw const NetworkFailure(
-                userMessage: 'Hết thời gian chờ phản hồi từ DeepSeek.',
+                userMessage: 'Hết thời gian chờ phản hồi từ Trợ lý Stud.',
                 code: 'deepseek_timeout',
               );
             },
           );
     } on TimeoutException {
       throw const NetworkFailure(
-        userMessage: 'Hết thời gian chờ phản hồi từ DeepSeek.',
+        userMessage: 'Hết thời gian chờ phản hồi từ Trợ lý Stud.',
         code: 'deepseek_timeout',
       );
     } on CancelledException {
@@ -655,13 +655,13 @@ class DeepSeekClientImpl implements DeepSeekClient {
     }
     if (code >= 500) {
       throw UnknownFailure(
-        userMessage: 'Máy chủ DeepSeek tạm thời lỗi. Thử lại sau.',
+        userMessage: 'Máy chủ Trợ lý Stud tạm thời lỗi. Thử lại sau.',
         code: 'http_5xx',
         details: 'status=$code',
       );
     }
     throw UnknownFailure(
-      userMessage: 'Yêu cầu DeepSeek thất bại.',
+      userMessage: 'Yêu cầu Trợ lý Stud thất bại.',
       code: 'deepseek_http_$code',
       details: 'status=$code',
     );
@@ -670,7 +670,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
   String _extractContent(http.Response response) {
     if (response.body.isEmpty) {
       throw const ValidationFailure(
-        userMessage: 'Phản hồi DeepSeek trống.',
+        userMessage: 'Phản hồi của Trợ lý Stud trống.',
         code: 'deepseek_empty',
       );
     }
@@ -684,7 +684,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
       envelope = decoded;
     } on Object {
       throw const ValidationFailure(
-        userMessage: 'Phản hồi DeepSeek không phải JSON hợp lệ.',
+        userMessage: 'Phản hồi của Trợ lý Stud chưa đúng định dạng.',
         code: 'deepseek_malformed_envelope',
       );
     }
@@ -692,7 +692,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
     final choices = envelope['choices'];
     if (choices is! List || choices.isEmpty) {
       throw const ValidationFailure(
-        userMessage: 'Phản hồi DeepSeek thiếu nội dung.',
+        userMessage: 'Phản hồi của Trợ lý Stud thiếu nội dung.',
         code: 'deepseek_empty_choices',
       );
     }
@@ -703,7 +703,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
     final content = message is Map ? message['content'] : null;
     if (content is! String || content.trim().isEmpty) {
       throw const ValidationFailure(
-        userMessage: 'Phản hồi DeepSeek trống.',
+        userMessage: 'Phản hồi của Trợ lý Stud trống.',
         code: 'deepseek_empty_content',
       );
     }
@@ -714,7 +714,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
       jsonDecode(cleaned);
     } on Object {
       throw const ValidationFailure(
-        userMessage: 'Nội dung DeepSeek không phải JSON hợp lệ.',
+        userMessage: 'Nội dung phản hồi của Trợ lý Stud chưa đúng định dạng.',
         code: 'deepseek_malformed_json',
       );
     }
@@ -735,7 +735,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
       // fall through
     }
     throw const ValidationFailure(
-      userMessage: 'Không phân tích được JSON từ DeepSeek.',
+      userMessage: 'Không đọc được phản hồi từ Trợ lý Stud.',
       code: 'deepseek_json_object_required',
     );
   }

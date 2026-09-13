@@ -43,7 +43,7 @@ class AnswerPrecedence {
           contextCandidates: contextOnly,
           warning:
               'Có kiến thức gần giống nhưng chưa đủ khớp để khóa đáp án. '
-              'AI giải kèm ngữ cảnh.',
+              'Trợ lý Stud giải kèm ngữ cảnh.',
         );
       }
       return const ModelKnowledgeDecision(
@@ -77,7 +77,7 @@ class AnswerPrecedence {
             .toList(),
         warning:
             'Cùng câu hỏi nhưng đáp án đã nhập khác nhau. '
-            'Không khóa một đáp án — AI đối chiếu các cặp câu hỏi–đáp án.',
+            'Không khóa một đáp án — Trợ lý Stud đối chiếu các cặp câu hỏi–đáp án.',
       );
     }
 
@@ -186,7 +186,7 @@ class AnswerPrecedence {
       contextCandidates: usable.isNotEmpty ? usable : candidates,
       warning:
           'Câu hỏi gần giống kiến thức đã nhập nhưng chưa đủ khớp để khóa '
-          'đáp án. AI giải dựa trên ngữ cảnh (có thể khác đáp án đã lưu).',
+          'đáp án. Trợ lý Stud giải dựa trên ngữ cảnh (có thể khác đáp án đã lưu).',
     );
   }
 

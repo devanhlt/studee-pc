@@ -6,8 +6,13 @@ import 'package:studee_pc/app/theme/app_colors.dart';
 /// Sized for the phone-width canvas (~393pt); body text stays readable
 /// without relying on system text scaling.
 abstract final class AppTypography {
-  static const String fontFamily = 'Inter';
-  static const String monoFamily = 'monospace';
+  static const String fontFamily = 'Be Vietnam Pro';
+  static const String monoFamily = 'JetBrains Mono';
+
+  /// Bundled fallbacks, so every platform renders the same glyphs.
+  /// Be Vietnam Pro covers Vietnamese but not math symbols (∞, →, √).
+  static const List<String> fontFamilyFallback = ['Inter'];
+  static const List<String> monoFamilyFallback = ['Inter', 'monospace'];
 
   static const List<FontFeature> tabular = [
     FontFeature.tabularFigures(),
@@ -16,6 +21,7 @@ abstract final class AppTypography {
   static TextTheme textTheme() {
     const base = TextStyle(
       fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
       color: AppColors.primaryText,
       height: 1.4,
     );
@@ -91,6 +97,7 @@ abstract final class AppTypography {
   /// Eyebrow / wordmark style (uppercase tracked caption).
   static TextStyle get eyebrow => const TextStyle(
         fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
         fontSize: 12,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.4,
@@ -101,6 +108,7 @@ abstract final class AppTypography {
   /// Tabular stats / counts.
   static TextStyle get tabularCaption => const TextStyle(
         fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
         fontSize: 13.5,
         fontWeight: FontWeight.w500,
         height: 1.35,
@@ -111,6 +119,7 @@ abstract final class AppTypography {
   /// Shared mono token for code / paths.
   static TextStyle get mono => const TextStyle(
         fontFamily: monoFamily,
+        fontFamilyFallback: monoFamilyFallback,
         fontSize: 13.5,
         height: 1.4,
         color: AppColors.secondaryText,

@@ -51,7 +51,7 @@ extension SolvePipelineStageVi on SolvePipelineStage {
   String get labelVi => switch (this) {
         SolvePipelineStage.idle => 'Sẵn sàng',
         SolvePipelineStage.capturing => 'Đang chụp màn hình…',
-        SolvePipelineStage.recognizing => 'Đang đọc chữ trong ảnh…',
+        SolvePipelineStage.recognizing => 'Đang quét đề bài…',
         SolvePipelineStage.parsing => 'Đang phân tích đề bài…',
         SolvePipelineStage.retrieving => 'Đang tìm kiến thức liên quan…',
         SolvePipelineStage.generating => 'Đang soạn lời giải…',
@@ -723,7 +723,7 @@ class SolveService {
         _state.copyWith(
           stage: SolvePipelineStage.generating,
           errorMessage:
-              'Phản hồi của AI chưa đúng định dạng, đang thử lại…',
+              'Phản hồi của Trợ lý Stud chưa đúng định dạng, đang thử lại…',
         ),
       );
       try {
@@ -765,7 +765,7 @@ class SolveService {
               missingInformation: answer.missingInformation,
               warnings: [
                 ...answer.warnings,
-                'Đáp án lấy từ kiến thức đã nhập; phần giải thích giữ từ AI.',
+                'Đáp án lấy từ kiến thức đã nhập; phần giải thích giữ từ Trợ lý Stud.',
               ],
               rawJson: answer.rawJson,
             );
@@ -795,7 +795,7 @@ class SolveService {
               } else {
                 final f = ValidationFailure(
                   userMessage:
-                      'Phản hồi của AI chưa đúng định dạng. Hãy giải lại nhé.',
+                      'Phản hồi của Trợ lý Stud chưa đúng định dạng. Hãy giải lại nhé.',
                   code: 'deepseek_response_invalid',
                   details: details,
                 );

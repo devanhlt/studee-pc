@@ -24,7 +24,7 @@ abstract final class UserFacingCopy {
     if (lower.contains('remap') || lower.contains('schema')) return null;
     if (lower.contains('hiển thị đáp án mô hình') ||
         lower.contains('hiển thị câu trả lời mô hình')) {
-      return 'Đây là gợi ý từ AI, bạn nên đối chiếu lại với đề.';
+      return 'Đây là gợi ý từ Trợ lý Stud, bạn nên đối chiếu lại với đề.';
     }
     if (lower.contains('tin cậy thấp')) {
       return 'Độ tin cậy thấp, hãy kiểm tra lại trước khi dùng.';

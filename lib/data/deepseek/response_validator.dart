@@ -89,7 +89,7 @@ class ResponseValidator {
       return Failure(
         ValidationFailure(
           userMessage:
-              'Phản hồi AI không hợp lệ so với gói bằng chứng.',
+              'Phản hồi của Trợ lý Stud không hợp lệ so với gói bằng chứng.',
           code: 'deepseek_response_invalid',
           details: errors.join(','),
         ),
@@ -160,7 +160,7 @@ class ResponseValidator {
             label.trim().isNotEmpty &&
             label.trim() != byContent.label) {
           warnings.add(
-            'Đã khớp đáp án theo nội dung (nhãn AI "${label.trim()}" '
+            'Đã khớp đáp án theo nội dung (nhãn Trợ lý Stud "${label.trim()}" '
             '→ "${byContent.label}").',
           );
         }

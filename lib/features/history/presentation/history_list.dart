@@ -343,7 +343,7 @@ class HistoryDetailScreen extends ConsumerWidget {
                       const SizedBox(height: 10),
                       Text(
                         'Tin cậy: ${confidence.labelVi} · '
-                        '${detail.modelKnowledgeUsed ? 'Gợi ý từ AI' : 'Từ tài liệu đã nhập'}',
+                        '${detail.modelKnowledgeUsed ? 'Gợi ý từ Trợ lý Stud' : 'Từ tài liệu đã nhập'}',
                         style: const TextStyle(
                           color: AppColors.secondaryText,
                           fontSize: 13,

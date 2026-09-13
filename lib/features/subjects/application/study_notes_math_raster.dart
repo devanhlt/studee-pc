@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:screenshot/screenshot.dart';
+import 'package:studee_pc/app/theme/app_typography.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
 
 /// Renders LaTeX to PNG for PDF embedding (via flutter_math_fork).
@@ -77,7 +78,8 @@ class _MathCapture extends StatelessWidget {
                       display ? '\$\$$tex\$\$' : '\$$tex\$',
                       style: TextStyle(
                         fontSize: fontSize,
-                        fontFamily: 'monospace',
+                        fontFamily: AppTypography.monoFamily,
+                        fontFamilyFallback: AppTypography.monoFamilyFallback,
                         color: Colors.black87,
                       ),
                     ),

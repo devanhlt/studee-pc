@@ -37,6 +37,7 @@ abstract final class AppTheme {
       canvasColor: AppColors.background,
       dividerColor: AppColors.border,
       fontFamily: AppTypography.fontFamily,
+      fontFamilyFallback: AppTypography.fontFamilyFallback,
       textTheme: textTheme,
       primaryTextTheme: textTheme,
     );

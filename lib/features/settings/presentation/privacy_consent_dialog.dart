@@ -26,7 +26,7 @@ Future<bool> ensureDeepSeekPrivacyConsent(
             child: const SingleChildScrollView(
             child: Text(
               'Để giải bài và đọc chữ trong ảnh, Studee sẽ gửi dữ liệu tới '
-              'máy chủ Studee (proxy DeepSeek / OCR):\n'
+              'máy chủ Studee để Trợ lý Stud xử lý:\n'
               '• câu hỏi bạn đang xem,\n'
               '• một vài đoạn kiến thức liên quan bạn đã lưu, và\n'
               '• ảnh hoặc PDF khi bạn dùng OCR.\n\n'

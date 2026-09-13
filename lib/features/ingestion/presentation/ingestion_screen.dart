@@ -87,7 +87,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     final has = await _service.hasApiKey();
     if (!has && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hãy nhập khóa API DeepSeek.')),
+        const SnackBar(content: Text('Hãy nhập mã kích hoạt để dùng Trợ lý Stud.')),
       );
       context.push('/settings');
       return false;
@@ -716,7 +716,7 @@ class _TextReview extends StatelessWidget {
             width: double.infinity,
             child: FilledButton(
               onPressed: onSubmit,
-              child: const Text('Cấu trúc hóa bằng DeepSeek'),
+              child: const Text('Cấu trúc hóa bằng Trợ lý Stud'),
             ),
           ),
         ),

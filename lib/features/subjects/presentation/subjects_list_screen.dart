@@ -887,7 +887,7 @@ Future<void> _exportStudyNotes(
           SizedBox(width: 20),
           Expanded(
             child: Text(
-              'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
+              'Đang tạo tài liệu bằng Trợ lý Stud…\nCó thể mất một lúc.',
             ),
           ),
         ],

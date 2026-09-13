@@ -675,7 +675,7 @@ class IngestionService {
                 ? IngestionJobStatus.structuring.labelVi
                 : 'Đang cấu trúc hóa phần ${i + 1}/${chunks.length}'
                     '${chunk.questionCount > 0 ? ' (~${chunk.questionCount} câu)' : ''}'
-                    ' (DeepSeek)…',
+                    ' (Trợ lý Stud)…',
             clearError: true,
           ),
         );
@@ -1178,7 +1178,7 @@ class IngestionService {
     final has = await _credentials.hasDeepSeekApiKey();
     if (!has) {
       return const MissingApiKeyFailure(
-        userMessage: 'Nhập khóa API DeepSeek',
+        userMessage: 'Nhập mã kích hoạt để dùng Trợ lý Stud',
       );
     }
     return null;

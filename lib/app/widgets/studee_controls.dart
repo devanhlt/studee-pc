@@ -90,6 +90,8 @@ class StudeeSegmentedControl<T> extends StatelessWidget {
                                         ),
                                         style: TextStyle(
                                           fontFamily: AppTypography.fontFamily,
+                                          fontFamilyFallback:
+                                              AppTypography.fontFamilyFallback,
                                           fontSize: count >= 4 ? 13 : 14,
                                           fontWeight: FontWeight.w600,
                                           height: 1.0,
@@ -122,6 +124,8 @@ class StudeeSegmentedControl<T> extends StatelessWidget {
                                             style: TextStyle(
                                               fontFamily:
                                                   AppTypography.fontFamily,
+                                              fontFamilyFallback: AppTypography
+                                                  .fontFamilyFallback,
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                               height: 1.0,
@@ -193,6 +197,7 @@ class _StudeeGradientButtonState extends State<StudeeGradientButton> {
       textAlign: TextAlign.center,
       style: const TextStyle(
         fontFamily: AppTypography.fontFamily,
+        fontFamilyFallback: AppTypography.fontFamilyFallback,
         fontSize: 15,
         fontWeight: FontWeight.w600,
         color: AppColors.onAccent,
@@ -283,6 +288,7 @@ class StudeePill extends StatelessWidget {
             label,
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,
+              fontFamilyFallback: AppTypography.fontFamilyFallback,
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: c,
@@ -347,6 +353,7 @@ class StudeeConfidenceMeter extends StatelessWidget {
             label,
             style: TextStyle(
               fontFamily: AppTypography.fontFamily,
+              fontFamilyFallback: AppTypography.fontFamilyFallback,
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: color,

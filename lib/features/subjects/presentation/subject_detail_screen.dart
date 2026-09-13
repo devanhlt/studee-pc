@@ -67,33 +67,27 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   }
 
   /// Active / unfinished work on [mode] that should confirm before leaving.
-  String? _incompleteLeaveMessage(_WorkspaceMode mode) {
+  bool _hasIncompleteWork(_WorkspaceMode mode) {
     switch (mode) {
       case _WorkspaceMode.solve:
         final solve = ref.read(solveServiceProvider).current;
         final draft = ref.read(solveTabDraftProvider).trim();
-        if (solve.stage.isInProgress ||
+        return solve.stage.isInProgress ||
             solve.needsOcrReview ||
             solve.needsQuestionConfirm ||
             (solve.result == null &&
                 (solve.rawText?.trim().isNotEmpty ?? false)) ||
-            draft.isNotEmpty) {
-          return 'Câu hỏi chưa hoàn tất. Hủy tiến trình và chuyển tab?';
-        }
-        return null;
+            draft.isNotEmpty;
       case _WorkspaceMode.practice:
         final draft = ref.read(practiceTabDraftProvider).trim();
-        if (ref.read(practiceServiceProvider).hasIncompleteSession ||
-            draft.isNotEmpty) {
-          return 'Bài luyện chưa hoàn tất. Hủy tiến trình và chuyển tab?';
-        }
-        return null;
+        return ref.read(practiceServiceProvider).hasIncompleteSession ||
+            draft.isNotEmpty;
       case _WorkspaceMode.review:
         // Ôn tập has no session yet — hook incomplete checks here later.
-        return null;
+        return false;
       case _WorkspaceMode.knowledge:
       case _WorkspaceMode.history:
-        return null;
+        return false;
     }
   }
 
@@ -117,13 +111,11 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   }
 
   Future<bool> _confirmLeaveCurrentTab() async {
-    final message = _incompleteLeaveMessage(_mode);
-    if (message == null) return true;
+    if (!_hasIncompleteWork(_mode)) return true;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Chuyển tab?'),
-        content: Text(message),
+        content: const Text('Bạn có muốn hủy bỏ tiến trình hiện tại?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -181,7 +173,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
             SizedBox(width: 20),
             Expanded(
               child: Text(
-                'Đang tạo tài liệu bằng AI…\nCó thể mất một lúc.',
+                'Đang tạo tài liệu bằng Trợ lý Stud…\nCó thể mất một lúc.',
               ),
             ),
           ],

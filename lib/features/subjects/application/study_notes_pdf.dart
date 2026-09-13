@@ -22,11 +22,11 @@ enum StudyNotesExportFormat {
 
 /// Renders study-notes Markdown into a printable PDF.
 ///
-/// Uses Roboto for body text and rasters LaTeX formulas
+/// Uses the app type family for body text and rasters LaTeX formulas
 /// (`$…$`, `$$…$$`, `\(...\)`, `\[…\]`) via flutter_math_fork.
 abstract final class StudyNotesPdf {
-  static const _regularAsset = 'assets/fonts/Roboto-Regular.ttf';
-  static const _boldAsset = 'assets/fonts/Roboto-Bold.ttf';
+  static const _regularAsset = 'assets/fonts/BeVietnamPro-Regular.ttf';
+  static const _boldAsset = 'assets/fonts/BeVietnamPro-Bold.ttf';
 
   /// Usable content width on A4 with 40pt margins.
   static final double _contentWidth = PdfPageFormat.a4.width - 80;
