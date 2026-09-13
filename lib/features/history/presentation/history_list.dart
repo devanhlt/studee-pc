@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
+import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/utils/answer_display.dart';
 import 'package:studee_pc/core/utils/user_facing_copy.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
@@ -20,29 +22,27 @@ class HistoryList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(subjectHistoryProvider(subjectId));
+    final theme = Theme.of(context).textTheme;
     return async.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => const Center(
-        child: Text('Không tải được lịch sử giải.'),
+      loading: () => const StudeeSkeletonList(),
+      error: (_, _) => const StudeeStatusState(
+        icon: AppIcons.error,
+        title: 'Không tải được lịch sử',
+        message: 'Hãy thử làm mới.',
       ),
       data: (items) {
         if (items.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
-                'Chưa có phiên giải câu hỏi.',
-                style: TextStyle(color: AppColors.secondaryText),
-                textAlign: TextAlign.center,
-              ),
-            ),
+          return const StudeeStatusState(
+            icon: AppIcons.history,
+            title: 'Chưa có lần giải nào',
+            message: 'Hãy thử ở tab Giải hoặc Luyện tập.',
           );
         }
         final fmt = DateFormat('dd/MM/yyyy HH:mm');
         return ListView.separated(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppLayout.pagePadding),
           itemCount: items.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          separatorBuilder: (_, _) => const SizedBox(height: AppLayout.gapSm),
           itemBuilder: (_, i) {
             final item = items[i];
             final preview = (item.preview ?? '').trim();
@@ -56,91 +56,90 @@ class HistoryList extends ConsumerWidget {
             final statusVi = UserFacingCopy.sessionStatusVi(item.status);
             final inputVi = UserFacingCopy.inputTypeVi(item.inputType);
 
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: () => context.push(
-                  '/subjects/$subjectId/history/${item.sessionId}',
-                ),
-                child: StudeeCard(
-                  accentColor: AppColors.accent,
-                  child: Column(
+            return StudeeCard(
+              accentColor: AppColors.accent,
+              onTap: () => context.push(
+                '/subjects/$subjectId/history/${item.sessionId}',
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: StudyMarkdown(
-                              preview.isEmpty
-                                  ? '(Không có văn bản xem trước)'
-                                  : preview,
-                              compact: true,
-                              maxLines: 3,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Xóa',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () {
-                              // Absorb tap so the card does not open detail.
-                              _confirmDelete(
-                                context,
-                                ref,
-                                subjectId: subjectId,
-                                sessionId: item.sessionId,
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              size: 20,
-                              color: AppColors.secondaryText,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        [
-                          fmt.format(item.createdAt.toLocal()),
-                          inputVi,
-                          if (statusVi.isNotEmpty) statusVi,
-                          if (confidence != null) 'Tin cậy: $confidence',
-                        ].join(' · '),
-                        style: const TextStyle(
-                          color: AppColors.secondaryText,
-                          fontSize: 12,
-                        ),
-                      ),
-                      if (answer.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        StudyMarkdown(
-                          'Đáp án: $answer',
+                      Expanded(
+                        child: StudyMarkdown(
+                          preview.isEmpty
+                              ? '(Không có nội dung xem trước)'
+                              : preview,
                           compact: true,
-                          maxLines: 2,
-                          style: const TextStyle(
-                            color: AppColors.primaryText,
-                            fontSize: 13,
-                            height: 1.35,
-                          ),
+                          maxLines: 3,
                         ),
-                      ],
-                      const SizedBox(height: 4),
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'Xem chi tiết →',
-                          style: TextStyle(
-                            color: AppColors.accent,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      ),
+                      IconButton(
+                        tooltip: 'Xóa',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          _confirmDelete(
+                            context,
+                            ref,
+                            subjectId: subjectId,
+                            sessionId: item.sessionId,
+                          );
+                        },
+                        icon: const Icon(
+                          AppIcons.delete,
+                          size: AppIcons.sizeAction,
+                          color: AppColors.secondaryText,
                         ),
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: AppLayout.gapSm),
+                  Wrap(
+                    spacing: AppLayout.gapXs,
+                    runSpacing: AppLayout.gapXs,
+                    children: [
+                      StudeePill(
+                        label: fmt.format(item.createdAt.toLocal()),
+                      ),
+                      if (inputVi.isNotEmpty) StudeePill(label: inputVi),
+                      if (statusVi.isNotEmpty) StudeePill(label: statusVi),
+                      if (confidence != null)
+                        StudeePill(label: 'Tin cậy: $confidence'),
+                    ],
+                  ),
+                  if (answer.isNotEmpty) ...[
+                    const SizedBox(height: AppLayout.gapSm),
+                    StudyMarkdown(
+                      'Đáp án: $answer',
+                      compact: true,
+                      maxLines: 2,
+                      style: theme.bodyMedium,
+                    ),
+                  ],
+                  const SizedBox(height: AppLayout.gapXs),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Xem chi tiết',
+                          style: theme.labelMedium?.copyWith(
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Icon(
+                          AppIcons.chevronRight,
+                          size: AppIcons.sizeMicro,
+                          color: AppColors.accent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             );
           },
@@ -197,17 +196,13 @@ class HistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final id = subjectId;
     return StudeePageScaffold(
+      atmosphereIntensity: AppLayout.atmospherePage,
       topBar: const StudeeGlassAppBar(title: 'Lịch sử giải'),
       body: id == null
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(12),
-                child: Text(
-                  'Chọn một môn học để xem lịch sử giải.',
-                  style: TextStyle(color: AppColors.secondaryText),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+          ? const StudeeStatusState(
+              icon: AppIcons.history,
+              title: 'Chưa chọn môn học',
+              message: 'Chọn một môn học để xem lịch sử giải.',
             )
           : HistoryList(subjectId: id),
     );
@@ -234,6 +229,7 @@ class HistoryDetailScreen extends ConsumerWidget {
     final fmt = DateFormat('dd/MM/yyyy HH:mm');
 
     return StudeePageScaffold(
+      atmosphereIntensity: AppLayout.atmospherePage,
       topBar: StudeeGlassAppBar(
         title: 'Chi tiết lần giải',
         actions: [
@@ -246,18 +242,24 @@ class HistoryDetailScreen extends ConsumerWidget {
               sessionId: sessionId,
               popOnSuccess: true,
             ),
-            icon: const Icon(Icons.delete_outline),
+            icon: const Icon(AppIcons.delete),
           ),
         ],
       ),
       body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => const Center(
-          child: Text('Không tải được chi tiết.'),
+        loading: () => const StudeeSkeletonList(count: 2),
+        error: (_, _) => const StudeeStatusState(
+          icon: AppIcons.error,
+          title: 'Không tải được chi tiết',
+          message: 'Thử mở lại lần giải này.',
         ),
         data: (detail) {
           if (detail == null) {
-            return const Center(child: Text('Không tìm thấy phiên giải.'));
+            return const StudeeStatusState(
+              icon: AppIcons.empty,
+              title: 'Không tìm thấy phiên giải',
+              message: 'Phiên này có thể đã bị xóa.',
+            );
           }
 
           final answer = AnswerDisplay.contentOnly(
@@ -275,8 +277,7 @@ class HistoryDetailScreen extends ConsumerWidget {
             padding: AppLayout.pageInsets(context),
             children: [
               StudeeGlass(
-                borderRadius: 16,
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                padding: const EdgeInsets.all(AppLayout.cardPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -307,8 +308,7 @@ class HistoryDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               StudeeGlass(
-                borderRadius: 16,
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                padding: const EdgeInsets.all(AppLayout.cardPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

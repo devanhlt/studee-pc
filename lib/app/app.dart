@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -17,10 +19,13 @@ class StudyOverlayApp extends ConsumerStatefulWidget {
 class _StudyOverlayAppState extends ConsumerState<StudyOverlayApp> {
   var _bootstrapped = false;
 
+  static bool get _isDesktop =>
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_bootstrapped || kIsWeb) return;
+    if (_bootstrapped || !_isDesktop) return;
     _bootstrapped = true;
     WidgetsBinding.instance.addPostFrameCallback((_) => _startDesktop());
   }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
+import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_pdf.dart';
 
@@ -16,7 +18,7 @@ Future<StudyNotesExportFormat?> showStudyNotesFormatDialog(
         elevation: 0,
         insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
         child: StudeeGlass(
-          borderRadius: 18,
+          borderRadius: AppLayout.radiusPanel,
           padding: const EdgeInsets.fromLTRB(18, 16, 12, 16),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 340),
@@ -40,7 +42,7 @@ Future<StudyNotesExportFormat?> showStudyNotesFormatDialog(
                       tooltip: 'Đóng',
                       visualDensity: VisualDensity.compact,
                       onPressed: () => Navigator.of(ctx).pop(),
-                      icon: const Icon(Icons.close, size: 20),
+                      icon: const Icon(AppIcons.close, size: AppIcons.sizeAction),
                     ),
                   ],
                 ),

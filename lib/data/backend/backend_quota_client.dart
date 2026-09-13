@@ -24,7 +24,7 @@ class BackendQuotaClient {
     final code = await _credentials.getActivationCode();
     if (code == null || code.trim().isEmpty) {
       return const MissingApiKeyFailure(
-        userMessage: 'Nhập mã kích hoạt trong Cài đặt.',
+        userMessage: 'Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.',
       );
     }
     try {
@@ -44,7 +44,7 @@ class BackendQuotaClient {
 
       if (response.statusCode == 402) {
         return const QuotaFailure(
-          userMessage: 'Đã hết lượt giải của mã này.',
+          userMessage: 'Mã này đã hết lượt giải. Hãy mua thêm lượt để tiếp tục.',
           code: 'quota_exhausted',
         );
       }
@@ -64,7 +64,7 @@ class BackendQuotaClient {
           }
         } on Object catch (_) {}
         return NetworkFailure(
-          userMessage: 'Không trừ được lượt giải ($detail).',
+          userMessage: 'Không trừ được lượt giải ($detail). Thử lại nhé.',
           code: 'consume_solve_http',
         );
       }
@@ -73,7 +73,7 @@ class BackendQuotaClient {
     } on Object catch (e) {
       _log.warning('consumeOneSolve failed: ${e.runtimeType}');
       return NetworkFailure(
-        userMessage: 'Không trừ được lượt giải.',
+        userMessage: 'Không trừ được lượt giải. Thử lại nhé.',
         code: 'consume_solve_failed',
         details: e.runtimeType.toString(),
       );

@@ -331,7 +331,7 @@ class IngestionService {
     if (bytes.isEmpty) {
       return const Failure(
         ValidationFailure(
-          userMessage: 'Tệp trống — hãy chọn file khác.',
+          userMessage: 'Tệp không có nội dung. Hãy chọn file khác.',
           code: 'source_bytes_empty',
         ),
       );

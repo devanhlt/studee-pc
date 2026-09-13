@@ -1,15 +1,16 @@
 import 'package:clipboard/clipboard.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/app_shortcuts.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
+import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/core/utils/answer_display.dart';
@@ -17,14 +18,26 @@ import 'package:studee_pc/core/utils/user_facing_copy.dart';
 import 'package:studee_pc/domain/entities/result_reference.dart';
 import 'package:studee_pc/domain/entities/solve_result.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
+import 'package:studee_pc/features/practice/application/practice_service.dart';
+import 'package:studee_pc/features/practice/presentation/practice_chat_panel.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
-import 'package:studee_pc/features/solver/presentation/camera_capture_dialog.dart';
+import 'package:studee_pc/features/solver/presentation/mobile_image_crop.dart';
+import 'package:studee_pc/features/solver/presentation/question_input_screen.dart';
+import 'package:studee_pc/features/solver/presentation/scan_question_screen.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 final solveStateProvider = StreamProvider.autoDispose<SolveSessionState>((ref) {
   return ref.watch(solveServiceProvider).states;
 });
+
+/// Typed-but-not-submitted question draft on the Giải tab.
+final solveTabDraftProvider = StateProvider<String>((ref) => '');
+
+/// Typed-but-not-submitted question draft on the Luyện tab (idle only).
+final practiceTabDraftProvider = StateProvider<String>((ref) => '');
+
+enum SolveSurfaceMode { solve, practice }
 
 class SolveScreen extends ConsumerStatefulWidget {
   const SolveScreen({
@@ -32,6 +45,8 @@ class SolveScreen extends ConsumerStatefulWidget {
     required this.subjectId,
     this.embedded = false,
     this.shortcutsActive = true,
+    this.showModeToggle = true,
+    this.initialSurfaceMode = SolveSurfaceMode.solve,
   });
 
   final String subjectId;
@@ -39,9 +54,13 @@ class SolveScreen extends ConsumerStatefulWidget {
   /// When true, render without its own [Scaffold]/AppBar] (for subject tabs).
   final bool embedded;
 
-  /// When embedded in subject tabs, set true only for the active Giải tab so
-  /// When embedded, set true only while Giải is visible so ⌘/Ctrl+↵ works.
+  /// When embedded, set true only while this tab is visible so ⌘/Ctrl+↵ works.
   final bool shortcutsActive;
+
+  /// Standalone solve route keeps the Giải/Luyện toggle; workspace tabs hide it.
+  final bool showModeToggle;
+
+  final SolveSurfaceMode initialSurfaceMode;
 
   @override
   ConsumerState<SolveScreen> createState() => _SolveScreenState();
@@ -50,14 +69,17 @@ class SolveScreen extends ConsumerStatefulWidget {
 class _SolveScreenState extends ConsumerState<SolveScreen> {
   final _textController = TextEditingController();
   final _ocrController = TextEditingController();
-  final _textFocusNode = FocusNode();
 
   /// Region picker only — pipeline busy comes from [SolveSessionState.stage].
   bool _pickingRegion = false;
 
+  late SolveSurfaceMode _surfaceMode = widget.initialSurfaceMode;
+
   SolveService get _service => ref.read(solveServiceProvider);
+  PracticeService get _practice => ref.read(practiceServiceProvider);
 
   bool get _isProcessing => _service.current.stage.isInProgress;
+  bool get _practiceBusy => _practice.current.stage.isBusy;
 
   @override
   void initState() {
@@ -71,19 +93,32 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
         _textController.text = raw;
       }
     }
-    if (widget.shortcutsActive &&
-        !current.stage.isInProgress &&
-        current.result == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _textFocusNode.requestFocus();
-      });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _syncTabDraft();
+      if (widget.showModeToggle) {
+        final restored =
+            await _practice.restoreIncompleteIfNeeded(widget.subjectId);
+        if (!mounted) return;
+        if (restored || _practice.hasIncompleteSession) {
+          setState(() => _surfaceMode = SolveSurfaceMode.practice);
+          return;
+        }
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant SolveScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSurfaceMode != widget.initialSurfaceMode) {
+      _surfaceMode = widget.initialSurfaceMode;
     }
   }
 
   @override
   void dispose() {
     // Do not cancel the solve pipeline — it keeps running in SolveService.
-    _textFocusNode.dispose();
     _textController.dispose();
     _ocrController.dispose();
     super.dispose();
@@ -104,7 +139,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Nhập mã kích hoạt trong Cài đặt'),
+          content: Text('Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.'),
         ),
       );
       context.push('/settings');
@@ -112,20 +147,43 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     return false;
   }
 
-  /// Privacy notice only — does not touch Keychain.
-  Future<bool> _ensurePrivacy() async {
-    final store = ref.read(privacyConsentStoreProvider);
-    return ensureDeepSeekPrivacyConsent(context, store: store);
+  void _syncTabDraft() {
+    final text = _textController.text;
+    if (_surfaceMode == SolveSurfaceMode.practice) {
+      ref.read(practiceTabDraftProvider.notifier).state = text;
+    } else {
+      ref.read(solveTabDraftProvider.notifier).state = text;
+    }
+  }
+
+  void _clearTabDraft() {
+    if (_surfaceMode == SolveSurfaceMode.practice) {
+      ref.read(practiceTabDraftProvider.notifier).state = '';
+    } else {
+      ref.read(solveTabDraftProvider.notifier).state = '';
+    }
   }
 
   Future<void> _solveText() async {
-    if (_isProcessing || _pickingRegion) return;
+    if (_isProcessing || _pickingRegion || _practiceBusy) return;
     final text = _textController.text.trim();
     if (text.isEmpty) {
-      _toast('Nhập câu hỏi trước khi giải.');
+      _toast(_surfaceMode == SolveSurfaceMode.practice
+          ? 'Hãy dán câu hỏi trước khi luyện.'
+          : 'Hãy dán câu hỏi trước khi giải.');
+      await _openQuestionEditor();
       return;
     }
     if (!await _ensureApiKey()) return;
+    _clearTabDraft();
+    if (_surfaceMode == SolveSurfaceMode.practice) {
+      final result = await _practice.startFromText(
+        subjectId: widget.subjectId,
+        text: text,
+      );
+      _handlePractice(result);
+      return;
+    }
     if (_isProcessing) return;
     final result = await _service.solveFromText(
       subjectId: widget.subjectId,
@@ -134,20 +192,37 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     _handle(result);
   }
 
+  Future<bool> _ensurePrivacy() async {
+    final store = ref.read(privacyConsentStoreProvider);
+    return ensureDeepSeekPrivacyConsent(context, store: store);
+  }
+
   Future<void> _solveFromImageBytes(
     Uint8List bytes, {
     required String emptyMessage,
     String inputType = 'image',
   }) async {
-    if (_isProcessing) return;
+    if (_isProcessing || _practiceBusy) return;
     if (bytes.isEmpty) {
       _toast(emptyMessage);
       return;
     }
-    // Load DeepSeek + Mathpix in one Keychain unlock before OCR starts.
-    try {
-      await _service.prepareCredentials();
-    } on Object catch (_) {}
+    if (!await _ensureApiKey()) return;
+    _clearTabDraft();
+    if (_surfaceMode == SolveSurfaceMode.practice) {
+      final practiceType = switch (inputType) {
+        'screenshot' => 'practice_screenshot',
+        'camera' => 'practice_camera',
+        _ => 'practice_image',
+      };
+      final result = await _practice.startFromImage(
+        subjectId: widget.subjectId,
+        bytes: bytes,
+        inputType: practiceType,
+      );
+      _handlePractice(result);
+      return;
+    }
     if (_isProcessing) return;
     final result = await _service.solveFromImage(
       subjectId: widget.subjectId,
@@ -166,60 +241,113 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _solveImage() async {
-    if (_isProcessing || _pickingRegion) return;
+    if (_isProcessing || _pickingRegion || _practiceBusy) return;
     if (!await _ensurePrivacy()) return;
-    final picked = await FilePicker.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
-    final bytes = picked?.files.single.bytes;
-    if (bytes == null) return;
-    await _solveFromImageBytes(
-      Uint8List.fromList(bytes),
-      emptyMessage: 'Ảnh trống — hãy chọn file khác.',
-    );
+    if (!mounted) return;
+    try {
+      final captured = await captureAndCropImage(
+        context,
+        capture: () => ref.read(platformIntegrationProvider).pickImage(),
+        emptyMessage: 'Ảnh không có nội dung. Chọn file khác nhé.',
+      );
+      if (captured == null || !mounted) return;
+      await _solveFromImageBytes(
+        captured.bytes,
+        emptyMessage: 'Ảnh không có nội dung. Chọn file khác nhé.',
+      );
+    } on AppFailure catch (f) {
+      _toast(f.userMessage);
+    }
   }
 
   Future<void> _capture() async {
-    if (_isProcessing || _pickingRegion) return;
+    if (_isProcessing || _pickingRegion || _practiceBusy) return;
     if (!await _ensurePrivacy()) return;
     setState(() => _pickingRegion = true);
     try {
       final captured =
-          await ref.read(desktopIntegrationProvider).captureRegion();
+          await ref.read(platformIntegrationProvider).captureRegion();
       if (!mounted) return;
       setState(() => _pickingRegion = false);
       if (captured == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã hủy chọn vùng.')),
-        );
+        _toast('Đã hủy chọn vùng.');
         return;
       }
       await _solveFromImageBytes(
         captured.bytes,
-        emptyMessage: 'Ảnh chụp trống — thử lại.',
+        emptyMessage: 'Ảnh chụp không có nội dung. Thử lại nhé.',
         inputType: 'screenshot',
       );
     } on ScreenCaptureFailure catch (f) {
       if (mounted) {
         setState(() => _pickingRegion = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(f.userMessage)),
-        );
+        _toast(f.userMessage);
+      }
+    } on AppFailure catch (f) {
+      if (mounted) {
+        setState(() => _pickingRegion = false);
+        _toast(f.userMessage);
       }
     }
   }
 
   Future<void> _openCamera() async {
-    if (_isProcessing || _pickingRegion) return;
+    if (_isProcessing || _pickingRegion || _practiceBusy) return;
     if (!await _ensurePrivacy()) return;
     if (!mounted) return;
-    final bytes = await showCameraCaptureDialog(context);
-    if (bytes == null || !mounted) return;
-    await _solveFromImageBytes(
-      bytes,
-      emptyMessage: 'Ảnh camera trống — thử lại.',
-      inputType: 'camera',
+    try {
+      final captured = await ScanQuestionScreen.open(context);
+      if (captured == null || !mounted) return;
+      await _solveFromImageBytes(
+        captured.bytes,
+        emptyMessage: 'Ảnh từ camera không có nội dung. Thử lại nhé.',
+        inputType: 'camera',
+      );
+    } on AppFailure catch (f) {
+      _toast(f.userMessage);
+    }
+  }
+
+  Widget _inputSourceMenu({required bool inputsLocked}) {
+    final platform = ref.watch(platformIntegrationProvider);
+    final tooltip = platform.supportsCamera
+        ? 'Ảnh & camera'
+        : 'Ảnh & chụp màn hình';
+    return MenuAnchor(
+      builder: (context, controller, child) {
+        return IconButton(
+          tooltip: tooltip,
+          onPressed: inputsLocked
+              ? null
+              : () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                },
+          icon: const Icon(AppIcons.photo),
+        );
+      },
+      menuChildren: [
+        MenuItemButton(
+          leadingIcon: const Icon(AppIcons.image),
+          onPressed: inputsLocked ? null : _solveImage,
+          child: const Text('Chọn ảnh'),
+        ),
+        if (platform.supportsScreenCapture)
+          MenuItemButton(
+            leadingIcon: const Icon(AppIcons.capture),
+            onPressed: inputsLocked ? null : _capture,
+            child: const Text('Chụp màn hình'),
+          ),
+        if (platform.supportsCamera)
+          MenuItemButton(
+            leadingIcon: const Icon(AppIcons.camera),
+            onPressed: inputsLocked ? null : _openCamera,
+            child: const Text('Quét câu hỏi'),
+          ),
+      ],
     );
   }
 
@@ -227,7 +355,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     if (_isProcessing || _pickingRegion) return;
     final text = _ocrController.text.trim();
     if (text.isEmpty) {
-      _toast('Nội dung câu hỏi không được trống.');
+      _toast('Nội dung câu hỏi đang trống. Hãy dán đề vào.');
       return;
     }
     if (!await _ensureApiKey()) return;
@@ -245,6 +373,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     r.when(
       success: (_) {
         _textController.text = _service.current.rawText ?? '';
+        _syncTabDraft();
         setState(() {});
       },
       failure: (f) {
@@ -256,10 +385,10 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<void> _confirmQuestionAndSolve() async {
-    if (_isProcessing || _pickingRegion) return;
+    if (_isProcessing) return;
     final text = _textController.text.trim();
     if (text.isEmpty) {
-      _toast('Câu hỏi không được trống.');
+      _toast('Câu hỏi đang trống. Hãy dán đề vào.');
       return;
     }
     if (!await _ensureApiKey()) return;
@@ -277,8 +406,15 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
     );
   }
 
@@ -297,22 +433,216 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
           setState(() {});
           return;
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(f.userMessage)),
-        );
+        _toast(f.userMessage);
+        setState(() {});
+      },
+    );
+  }
+
+  void _handlePractice(Result<void> result) {
+    result.when(
+      success: (_) {
+        if (!mounted) return;
+        setState(() {});
+        ref.invalidate(subjectHistoryProvider(widget.subjectId));
+      },
+      failure: (f) {
+        if (!mounted) return;
+        if (f is CancelledFailure || f.code == 'cancelled') return;
+        if (f is MissingApiKeyFailure) context.push('/settings');
+        _toast(f.userMessage);
+        setState(() {});
       },
     );
   }
 
   void _newQuestion() {
-    if (_isProcessing) return;
+    if (_isProcessing || _practiceBusy) return;
     _service.reset();
+    _practice.reset();
     _textController.clear();
     _ocrController.clear();
+    _clearTabDraft();
     setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _textFocusNode.requestFocus();
-    });
+  }
+
+  void _newPracticeQuestion() {
+    _practice.reset();
+    _textController.clear();
+    _clearTabDraft();
+    setState(() {});
+  }
+
+  Future<void> _openQuestionEditor() async {
+    if (_isProcessing || _pickingRegion || _practiceBusy) return;
+    final isPractice = _surfaceMode == SolveSurfaceMode.practice;
+    final text = await QuestionInputScreen.open(
+      context,
+      initialText: _textController.text,
+      hintText: isPractice
+          ? 'Dán câu hỏi cần luyện…'
+          : 'Dán nội dung câu hỏi…',
+    );
+    if (!mounted || text == null) return;
+    setState(() => _textController.text = text);
+    _syncTabDraft();
+  }
+
+  Future<void> _cancelPractice() async {
+    await _practice.cancel();
+    if (mounted) setState(() {});
+  }
+
+  Widget _modeToggle({required bool enabled}) {
+    return StudeeSegmentedControl<SolveSurfaceMode>(
+      enabled: enabled,
+      selected: _surfaceMode,
+      onChanged: (mode) {
+        if (mode == _surfaceMode) return;
+        setState(() => _surfaceMode = mode);
+      },
+      segments: const [
+        StudeeSegment(
+          value: SolveSurfaceMode.solve,
+          label: 'Giải',
+          icon: AppIcons.solve,
+        ),
+        StudeeSegment(
+          value: SolveSurfaceMode.practice,
+          label: 'Luyện tập',
+          icon: AppIcons.practice,
+        ),
+      ],
+    );
+  }
+
+  Widget _wrapWithModeToggle({
+    required bool enabled,
+    required Widget child,
+  }) {
+    if (!widget.showModeToggle) return child;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: AppLayout.pageInsets(context).copyWith(bottom: 10, top: 8),
+          child: _modeToggle(enabled: enabled),
+        ),
+        Expanded(child: child),
+      ],
+    );
+  }
+
+  Widget _idleQuestionPreview({
+    required bool inputsLocked,
+    List<Widget> belowFooter = const [],
+  }) {
+    final isPractice = _surfaceMode == SolveSurfaceMode.practice;
+    final question = _textController.text.trim();
+    final hasQuestion = question.isNotEmpty;
+
+    return Padding(
+      padding: AppLayout.pageInsets(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: AppLayout.cardBorder,
+                      onTap: inputsLocked ? null : _openQuestionEditor,
+                      child: StudeeGlass(
+                        padding: const EdgeInsets.all(AppLayout.cardPadding),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Câu hỏi',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Sửa',
+                                  onPressed: inputsLocked
+                                      ? null
+                                      : _openQuestionEditor,
+                                  icon: const Icon(AppIcons.edit),
+                                ),
+                                _inputSourceMenu(inputsLocked: inputsLocked),
+                              ],
+                            ),
+                            if (!hasQuestion)
+                              Text(
+                                'Chạm để nhập hoặc dán đề bài…',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: AppColors.secondaryText,
+                                      height: 1.4,
+                                    ),
+                              )
+                            else
+                              StudyMarkdown(question),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_pickingRegion) ...[
+                    const SizedBox(height: AppLayout.gapMd),
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Đang chọn vùng chụp… kéo khung quanh câu hỏi',
+                      style: TextStyle(color: AppColors.secondaryText),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (hasQuestion) ...[
+            const SizedBox(height: AppLayout.gapMd),
+            StudeeGlassFooter(
+              padding: AppLayout.footerInsets,
+              child: StudeeGradientButton(
+                onPressed: inputsLocked ? null : _solveText,
+                icon: isPractice ? AppIcons.practice : AppIcons.solve,
+                label: isPractice
+                    ? AppShortcuts.label('Bắt đầu luyện', '↵')
+                    : AppShortcuts.label('Giải', '↵'),
+              ),
+            ),
+          ],
+          ...belowFooter,
+        ],
+      ),
+    );
+  }
+
+  Widget _practiceIdleInput({required bool inputsLocked}) {
+    return _idleQuestionPreview(
+      inputsLocked: inputsLocked,
+      belowFooter: [
+        if (_practice.current.errorMessage != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _practice.current.errorMessage!,
+            style: const TextStyle(color: AppColors.error),
+          ),
+        ],
+      ],
+    );
   }
 
   Widget _processingPanel(SolveSessionState state) {
@@ -326,28 +656,14 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: StudeeGlass(
-                  borderRadius: 16,
                   padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: CircularProgressIndicator(strokeWidth: 3),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        state.stage.labelVi,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+                      StudeeGradientProgress(label: state.stage.labelVi),
+                      const SizedBox(height: 16),
                       const Text(
-                        'Bạn có thể quay lại — tiến trình vẫn chạy nền.',
+                        'Bạn có thể làm việc khác, tiến trình vẫn chạy nền.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: AppColors.secondaryText,
@@ -386,8 +702,31 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   Widget build(BuildContext context) {
     final async = ref.watch(solveStateProvider);
     final state = async.asData?.value ?? _service.current;
+    final practiceAsync = ref.watch(practiceStateProvider);
+    final practice = practiceAsync.asData?.value ?? _practice.current;
     final isProcessing = state.stage.isInProgress;
-    final inputsLocked = isProcessing || _pickingRegion;
+    final inputsLocked = isProcessing || _pickingRegion || _practiceBusy;
+    final practiceSessionOpen = practice.stage != PracticeStage.idle &&
+        !(practice.stage == PracticeStage.failed && practice.messages.isEmpty);
+    final modeSwitchEnabled =
+        !isProcessing && !_practiceBusy && !practiceSessionOpen;
+
+    if (_surfaceMode == SolveSurfaceMode.practice && practiceSessionOpen) {
+      return _wrapWithModeToggle(
+        enabled: modeSwitchEnabled,
+        child: PracticeChatPanel(
+          onNewQuestion: _newPracticeQuestion,
+          onCancel: _cancelPractice,
+        ),
+      );
+    }
+
+    if (_surfaceMode == SolveSurfaceMode.practice) {
+      return _wrapWithModeToggle(
+        enabled: modeSwitchEnabled,
+        child: _practiceIdleInput(inputsLocked: inputsLocked),
+      );
+    }
 
     final showInputForm = !isProcessing &&
         state.result == null &&
@@ -443,144 +782,39 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
         ],
       );
     } else if (showInputForm) {
-      body = Padding(
-        padding: AppLayout.pageInsets(context),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.embedded &&
-                (state.stage == SolvePipelineStage.offlineFailure ||
-                    state.stage == SolvePipelineStage.partialFailure))
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {
-                    _service.reset();
-                    setState(() {});
-                  },
-                  child: const Text('Đóng'),
-                ),
-              ),
-            Expanded(
-              child: Focus(
-                onKeyEvent: (node, event) {
-                  if (!widget.shortcutsActive) return KeyEventResult.ignored;
-                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
-                  if (inputsLocked || !showInputForm) {
-                    return KeyEventResult.ignored;
-                  }
-                  final mod = HardwareKeyboard.instance.isMetaPressed ||
-                      HardwareKeyboard.instance.isControlPressed;
-                  if (!mod) return KeyEventResult.ignored;
-                  if (event.logicalKey == LogicalKeyboardKey.enter) {
-                    _solveText();
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: StudeeGlass(
-                  borderRadius: 16,
-                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
-                  child: TextField(
-                    controller: _textController,
-                    focusNode: _textFocusNode,
-                    enabled: !inputsLocked,
-                    autofocus: widget.shortcutsActive,
-                    expands: true,
-                    maxLines: null,
-                    minLines: null,
-                    textAlignVertical: TextAlignVertical.top,
-                    decoration: InputDecoration(
-                      hintText:
-                          'Dán nội dung câu hỏi… (${AppShortcuts.chord('↵')} để giải)',
-                      alignLabelWithHint: true,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      filled: false,
-                      isDense: false,
-                      contentPadding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            StudeeGlassFooter(
-              padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: inputsLocked ? null : _solveText,
-                      icon: const Icon(Icons.play_arrow),
-                      label: Text(AppShortcuts.label('Giải', '↵')),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  MenuAnchor(
-                    builder: (context, controller, child) {
-                      return IconButton.outlined(
-                        tooltip: 'Ảnh & camera',
-                        onPressed: inputsLocked
-                            ? null
-                            : () {
-                                if (controller.isOpen) {
-                                  controller.close();
-                                } else {
-                                  controller.open();
-                                }
-                              },
-                        icon: const Icon(Icons.photo_outlined),
-                      );
-                    },
-                    menuChildren: [
-                      MenuItemButton(
-                        leadingIcon: const Icon(Icons.image_outlined),
-                        onPressed: inputsLocked ? null : _solveImage,
-                        child: const Text('Chọn ảnh'),
-                      ),
-                      MenuItemButton(
-                        leadingIcon: const Icon(Icons.crop_free),
-                        onPressed: inputsLocked ? null : _capture,
-                        child: const Text('Chụp màn hình'),
-                      ),
-                      MenuItemButton(
-                        leadingIcon: const Icon(Icons.photo_camera_outlined),
-                        onPressed: inputsLocked ? null : _openCamera,
-                        child: const Text('Camera'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (_pickingRegion) ...[
-              const SizedBox(height: 16),
-              const LinearProgressIndicator(),
-              const SizedBox(height: 8),
-              const Text(
-                'Đang chọn vùng chụp…',
-                style: TextStyle(color: AppColors.secondaryText),
-              ),
-            ],
-            if (state.errorMessage != null && state.result == null) ...[
-              const SizedBox(height: 12),
-              Text(
-                state.errorMessage!,
-                style: const TextStyle(color: AppColors.error),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
+      body = _idleQuestionPreview(
+        inputsLocked: inputsLocked,
+        belowFooter: [
+          if (widget.embedded &&
+              (state.stage == SolvePipelineStage.offlineFailure ||
+                  state.stage == SolvePipelineStage.partialFailure)) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
                 onPressed: () {
                   _service.reset();
                   setState(() {});
                 },
-                child: const Text('Thử lại'),
+                child: const Text('Đóng'),
               ),
-            ],
+            ),
           ],
-        ),
+          if (state.errorMessage != null && state.result == null) ...[
+            const SizedBox(height: 12),
+            Text(
+              state.errorMessage!,
+              style: const TextStyle(color: AppColors.error),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () {
+                _service.reset();
+                setState(() {});
+              },
+              child: const Text('Thử lại'),
+            ),
+          ],
+        ],
       );
     } else {
       body = ListView(
@@ -602,7 +836,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
           ],
           if (state.needsOcrReview) ...[
             const Text(
-              'Chữ nhận dạng chưa rõ — hãy chỉnh lại trước khi giải:',
+              'Chữ nhận dạng chưa rõ, hãy chỉnh lại trước khi giải:',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
@@ -623,7 +857,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
           ],
           if (state.needsQuestionConfirm) ...[
             const Text(
-              'Chỉnh câu hỏi rồi xác nhận để giải lại',
+              'Chỉnh lại câu hỏi rồi xác nhận để giải lại',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
@@ -688,13 +922,17 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             }
           : const <ShortcutActivator, VoidCallback>{},
       child: Focus(
-        child: body,
+        child: _wrapWithModeToggle(
+          enabled: modeSwitchEnabled,
+          child: body,
+        ),
       ),
     );
 
     if (widget.embedded) return wrapped;
 
     return StudeePageScaffold(
+      atmosphereIntensity: AppLayout.atmospherePage,
       topBar: StudeeGlassAppBar(
         title: 'Giải câu hỏi',
         actions: [
@@ -725,27 +963,50 @@ class CollapsedQuestionTile extends StatelessWidget {
 
   final String text;
 
+  /// Plain preview without raw LaTeX delimiters for the collapsed subtitle.
+  static String plainPreview(String input) {
+    var t = input.replaceAll('\r\n', '\n');
+    t = t.replaceAllMapped(
+      RegExp(r'\$\$[\s\S]*?\$\$'),
+      (_) => ' [công thức] ',
+    );
+    t = t.replaceAllMapped(
+      RegExp(r'\\\[([\s\S]*?)\\\]'),
+      (_) => ' [công thức] ',
+    );
+    t = t.replaceAllMapped(
+      RegExp(r'\$[^$\n]+\$'),
+      (_) => ' [công thức] ',
+    );
+    t = t.replaceAllMapped(
+      RegExp(r'\\\(([\s\S]*?)\\\)'),
+      (_) => ' [công thức] ',
+    );
+    t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return t;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: StudeeGlass(
-        borderRadius: 14,
         child: ExpansionTile(
           initiallyExpanded: false,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          title: const Text(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          title: Text(
             'Câu hỏi',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            style: theme.titleSmall,
           ),
           subtitle: Text(
-            text.replaceAll(RegExp(r'\s+'), ' ').trim(),
+            plainPreview(text),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: theme.bodyMedium?.copyWith(
               color: AppColors.secondaryText,
-              fontSize: 13,
+              height: 1.4,
             ),
           ),
           children: [
@@ -789,64 +1050,84 @@ class SolveResultView extends ConsumerWidget {
     );
 
     final knowledgeLabel = result.fromImportedKnowledge
-        ? 'Từ tài liệu đã nhập'
+        ? 'Từ tài liệu bạn đã nhập'
         : 'Gợi ý từ AI';
     final notes = UserFacingCopy.friendlyWarnings(result.warnings);
+
+    final confidenceLevel = switch (result.confidence) {
+      ConfidenceLevel.high => 2,
+      ConfidenceLevel.medium => 1,
+      ConfidenceLevel.low || ConfidenceLevel.conflict => 0,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Đáp án gợi ý',
-          style: TextStyle(
-            fontSize: compact ? 12 : 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.secondaryText,
+        StudeeGlass(
+          gradientBorder: true,
+          padding: EdgeInsets.fromLTRB(
+            compact ? 14 : 16,
+            compact ? 14 : 16,
+            compact ? 14 : 16,
+            compact ? 14 : 16,
           ),
-        ),
-        const SizedBox(height: 6),
-        if (answer.isEmpty)
-          Text(
-            '(Chưa có đáp án ngắn — xem phần giải thích bên dưới)',
-            style: TextStyle(
-              fontSize: compact ? 16 : 18,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primaryText,
-              height: 1.35,
-            ),
-          )
-        else
-          StudyMarkdown(
-            answer,
-            compact: compact,
-            style: TextStyle(
-              fontSize: compact ? 17 : 19,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primaryText,
-              height: 1.35,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Đáp án gợi ý',
+                style: TextStyle(
+                  fontSize: compact ? 13.5 : 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.secondaryText,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (answer.isEmpty)
+                Text(
+                  '(Chưa có đáp án ngắn, xem phần giải thích bên dưới)',
+                  style: TextStyle(
+                    fontSize: compact ? 17 : 19,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryText,
+                    height: 1.35,
+                  ),
+                )
+              else
+                StudyMarkdown(
+                  answer,
+                  compact: compact,
+                  style: TextStyle(
+                    fontSize: compact ? 20 : 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryText,
+                    height: 1.35,
+                  ),
+                ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  StudeeConfidenceMeter(
+                    level: confidenceLevel,
+                    label: 'Tin cậy: ${result.confidence.labelVi}',
+                  ),
+                  StudeePill(
+                    label: knowledgeLabel,
+                    color: result.fromImportedKnowledge
+                        ? AppColors.success
+                        : AppColors.violet,
+                    icon: result.fromImportedKnowledge
+                        ? AppIcons.book
+                        : AppIcons.sparkle,
+                  ),
+                ],
+              ),
+            ],
           ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _Chip(
-              label: 'Tin cậy: ${result.confidence.labelVi}',
-              color: switch (result.confidence) {
-                ConfidenceLevel.high => AppColors.success,
-                ConfidenceLevel.medium => AppColors.accent,
-                ConfidenceLevel.low => AppColors.secondaryText,
-                ConfidenceLevel.conflict => AppColors.error,
-              },
-            ),
-            _Chip(
-              label: knowledgeLabel,
-              color: result.fromImportedKnowledge
-                  ? AppColors.success
-                  : AppColors.secondaryText,
-            ),
-          ],
         ),
         if (notes.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -855,21 +1136,17 @@ class SolveResultView extends ConsumerWidget {
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
                 w,
-                style: const TextStyle(
-                  color: AppColors.secondaryText,
-                  fontSize: 13,
-                  height: 1.35,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.secondaryText,
+                      height: 1.4,
+                    ),
               ),
             ),
           ),
         ],
-        const SizedBox(height: 16),
-        const Text(
-          'Giải thích',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 18),
+        const StudeeSectionLabel('Giải thích'),
+        const SizedBox(height: 10),
         StudyMarkdown(
           result.explanationMarkdown,
           compact: compact,
@@ -883,7 +1160,7 @@ class SolveResultView extends ConsumerWidget {
                 context,
                 result.references,
               ),
-              icon: const Icon(Icons.menu_book_outlined, size: 18),
+              icon: const Icon(AppIcons.book, size: AppIcons.sizeInline),
               label: Text('Nguồn tham khảo (${result.references.length})'),
               style: TextButton.styleFrom(
                 foregroundColor: AppColors.secondaryText,
@@ -933,7 +1210,8 @@ class SolveResultActions extends ConsumerWidget {
     return Row(
       children: [
         Expanded(
-          child: FilledButton(
+          flex: 5,
+          child: StudeeGradientButton(
             onPressed: () async {
               final r = await ref
                   .read(solveServiceProvider)
@@ -956,20 +1234,33 @@ class SolveResultActions extends ConsumerWidget {
                 },
               );
             },
-            child: const Text('Lưu vào môn học'),
+            label: 'Lưu vào môn học',
+            icon: AppIcons.bookmarkAdd,
           ),
         ),
         if (onReset != null) ...[
           const SizedBox(width: 8),
           Expanded(
+            flex: 4,
             child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               onPressed: onReset,
-              child: const Text('Câu hỏi mới'),
+              child: const Text(
+                'Câu hỏi mới',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+              ),
             ),
           ),
         ],
         PopupMenuButton<_ResultMoreAction>(
           tooltip: 'Thêm',
+          padding: EdgeInsets.zero,
           onSelected: (action) async {
             switch (action) {
               case _ResultMoreAction.copy:
@@ -996,7 +1287,7 @@ class SolveResultActions extends ConsumerWidget {
                   success: (_) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Đã ghi nhận kết quả sai.'),
+                        content: Text('Đã ghi nhận phản hồi của bạn.'),
                       ),
                     );
                   },
@@ -1023,7 +1314,7 @@ class SolveResultActions extends ConsumerWidget {
               child: Text('Báo kết quả sai'),
             ),
           ],
-          icon: const Icon(Icons.more_horiz),
+          icon: const Icon(AppIcons.more),
         ),
       ],
     );
@@ -1095,23 +1386,4 @@ void _showReferencesPopup(
       );
     },
   );
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.color});
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12)),
-    );
-  }
 }

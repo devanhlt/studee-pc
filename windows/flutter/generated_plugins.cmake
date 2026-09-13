@@ -3,8 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  camera_desktop
   desktop_multi_window
+  file_selector_windows
   flutter_secure_storage_windows
   hotkey_manager_windows
   screen_capturer_windows

@@ -26,7 +26,7 @@ sealed class AppFailure {
 final class DatabaseFailure extends AppFailure {
   const DatabaseFailure({
     super.userMessage =
-        'Lỗi cơ sở dữ liệu. Thao tác đã được hoàn tác nếu có thể.',
+        'Không lưu được dữ liệu. Thao tác đã được hoàn tác.',
     super.code,
     super.details,
   });
@@ -35,7 +35,7 @@ final class DatabaseFailure extends AppFailure {
 final class NetworkFailure extends AppFailure {
   const NetworkFailure({
     super.userMessage =
-        'Không thể kết nối mạng. Kiểm tra kết nối và thử lại.',
+        'Không có kết nối mạng. Kiểm tra internet rồi thử lại nhé.',
     super.code,
     super.details,
   });
@@ -44,7 +44,7 @@ final class NetworkFailure extends AppFailure {
 final class AuthFailure extends AppFailure {
   const AuthFailure({
     super.userMessage =
-        'Xác thực API thất bại. Kiểm tra khóa DeepSeek trong Cài đặt.',
+        'Mã kích hoạt chưa được chấp nhận. Kiểm tra lại trong Cài đặt.',
     super.code,
     super.details,
   });
@@ -53,7 +53,7 @@ final class AuthFailure extends AppFailure {
 final class RateLimitFailure extends AppFailure {
   const RateLimitFailure({
     super.userMessage =
-        'Đã vượt giới hạn tốc độ API. Vui lòng đợi rồi thử lại.',
+        'Bạn gửi yêu cầu hơi nhanh. Chờ một chút rồi thử lại nhé.',
     super.code,
     super.details,
   });
@@ -62,7 +62,7 @@ final class RateLimitFailure extends AppFailure {
 final class QuotaFailure extends AppFailure {
   const QuotaFailure({
     super.userMessage =
-        'Đã hết hạn mức API. Kiểm tra tài khoản DeepSeek của bạn.',
+        'Đã hết lượt giải. Nạp thêm lượt để tiếp tục nhé.',
     super.code,
     super.details,
   });
@@ -71,7 +71,7 @@ final class QuotaFailure extends AppFailure {
 final class OcrFailure extends AppFailure {
   const OcrFailure({
     super.userMessage =
-        'Nhận dạng văn bản (OCR) thất bại. Bạn có thể thử lại trang này.',
+        'Không đọc được chữ trong ảnh. Thử lại trang này hoặc nhập tay.',
     super.code,
     super.details,
   });
@@ -79,7 +79,7 @@ final class OcrFailure extends AppFailure {
 
 final class ValidationFailure extends AppFailure {
   const ValidationFailure({
-    super.userMessage = 'Dữ liệu không hợp lệ. Vui lòng kiểm tra và sửa.',
+    super.userMessage = 'Thông tin chưa hợp lệ. Kiểm tra lại rồi thử lần nữa.',
     super.code,
     super.details,
   });
@@ -87,7 +87,7 @@ final class ValidationFailure extends AppFailure {
 
 final class CancelledFailure extends AppFailure {
   const CancelledFailure({
-    super.userMessage = 'Thao tác đã bị hủy.',
+    super.userMessage = 'Đã hủy.',
     super.code,
     super.details,
   });
@@ -95,7 +95,7 @@ final class CancelledFailure extends AppFailure {
 
 final class NotFoundFailure extends AppFailure {
   const NotFoundFailure({
-    super.userMessage = 'Không tìm thấy dữ liệu yêu cầu.',
+    super.userMessage = 'Không tìm thấy dữ liệu bạn cần.',
     super.code,
     super.details,
   });
@@ -104,7 +104,7 @@ final class NotFoundFailure extends AppFailure {
 final class ConflictFailure extends AppFailure {
   const ConflictFailure({
     super.userMessage =
-        'Nguồn đáng tin cậy mâu thuẫn. Không tự chọn đáp án.',
+        'Các nguồn đang không khớp nhau nên chưa thể chọn đáp án.',
     super.code,
     super.details,
   });
@@ -113,7 +113,7 @@ final class ConflictFailure extends AppFailure {
 final class MissingApiKeyFailure extends AppFailure {
   const MissingApiKeyFailure({
     super.userMessage =
-        'Chưa có mã kích hoạt. Nhập mã trong Cài đặt để tiếp tục.',
+        'Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.',
     super.code = 'missing_api_key',
     super.details,
   });
@@ -122,8 +122,8 @@ final class MissingApiKeyFailure extends AppFailure {
 final class ScreenCaptureFailure extends AppFailure {
   const ScreenCaptureFailure({
     super.userMessage =
-        'Không chụp được màn hình. Cấp quyền Ghi màn hình cho đúng bản '
-        '(Studee hoặc Studee (Debug)), rồi thoát hẳn app và mở lại.',
+        'Không chụp được màn hình. Hãy cấp quyền Ghi màn hình cho đúng bản '
+        '(Studee hoặc Studee (Debug)), thoát hẳn app rồi mở lại.',
     super.code = 'screen_capture_denied',
     super.details,
   });
@@ -131,7 +131,7 @@ final class ScreenCaptureFailure extends AppFailure {
 
 final class UnknownFailure extends AppFailure {
   const UnknownFailure({
-    super.userMessage = 'Đã xảy ra lỗi không xác định. Vui lòng thử lại.',
+    super.userMessage = 'Đã có lỗi xảy ra. Thử lại giúp mình nhé.',
     super.code,
     super.details,
   });

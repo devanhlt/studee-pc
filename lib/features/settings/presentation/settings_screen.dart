@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
@@ -56,7 +57,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _saveCode() async {
     if (_codeController.text.trim().isEmpty) {
-      setState(() => _status = 'Nhập mã kích hoạt.');
+      setState(() => _status = 'Hãy dán mã kích hoạt vào trước.');
       return;
     }
     setState(() {
@@ -87,7 +88,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     result.when(
       success: (_) {
         _refreshCredentials();
-        setState(() => _status = 'Đã xóa mã kích hoạt.');
+        setState(() => _status = 'Đã xóa mã kích hoạt khỏi máy.');
       },
       failure: (f) => setState(() => _status = f.userMessage),
     );
@@ -105,7 +106,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         setState(() {
           _entitlement = info;
           _status =
-              'Kết nối thành công · ${info.plan} · còn ${info.remaining}/${info.maxSolves} lượt giải';
+              'Đã kết nối · ${info.plan} · còn ${info.remaining}/${info.maxSolves} lượt giải';
         });
       },
       failure: (f) => setState(() {
@@ -122,18 +123,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
     try {
       await ref
-          .read(desktopIntegrationProvider)
+          .read(platformIntegrationProvider)
           .resetAndRequestScreenCaptureAccess();
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _status = 'Đã đặt lại. Thoát hẳn Studee rồi mở lại để cấp quyền.';
+        _status = 'Đã đặt lại. Hãy thoát hẳn Studee rồi mở lại để cấp quyền.';
       });
     } on Object catch (_) {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _status = 'Không đặt lại được. Thử lại hoặc cấp quyền trong Hệ thống.';
+        _status = 'Không đặt lại được. Thử lại hoặc cấp quyền trong Cài đặt hệ thống.';
       });
     }
   }
@@ -155,13 +156,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
 
     return StudeePageScaffold(
+      atmosphereIntensity: AppLayout.atmospherePage,
       topBar: const StudeeGlassAppBar(title: 'Cài đặt'),
       body: ListView(
         padding: AppLayout.pageInsets(context),
         children: [
           StudeeGlass(
-            borderRadius: 16,
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            padding: const EdgeInsets.all(AppLayout.cardPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -181,8 +182,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Nhập mã bạn nhận sau khi đăng ký gói. Studee dùng mã này '
-                  'để gọi máy chủ (không cần khóa DeepSeek/Mathpix riêng).',
+                  'Dán mã bạn nhận được sau khi đăng ký gói.',
                   style: TextStyle(
                     color: AppColors.secondaryText.withValues(alpha: 0.95),
                     height: 1.4,
@@ -192,7 +192,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: () => context.push('/settings/request-code'),
-                  icon: const Icon(Icons.qr_code_2_rounded),
+                  icon: const Icon(AppIcons.qrCode),
                   label: const Text('Yêu cầu mã'),
                 ),
                 const SizedBox(height: 16),
@@ -207,8 +207,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           setState(() => _obscureCode = !_obscureCode),
                       icon: Icon(
                         _obscureCode
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
+                            ? AppIcons.visibility
+                            : AppIcons.visibilityOff,
                       ),
                     ),
                   ),
@@ -243,7 +243,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           if (_status != null) ...[
             const SizedBox(height: 12),
             StudeeGlass(
-              borderRadius: 12,
+              borderRadius: AppLayout.radiusControl,
               padding: const EdgeInsets.all(12),
               child: Text(
                 _status!,
@@ -254,8 +254,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           if (Platform.isMacOS) ...[
             const SizedBox(height: 12),
             StudeeGlass(
-              borderRadius: 16,
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+              padding: const EdgeInsets.all(AppLayout.cardPadding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -271,27 +270,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 12),
-          StudeeGlass(
-            borderRadius: 16,
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const StudeeSectionLabel('Phím tắt'),
-                const SizedBox(height: 10),
-                Text(
-                  Platform.isMacOS
-                      ? '⌘↵ giải câu hỏi'
-                      : 'Ctrl+Enter giải câu hỏi',
-                  style: TextStyle(
-                    color: AppColors.secondaryText.withValues(alpha: 0.95),
-                    height: 1.4,
+          if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) ...[
+            const SizedBox(height: 12),
+            StudeeGlass(
+              padding: const EdgeInsets.all(AppLayout.cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const StudeeSectionLabel('Phím tắt'),
+                  const SizedBox(height: 10),
+                  Text(
+                    Platform.isMacOS
+                        ? '⌘↵ giải câu hỏi'
+                        : 'Ctrl+Enter giải câu hỏi',
+                    style: TextStyle(
+                      color: AppColors.secondaryText.withValues(alpha: 0.95),
+                      height: 1.4,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 24),
         ],
       ),

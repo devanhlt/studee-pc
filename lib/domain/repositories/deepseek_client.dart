@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:studee_pc/domain/entities/deepseek_answer_response.dart';
 import 'package:studee_pc/domain/entities/evidence_package.dart';
 import 'package:studee_pc/domain/entities/parsed_question.dart';
+import 'package:studee_pc/domain/entities/practice_turn.dart';
 
 /// Page or document text ready for structured extraction.
 class StructureSourceRequest extends Equatable {
@@ -160,6 +161,22 @@ abstract interface class DeepSeekClient {
   Future<String> polishOcrText({
     required String raw,
     required String heuristic,
+  });
+
+  /// First practice coach turn for [questionText] (optional parsed stem).
+  Future<PracticeTurnResponse> startPracticeTurn({
+    required String questionText,
+    ParsedQuestion? parsed,
+    int maxCheckSteps = 6,
+  });
+
+  /// Continue practice with prior LLM [history] plus the latest user answer.
+  Future<PracticeTurnResponse> continuePracticeTurn({
+    required List<PracticeLlmMessage> history,
+    required String userAnswer,
+    required int attemptsOnStep,
+    int checkStepsSoFar = 0,
+    int maxCheckSteps = 6,
   });
 
   /// Start a cancellable API session (cancels any previous one).

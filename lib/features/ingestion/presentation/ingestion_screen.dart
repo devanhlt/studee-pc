@@ -7,15 +7,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
+import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/domain/enums/ingestion_job_status.dart';
 import 'package:studee_pc/domain/enums/source_type.dart';
 import 'package:studee_pc/features/ingestion/application/ingestion_service.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
+import 'package:studee_pc/features/solver/presentation/mobile_image_crop.dart';
+import 'package:studee_pc/features/solver/presentation/scan_question_screen.dart';
 
 final ingestionStateProvider =
     StreamProvider.autoDispose<IngestionState?>((ref) {
@@ -83,7 +87,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     final has = await _service.hasApiKey();
     if (!has && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nhập khóa API DeepSeek')),
+        const SnackBar(content: Text('Hãy nhập khóa API DeepSeek.')),
       );
       context.push('/settings');
       return false;
@@ -94,35 +98,37 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   }
 
   Future<void> _pickImage() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
-    final file = result?.files.single;
-    if (file?.bytes == null) return;
-    if (file!.bytes!.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tệp trống — hãy chọn file khác.')),
+    try {
+      final captured = await captureAndCropImage(
+        context,
+        capture: () => ref.read(platformIntegrationProvider).pickImage(),
+        emptyMessage: 'Tệp không có nội dung. Hãy chọn file khác.',
       );
-      return;
+      if (captured == null) return;
+      setState(() => _starting = true);
+      final r = await _service.startFromImage(
+        subjectId: widget.subjectId,
+        bytes: captured.bytes,
+        fileName: captured.mimeType == 'image/jpeg' ? 'image.jpg' : 'image.png',
+        type: SourceType.image,
+      );
+      setState(() => _starting = false);
+      _handleStart(r);
+    } on AppFailure catch (f) {
+      setState(() => _starting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(f.userMessage)),
+        );
+      }
     }
-    setState(() => _starting = true);
-    final r = await _service.startFromImage(
-      subjectId: widget.subjectId,
-      bytes: file.bytes!,
-      fileName: file.name,
-      type: SourceType.image,
-    );
-    setState(() => _starting = false);
-    _handleStart(r);
   }
 
   Future<void> _capture() async {
     setState(() => _starting = true);
-    final desktop = ref.read(desktopIntegrationProvider);
+    final platform = ref.read(platformIntegrationProvider);
     try {
-      final captured = await desktop.captureRegion();
+      final captured = await platform.captureRegion();
       if (captured == null) {
         setState(() => _starting = false);
         if (mounted) {
@@ -136,7 +142,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
         setState(() => _starting = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Ảnh chụp trống — thử lại.')),
+            const SnackBar(content: Text('Ảnh chụp không có nội dung. Thử lại nhé.')),
           );
         }
         return;
@@ -156,6 +162,39 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
           SnackBar(content: Text(f.userMessage)),
         );
       }
+    } on AppFailure catch (f) {
+      setState(() => _starting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(f.userMessage)),
+        );
+      }
+    }
+  }
+
+  Future<void> _captureFromCamera() async {
+    try {
+      setState(() => _starting = true);
+      final captured = await ScanQuestionScreen.open(context);
+      if (captured == null) {
+        setState(() => _starting = false);
+        return;
+      }
+      final r = await _service.startFromImage(
+        subjectId: widget.subjectId,
+        bytes: captured.bytes,
+        fileName: 'camera.jpg',
+        type: SourceType.image,
+      );
+      setState(() => _starting = false);
+      _handleStart(r);
+    } on AppFailure catch (f) {
+      setState(() => _starting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(f.userMessage)),
+        );
+      }
     }
   }
 
@@ -164,7 +203,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     if (value.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nội dung không được trống.')),
+        const SnackBar(content: Text('Hãy nhập nội dung.')),
       );
       return;
     }
@@ -188,7 +227,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     if (file!.bytes!.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tệp trống — hãy chọn file khác.')),
+        const SnackBar(content: Text('Tệp không có nội dung. Hãy chọn file khác.')),
       );
       return;
     }
@@ -239,7 +278,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     if (reviewed.every((p) => p.text.trim().isEmpty)) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nội dung trang không được trống.')),
+        const SnackBar(content: Text('Hãy nhập nội dung cho trang này.')),
       );
       return;
     }
@@ -262,7 +301,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Chọn ít nhất một mục kiến thức hoặc câu hỏi để lưu.'),
+          content: Text('Hãy chọn ít nhất một mục kiến thức hoặc câu hỏi để lưu.'),
         ),
       );
       return;
@@ -307,6 +346,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
         state == null || state.status == IngestionJobStatus.queued;
 
     return StudeePageScaffold(
+      atmosphereIntensity: AppLayout.atmospherePage,
       topBar: StudeeGlassAppBar(
         title: 'Nhập kiến thức',
         subtitle: choosingSource ? 'Dán văn bản hoặc chọn nguồn' : null,
@@ -328,25 +368,36 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
                     _pickImage();
                   case _SourceMoreAction.screenshot:
                     _capture();
+                  case _SourceMoreAction.camera:
+                    _captureFromCamera();
                   case _SourceMoreAction.pdf:
                     _pickPdf();
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: _SourceMoreAction.image,
-                  child: Text('Ảnh'),
-                ),
-                PopupMenuItem(
-                  value: _SourceMoreAction.screenshot,
-                  child: Text('Ảnh chụp màn hình'),
-                ),
-                PopupMenuItem(
-                  value: _SourceMoreAction.pdf,
-                  child: Text('PDF'),
-                ),
-              ],
-              icon: const Icon(Icons.more_horiz),
+              itemBuilder: (_) {
+                final platform = ref.read(platformIntegrationProvider);
+                return [
+                  const PopupMenuItem(
+                    value: _SourceMoreAction.image,
+                    child: Text('Ảnh'),
+                  ),
+                  if (platform.supportsScreenCapture)
+                    const PopupMenuItem(
+                      value: _SourceMoreAction.screenshot,
+                      child: Text('Ảnh chụp màn hình'),
+                    ),
+                  if (platform.supportsCamera)
+                    const PopupMenuItem(
+                      value: _SourceMoreAction.camera,
+                      child: Text('Quét câu hỏi'),
+                    ),
+                  const PopupMenuItem(
+                    value: _SourceMoreAction.pdf,
+                    child: Text('PDF'),
+                  ),
+                ];
+              },
+              icon: const Icon(AppIcons.more),
             ),
           ] else if (state != null && !state.status.isTerminal)
             TextButton(
@@ -373,7 +424,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   }
 }
 
-enum _SourceMoreAction { image, screenshot, pdf }
+enum _SourceMoreAction { image, screenshot, camera, pdf }
 
 class _SourceChooser extends StatelessWidget {
   const _SourceChooser({
@@ -397,7 +448,6 @@ class _SourceChooser extends StatelessWidget {
           child: Padding(
             padding: insets,
             child: StudeeGlass(
-              borderRadius: 16,
               padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
               child: TextField(
                 controller: controller,
@@ -409,14 +459,14 @@ class _SourceChooser extends StatelessWidget {
                 enabled: !busy,
                 textAlignVertical: TextAlignVertical.top,
                 decoration: const InputDecoration(
-                  hintText: 'Dán nội dung tài liệu tại đây…',
+                  hintText: 'Dán tài liệu vào đây, càng đầy đủ thì đáp án càng chính xác…',
                   alignLabelWithHint: true,
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
                   filled: false,
                   isDense: false,
-                  contentPadding: EdgeInsets.fromLTRB(14, 14, 14, 14),
+                  contentPadding: EdgeInsets.all(AppLayout.cardPadding),
                 ),
               ),
             ),
@@ -469,9 +519,9 @@ class _IngestionBody extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(
-                        Icons.check_circle,
+                        AppIcons.checkCircle,
                         color: AppColors.success,
-                        size: 48,
+                        size: AppIcons.sizeEmptyState,
                       ),
                       const SizedBox(height: 12),
                       Text(state.status.labelVi),
@@ -492,41 +542,33 @@ class _IngestionBody extends StatelessWidget {
                   ),
                 ),
               ),
-            IngestionJobStatus.failed || IngestionJobStatus.cancelled => Center(
-                child: SingleChildScrollView(
-                  padding: AppLayout.pageInsets(context),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        state.errorMessage ?? state.status.labelVi,
-                        style: const TextStyle(color: AppColors.error),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton(
-                        onPressed: onRestart,
-                        child: const Text('Thử lại'),
-                      ),
-                    ],
-                  ),
-                ),
+            IngestionJobStatus.failed || IngestionJobStatus.cancelled =>
+              StudeeStatusState(
+                icon: AppIcons.error,
+                title: state.status.labelVi,
+                message: state.errorMessage ?? 'Thử lại với nguồn khác.',
+                actionLabel: 'Thử lại',
+                onAction: onRestart,
               ),
-            _ => Center(
-                child: SingleChildScrollView(
-                  padding: AppLayout.pageInsets(context),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(
-                        state.progressMessage ?? state.status.labelVi,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+            _ => Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppLayout.pagePadding,
+                      AppLayout.gapSm,
+                      AppLayout.pagePadding,
+                      0,
+                    ),
+                    child: Text(
+                      state.progressMessage ?? state.status.labelVi,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.secondaryText,
+                          ),
+                    ),
                   ),
-                ),
+                  const Expanded(child: StudeeSkeletonList()),
+                ],
               ),
           },
         ),
@@ -546,7 +588,7 @@ class _ProgressBanner extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: StudeeGlass(
-        borderRadius: 12,
+        borderRadius: AppLayout.radiusControl,
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -591,12 +633,11 @@ class _TextReview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPdf = state.sourceType == SourceType.pdf;
-    final narrow = AppLayout.isNarrow(context);
     return Column(
       children: [
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppLayout.pagePadding),
             itemCount: state.pages.length,
             itemBuilder: (_, i) {
               final page = state.pages[i];
@@ -611,7 +652,7 @@ class _TextReview extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: AppLayout.controlBorder,
                     border: Border.all(color: AppColors.border),
                   ),
                   child: page.imagePath != null
@@ -636,39 +677,30 @@ class _TextReview extends StatelessWidget {
                 );
                 final textField = TextField(
                   controller: controller,
-                  maxLines: narrow ? 8 : 14,
+                  maxLines: 8,
                   decoration: InputDecoration(
                     labelText: 'Văn bản trang ${page.pageNumber}',
                   ),
                 );
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: narrow
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            preview,
-                            const SizedBox(height: 12),
-                            textField,
-                          ],
-                        )
-                      : Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: preview),
-                            const SizedBox(width: 12),
-                            Expanded(child: textField),
-                          ],
-                        ),
+                  padding: const EdgeInsets.only(bottom: AppLayout.gapLg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      preview,
+                      const SizedBox(height: AppLayout.gapMd),
+                      textField,
+                    ],
+                  ),
                 );
               }
               return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.only(bottom: AppLayout.gapLg),
                 child: TextField(
                   controller: controller,
                   maxLines: 8,
                   decoration: InputDecoration(
-                    labelText: 'Duyệt văn bản OCR — trang ${page.pageNumber}',
+                    labelText: 'Duyệt văn bản nhận dạng · trang ${page.pageNumber}',
                     helperText: page.ocrConfidence != null
                         ? 'Độ tin cậy OCR: ${(page.ocrConfidence! * 100).toStringAsFixed(0)}%'
                         : null,
@@ -679,7 +711,7 @@ class _TextReview extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppLayout.pagePadding),
           child: SizedBox(
             width: double.infinity,
             child: FilledButton(

@@ -3,8 +3,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
+import 'package:studee_pc/app/theme/app_layout.dart';
+import 'package:studee_pc/app/theme/app_motion.dart';
 
-/// Soft amber atmosphere used behind every primary Studee screen.
+/// Soft aurora atmosphere used behind every primary Studee screen.
 class StudeeAtmosphere extends StatelessWidget {
   const StudeeAtmosphere({super.key, this.intensity = 1});
 
@@ -32,36 +35,65 @@ class _StudeeAtmospherePainter extends CustomPainter {
     final base = Paint()..color = AppColors.background;
     canvas.drawRect(Offset.zero & size, base);
 
-    final glow = Paint()
+    // Violet aurora — top-left.
+    final violetGlow = Paint()
       ..shader = RadialGradient(
-        center: const Alignment(-0.75, -0.95),
-        radius: 1.15,
+        center: const Alignment(-0.85, -0.95),
+        radius: 1.05,
         colors: [
-          AppColors.accent.withValues(alpha: 0.22 * intensity),
-          AppColors.accent.withValues(alpha: 0.06 * intensity),
+          AppColors.violet.withValues(alpha: 0.18 * intensity),
+          AppColors.violet.withValues(alpha: 0.05 * intensity),
           Colors.transparent,
         ],
-        stops: const [0.0, 0.35, 1.0],
+        stops: const [0.0, 0.4, 1.0],
       ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, glow);
+    canvas.drawRect(Offset.zero & size, violetGlow);
 
+    // Cyan aurora — bottom-right.
+    final cyanGlow = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(0.95, 1.05),
+        radius: 1.0,
+        colors: [
+          AppColors.cyan.withValues(alpha: 0.14 * intensity),
+          AppColors.cyan.withValues(alpha: 0.04 * intensity),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.42, 1.0],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, cyanGlow);
+
+    // Soft vertical wash.
     final wash = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          const Color(0xFF1A1612).withValues(alpha: 0.55 * intensity),
-          AppColors.background.withValues(alpha: 0.15 * intensity),
+          AppColors.surface.withValues(alpha: 0.45 * intensity),
+          AppColors.background.withValues(alpha: 0.12 * intensity),
           AppColors.background,
         ],
-        stops: const [0.0, 0.42, 1.0],
+        stops: const [0.0, 0.4, 1.0],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, wash);
 
+    // Faint mesh grid for an engineered feel.
+    final mesh = Paint()
+      ..color = AppColors.primaryText.withValues(alpha: 0.028 * intensity)
+      ..strokeWidth = 1;
+    const step = 42.0;
+    for (var x = 0.0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), mesh);
+    }
+    for (var y = 0.0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), mesh);
+    }
+
+    // Subtle arc accent near the top-right.
     final arcPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2
-      ..color = AppColors.accent.withValues(alpha: 0.12 * intensity);
+      ..color = AppColors.accent.withValues(alpha: 0.1 * intensity);
     canvas.drawArc(
       Rect.fromCircle(center: Offset(size.width + 20, -30), radius: 140),
       0.6,
@@ -74,16 +106,9 @@ class _StudeeAtmospherePainter extends CustomPainter {
       0.75,
       math.pi * 0.85,
       false,
-      arcPaint..color = AppColors.primaryText.withValues(alpha: 0.05 * intensity),
+      arcPaint
+        ..color = AppColors.cyan.withValues(alpha: 0.06 * intensity),
     );
-
-    final linePaint = Paint()
-      ..color = AppColors.primaryText.withValues(alpha: 0.035 * intensity)
-      ..strokeWidth = 1;
-    for (var i = 0; i < 7; i++) {
-      final y = 90.0 + i * 58;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y + i * 2.5), linePaint);
-    }
   }
 
   @override
@@ -96,12 +121,13 @@ class StudeeGlass extends StatelessWidget {
   const StudeeGlass({
     super.key,
     required this.child,
-    this.borderRadius = 16,
+    this.borderRadius = AppLayout.radiusCard,
     this.padding,
     this.blur = 18,
     this.opacity = 0.58,
     this.border = true,
     this.clipBehavior = Clip.antiAlias,
+    this.gradientBorder = false,
   });
 
   final Widget child;
@@ -112,10 +138,13 @@ class StudeeGlass extends StatelessWidget {
   final bool border;
   final Clip clipBehavior;
 
+  /// Draw a violet→cyan hairline around the panel.
+  final bool gradientBorder;
+
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(borderRadius);
-    return ClipRRect(
+    final panel = ClipRRect(
       borderRadius: radius,
       clipBehavior: clipBehavior,
       child: BackdropFilter(
@@ -124,7 +153,7 @@ class StudeeGlass extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: radius,
             color: AppColors.elevated.withValues(alpha: opacity),
-            border: border
+            border: border && !gradientBorder
                 ? Border.all(
                     color: AppColors.border.withValues(alpha: 0.72),
                   )
@@ -133,8 +162,8 @@ class StudeeGlass extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withValues(alpha: 0.06),
-                Colors.white.withValues(alpha: 0.01),
+                Colors.white.withValues(alpha: 0.07),
+                Colors.white.withValues(alpha: 0.015),
               ],
             ),
           ),
@@ -142,6 +171,19 @@ class StudeeGlass extends StatelessWidget {
               ? child
               : Padding(padding: padding!, child: child),
         ),
+      ),
+    );
+
+    if (!gradientBorder) return panel;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        gradient: AppColors.intelligence,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(1.1),
+        child: panel,
       ),
     );
   }
@@ -155,7 +197,7 @@ class StudeePageScaffold extends StatelessWidget {
     this.topBar,
     this.bottomBar,
     this.floatingActionButton,
-    this.atmosphereIntensity = 0.85,
+    this.atmosphereIntensity = AppLayout.atmospherePage,
   });
 
   final Widget body;
@@ -176,9 +218,9 @@ class StudeePageScaffold extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (topBar != null) topBar!,
+              ?topBar,
               Expanded(child: body),
-              if (bottomBar != null) bottomBar!,
+              ?bottomBar,
             ],
           ),
         ],
@@ -208,10 +250,9 @@ class StudeeGlassAppBar extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(10, top + 8, 10, 8),
       child: StudeeGlass(
-        borderRadius: 14,
         padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
         child: SizedBox(
-          height: subtitle == null ? 48 : 56,
+          height: subtitle == null ? 52 : 60,
           child: Row(
             children: [
               if (leading != null)
@@ -220,7 +261,7 @@ class StudeeGlassAppBar extends StatelessWidget {
                 IconButton(
                   tooltip: 'Quay lại',
                   onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const Icon(AppIcons.back),
                 ),
               const SizedBox(width: 2),
               Expanded(
@@ -232,12 +273,7 @@ class StudeeGlassAppBar extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                        color: AppColors.primaryText,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
@@ -245,10 +281,7 @@ class StudeeGlassAppBar extends StatelessWidget {
                         subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.secondaryText.withValues(alpha: 0.95),
-                        ),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ],
@@ -275,69 +308,130 @@ class StudeeSectionLabel extends StatelessWidget {
       children: [
         Container(
           width: 3,
-          height: 14,
+          height: 16,
           decoration: BoxDecoration(
-            color: AppColors.accent,
-            borderRadius: BorderRadius.circular(2),
+            gradient: AppColors.intelligence,
+            borderRadius: AppLayout.xsBorder,
           ),
         ),
         const SizedBox(width: 8),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.secondaryText,
-            letterSpacing: 0.2,
-          ),
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                letterSpacing: 0.1,
+                fontWeight: FontWeight.w600,
+              ),
         ),
       ],
     );
   }
 }
 
-/// Translucent content card (lighter glass — no blur for list performance).
-class StudeeCard extends StatelessWidget {
+/// Translucent content card with desktop hover lift.
+class StudeeCard extends StatefulWidget {
   const StudeeCard({
     super.key,
     required this.child,
     this.onTap,
     this.padding = const EdgeInsets.all(12),
     this.accentColor,
+    this.gradientBorder = false,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry padding;
   final Color? accentColor;
+  final bool gradientBorder;
+
+  @override
+  State<StudeeCard> createState() => _StudeeCardState();
+}
+
+class _StudeeCardState extends State<StudeeCard> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final accent = accentColor;
-    return Material(
-      color: AppColors.elevated.withValues(alpha: 0.88),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: AppColors.border.withValues(alpha: 0.85)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: DecoratedBox(
-          decoration: accent == null
-              ? const BoxDecoration()
-              : BoxDecoration(
-                  border: Border(
-                    left: BorderSide(
-                      color: accent.withValues(alpha: 0.9),
-                      width: 4,
-                    ),
-                  ),
+    final accent = widget.accentColor;
+    final duration = AppMotion.duration(context, AppMotion.fast);
+    final lift = _hovered && widget.onTap != null ? AppMotion.hoverLift : 0.0;
+
+    Widget card = AnimatedContainer(
+      duration: duration,
+      curve: AppMotion.easeOut,
+      transform: Matrix4.translationValues(0, -lift, 0),
+      decoration: BoxDecoration(
+        borderRadius: AppLayout.cardBorder,
+        boxShadow: _hovered && widget.onTap != null
+            ? [
+                BoxShadow(
+                  color: (accent ?? AppColors.accent)
+                      .withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
                 ),
-          child: Padding(padding: padding, child: child),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+      ),
+      child: Material(
+        color: AppColors.elevated.withValues(alpha: 0.92),
+        shape: RoundedRectangleBorder(
+          borderRadius: AppLayout.cardBorder,
+          side: BorderSide(
+            color: _hovered
+                ? AppColors.borderStrong.withValues(alpha: 0.95)
+                : AppColors.border.withValues(alpha: 0.85),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: AppLayout.cardBorder,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  width: 1,
+                ),
+                left: accent == null
+                    ? BorderSide.none
+                    : BorderSide(
+                        color: accent.withValues(alpha: 0.9),
+                        width: 4,
+                      ),
+              ),
+            ),
+            child: Padding(padding: widget.padding, child: widget.child),
+          ),
         ),
       ),
+    );
+
+    if (widget.gradientBorder) {
+      card = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: AppLayout.cardBorder,
+          gradient: AppColors.intelligence,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(1.1),
+          child: card,
+        ),
+      );
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: card,
     );
   }
 }
@@ -359,9 +453,7 @@ class StudeeGlassFooter extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(10, 0, 10, 8 + insets.bottom * 0.35),
       child: StudeeGlass(
-        borderRadius: 14,
-        padding: padding ??
-            const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        padding: padding ?? const EdgeInsets.fromLTRB(12, 10, 8, 10),
         child: child,
       ),
     );

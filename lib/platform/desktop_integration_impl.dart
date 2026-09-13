@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
@@ -8,14 +9,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screen_capturer/screen_capturer.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
-import 'package:studee_pc/domain/repositories/desktop_integration.dart';
+import 'package:studee_pc/domain/repositories/platform_integration.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Desktop overlay, capture, and global-shortcut adapter.
 ///
 /// Uses [window_manager] for always-on-top, [screen_capturer] for region
-/// capture, and [hotkey_manager] for global shortcuts.
-class DesktopIntegrationImpl implements DesktopIntegration {
+/// capture, and [hotkey_manager] for global shortcuts. No live camera.
+class DesktopIntegrationImpl implements PlatformIntegration {
   DesktopIntegrationImpl();
 
   final AppLogger _log = AppLogger('DesktopIntegration');
@@ -34,6 +35,15 @@ class DesktopIntegrationImpl implements DesktopIntegration {
     'com.studee.studeePc',
     'com.studee.studeePc.debug',
   ];
+
+  @override
+  bool get supportsScreenCapture => true;
+
+  @override
+  bool get supportsCamera => false;
+
+  @override
+  bool get supportsOverlay => true;
 
   @override
   Stream<DesktopShortcutEvent> get shortcutEvents => _shortcutController.stream;
@@ -216,6 +226,43 @@ class DesktopIntegrationImpl implements DesktopIntegration {
           code: 'screen_capture_windows',
         );
       }
+      return null;
+    }
+  }
+
+  @override
+  Future<CapturedImage?> captureFromCamera() async {
+    // Desktop does not offer live camera capture.
+    return null;
+  }
+
+  @override
+  Future<CapturedImage?> pickImage() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.image,
+        withData: true,
+        allowMultiple: false,
+      );
+      final files = result?.files;
+      if (files == null || files.isEmpty) return null;
+      final file = files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) return null;
+
+      final name = file.name.toLowerCase();
+      final mime = name.endsWith('.jpg') || name.endsWith('.jpeg')
+          ? 'image/jpeg'
+          : 'image/png';
+
+      return CapturedImage(
+        bytes: Uint8List.fromList(bytes),
+        width: 0,
+        height: 0,
+        mimeType: mime,
+      );
+    } on Object catch (e) {
+      _log.warning('pickImage failed: ${e.runtimeType}');
       return null;
     }
   }

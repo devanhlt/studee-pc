@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
+import 'package:studee_pc/app/theme/app_layout.dart';
+import 'package:studee_pc/app/theme/app_window_size.dart';
+import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
@@ -36,7 +40,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final desktop = ref.read(desktopIntegrationProvider);
+      final desktop = ref.read(platformIntegrationProvider);
       await desktop.setAlwaysOnTop(true);
       final subjects = await ref.read(subjectsListProvider.future);
       if (subjects.isNotEmpty && ref.read(overlaySubjectIdProvider) == null) {
@@ -52,7 +56,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
       await _solve.prepareCredentials();
     } on Object catch (_) {}
     if (!await _solve.hasApiKey()) {
-      _toast('Nhập mã kích hoạt trong Cài đặt');
+      _toast('Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.');
       if (mounted) context.push('/settings');
       return false;
     }
@@ -65,14 +69,14 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
     if (_solve.current.stage.isInProgress) return;
     final subjectId = ref.read(overlaySubjectIdProvider);
     if (subjectId == null) {
-      _toast('Chọn môn học trong cửa sổ chính trước.');
+      _toast('Hãy chọn môn học ở cửa sổ chính trước.');
       return;
     }
     if (!await _ensureReady()) return;
     if (_solve.current.stage.isInProgress) return;
 
     ref.read(overlayModeProvider.notifier).state = OverlayDisplayMode.expanded;
-    final desktop = ref.read(desktopIntegrationProvider);
+    final desktop = ref.read(platformIntegrationProvider);
     try {
       final captured = await desktop.captureRegion();
       if (captured == null) {
@@ -80,7 +84,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
         return;
       }
       if (captured.bytes.isEmpty) {
-        _toast('Ảnh chụp trống — thử lại.');
+        _toast('Ảnh chụp không có nội dung. Thử lại nhé.');
         return;
       }
       if (_solve.current.stage.isInProgress) return;
@@ -105,7 +109,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
     if (_solve.current.stage.isInProgress) return;
     final subjectId = ref.read(overlaySubjectIdProvider);
     if (subjectId == null) {
-      _toast('Chọn môn học trong cửa sổ chính trước.');
+      _toast('Hãy chọn môn học ở cửa sổ chính trước.');
       return;
     }
     if (!await _ensureReady()) return;
@@ -113,7 +117,7 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
 
     final text = await FlutterClipboard.paste();
     if (text.trim().isEmpty) {
-      _toast('Clipboard trống.');
+      _toast('Bộ nhớ tạm đang trống.');
       return;
     }
     ref.read(overlayModeProvider.notifier).state = OverlayDisplayMode.expanded;
@@ -169,47 +173,40 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
         alignment: Alignment.topRight,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: isCompact ? 220 : 420,
+            maxWidth: isCompact ? 220 : AppWindowSize.phoneWidth,
             minWidth: isCompact ? 160 : 280,
             maxHeight: maxHeight,
           ),
-          child: Container(
-            margin: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.elevated.withValues(alpha: 0.96),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+          child: Padding(
+            padding: const EdgeInsets.all(AppLayout.pagePadding),
+            child: StudeeGlass(
+              borderRadius: AppLayout.radiusPanel,
+              gradientBorder: true,
+              opacity: 0.92,
+              child: isCompact
+                  ? _CompactBar(
+                      stage: state.stage,
+                      onCapture: _capture,
+                      onPaste: _paste,
+                      onCancel: _cancel,
+                      onExpand: () {
+                        ref.read(overlayModeProvider.notifier).state =
+                            OverlayDisplayMode.expanded;
+                      },
+                    )
+                  : _ExpandedBody(
+                      state: state,
+                      subjectId: ref.watch(overlaySubjectIdProvider),
+                      onCapture: _capture,
+                      onPaste: _paste,
+                      onCancel: _cancel,
+                      onCollapse: () {
+                        // Collapsing must not cancel the in-flight solve.
+                        ref.read(overlayModeProvider.notifier).state =
+                            OverlayDisplayMode.compact;
+                      },
+                    ),
             ),
-            child: isCompact
-                ? _CompactBar(
-                    stage: state.stage,
-                    onCapture: _capture,
-                    onPaste: _paste,
-                    onCancel: _cancel,
-                    onExpand: () {
-                      ref.read(overlayModeProvider.notifier).state =
-                          OverlayDisplayMode.expanded;
-                    },
-                  )
-                : _ExpandedBody(
-                    state: state,
-                    subjectId: ref.watch(overlaySubjectIdProvider),
-                    onCapture: _capture,
-                    onPaste: _paste,
-                    onCancel: _cancel,
-                    onCollapse: () {
-                      // Collapsing must not cancel the in-flight solve.
-                      ref.read(overlayModeProvider.notifier).state =
-                          OverlayDisplayMode.compact;
-                    },
-                  ),
           ),
         ),
       ),
@@ -245,19 +242,19 @@ class _CompactBar extends StatelessWidget {
             tooltip: 'Chụp vùng',
             visualDensity: VisualDensity.compact,
             onPressed: busy ? null : onCapture,
-            icon: const Icon(Icons.crop_free, color: AppColors.accent),
+            icon: const Icon(AppIcons.capture, color: AppColors.accent),
           ),
           IconButton(
             tooltip: 'Dán',
             visualDensity: VisualDensity.compact,
             onPressed: busy ? null : onPaste,
-            icon: const Icon(Icons.content_paste),
+            icon: const Icon(AppIcons.paste),
           ),
           IconButton(
             tooltip: 'Mở rộng',
             visualDensity: VisualDensity.compact,
             onPressed: onExpand,
-            icon: const Icon(Icons.open_in_full),
+            icon: const Icon(AppIcons.expand),
           ),
           if (busy) ...[
             const Padding(
@@ -272,7 +269,7 @@ class _CompactBar extends StatelessWidget {
               tooltip: 'Hủy',
               visualDensity: VisualDensity.compact,
               onPressed: onCancel,
-              icon: const Icon(Icons.close, color: AppColors.error),
+              icon: const Icon(AppIcons.close, color: AppColors.error),
             ),
           ],
         ],
@@ -329,19 +326,19 @@ class _ExpandedBody extends StatelessWidget {
                   tooltip: 'Chụp',
                   visualDensity: VisualDensity.compact,
                   onPressed: busy ? null : onCapture,
-                  icon: const Icon(Icons.crop_free),
+                  icon: const Icon(AppIcons.capture),
                 ),
                 IconButton(
                   tooltip: 'Dán',
                   visualDensity: VisualDensity.compact,
                   onPressed: busy ? null : onPaste,
-                  icon: const Icon(Icons.content_paste),
+                  icon: const Icon(AppIcons.paste),
                 ),
                 IconButton(
                   tooltip: 'Thu gọn',
                   visualDensity: VisualDensity.compact,
                   onPressed: onCollapse,
-                  icon: const Icon(Icons.close_fullscreen),
+                  icon: const Icon(AppIcons.collapse),
                 ),
               ],
             ),
@@ -376,7 +373,7 @@ class _ExpandedBody extends StatelessWidget {
             _StatusLine(state.stage.labelVi),
             const SizedBox(height: 12),
             const Text(
-              'Tiến trình vẫn chạy nếu bạn thu gọn overlay.',
+              'Bạn có thể thu gọn, tiến trình vẫn chạy nền.',
               style: TextStyle(
                 color: AppColors.secondaryText,
                 fontSize: 12,
@@ -397,7 +394,7 @@ class _ExpandedBody extends StatelessWidget {
         );
       case SolvePipelineStage.offlineFailure:
         return Text(
-          state.errorMessage ?? 'Không kết nối được',
+          state.errorMessage ?? 'Không có kết nối mạng',
           style: const TextStyle(color: AppColors.error),
         );
       case SolvePipelineStage.partialFailure:
@@ -476,9 +473,15 @@ class OverlayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.background,
-      body: OverlayPanel(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: const [
+          StudeeAtmosphere(intensity: AppLayout.atmospherePage),
+          OverlayPanel(),
+        ],
+      ),
     );
   }
 }

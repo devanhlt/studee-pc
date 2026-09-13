@@ -12,6 +12,7 @@ import 'package:studee_pc/domain/entities/evidence_item.dart';
 import 'package:studee_pc/domain/entities/evidence_package.dart';
 import 'package:studee_pc/domain/entities/parsed_choice.dart';
 import 'package:studee_pc/domain/entities/parsed_question.dart';
+import 'package:studee_pc/domain/entities/practice_turn.dart';
 import 'package:studee_pc/domain/enums/question_type.dart';
 import 'package:studee_pc/domain/repositories/credentials_repository.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
@@ -396,6 +397,80 @@ class DeepSeekClientImpl implements DeepSeekClient {
     return text;
   }
 
+  @override
+  Future<PracticeTurnResponse> startPracticeTurn({
+    required String questionText,
+    ParsedQuestion? parsed,
+    int maxCheckSteps = 6,
+  }) async {
+    final version = DeepSeekPrompts.practiceVersion;
+    final userPayload = <String, dynamic>{
+      'action': 'start',
+      'question_text': questionText,
+      'max_check_steps': maxCheckSteps,
+      'check_steps_so_far': 0,
+      if (parsed != null)
+        'parsed': {
+          'question_type': parsed.questionType.wireName,
+          'content': parsed.content,
+          'choices': [
+            for (final c in parsed.choices)
+              {'label': c.label, 'content': c.content},
+          ],
+        },
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.practiceSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: version,
+      maxTokensOverride: 2048,
+    );
+    return _parsePracticeTurn(raw);
+  }
+
+  @override
+  Future<PracticeTurnResponse> continuePracticeTurn({
+    required List<PracticeLlmMessage> history,
+    required String userAnswer,
+    required int attemptsOnStep,
+    int checkStepsSoFar = 0,
+    int maxCheckSteps = 6,
+  }) async {
+    final version = DeepSeekPrompts.practiceVersion;
+    final messages = <Map<String, String>>[
+      for (final m in history) m.toApiMap(),
+      {
+        'role': 'user',
+        'content': jsonEncode({
+          'action': 'answer',
+          'user_answer': userAnswer,
+          'attempts_on_step': attemptsOnStep,
+          'check_steps_so_far': checkStepsSoFar,
+          'max_check_steps': maxCheckSteps,
+        }),
+      },
+    ];
+    final raw = await _chatJsonMessages(
+      systemPrompt: DeepSeekPrompts.practiceSystem(),
+      messages: messages,
+      promptVersion: version,
+      maxTokensOverride: 2048,
+    );
+    return _parsePracticeTurn(raw);
+  }
+
+  PracticeTurnResponse _parsePracticeTurn(String raw) {
+    final map = _requireJsonObject(raw);
+    final turn = PracticeTurnResponse.fromJson(map, rawJson: raw);
+    if (turn.coachMessage.isEmpty && !turn.isComplete) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi luyện tập không hợp lệ. Thử lại.',
+        code: 'practice_turn_invalid',
+      );
+    }
+    return turn;
+  }
+
   MeaningMatchResult _parseMeaningMatch(
     String raw, {
     required Set<String> expectedIds,
@@ -446,6 +521,22 @@ class DeepSeekClientImpl implements DeepSeekClient {
     required String userContent,
     required String promptVersion,
     int? maxTokensOverride,
+  }) {
+    return _chatJsonMessages(
+      systemPrompt: systemPrompt,
+      messages: [
+        {'role': 'user', 'content': userContent},
+      ],
+      promptVersion: promptVersion,
+      maxTokensOverride: maxTokensOverride,
+    );
+  }
+
+  Future<String> _chatJsonMessages({
+    required String systemPrompt,
+    required List<Map<String, String>> messages,
+    required String promptVersion,
+    int? maxTokensOverride,
   }) async {
     final apiKey = await _credentials.getDeepSeekApiKey();
     if (apiKey == null || apiKey.trim().isEmpty) {
@@ -459,7 +550,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
       'response_format': {'type': 'json_object'},
       'messages': [
         {'role': 'system', 'content': systemPrompt},
-        {'role': 'user', 'content': userContent},
+        ...messages,
       ],
     });
 

@@ -376,7 +376,7 @@ class SubjectFileStore {
         return const Failure(
           ValidationFailure(
             userMessage:
-                'ZIP thiếu manifest.json — không phải bản xuất môn học Studee.',
+                'ZIP thiếu manifest.json nên không phải bản xuất môn học của Studee.',
             code: 'import_manifest_missing',
           ),
         );
@@ -459,7 +459,7 @@ class SubjectFileStore {
         await Directory(folder).delete(recursive: true);
         return const Failure(
           ValidationFailure(
-            userMessage: 'ZIP thiếu subject.db — không thể nhập môn học.',
+            userMessage: 'ZIP thiếu subject.db nên không nhập được môn học.',
             code: 'import_db_missing',
           ),
         );

@@ -13,11 +13,12 @@ import 'package:studee_pc/data/repositories/subject_repository_impl.dart';
 import 'package:studee_pc/data/subject_database/subject_database_manager.dart';
 import 'package:studee_pc/domain/repositories/credentials_repository.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
-import 'package:studee_pc/domain/repositories/desktop_integration.dart';
 import 'package:studee_pc/domain/repositories/knowledge_retriever.dart';
 import 'package:studee_pc/domain/repositories/ocr_service.dart';
+import 'package:studee_pc/domain/repositories/platform_integration.dart';
 import 'package:studee_pc/domain/repositories/subject_repository.dart';
 import 'package:studee_pc/features/ingestion/application/ingestion_service.dart';
+import 'package:studee_pc/features/practice/application/practice_service.dart';
 import 'package:studee_pc/features/settings/application/privacy_consent_store.dart';
 import 'package:studee_pc/features/settings/application/settings_service.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
@@ -93,7 +94,7 @@ final ocrServiceProvider = Provider<OcrService>((ref) {
   );
 });
 
-final desktopIntegrationProvider = Provider<DesktopIntegration>((ref) {
+final platformIntegrationProvider = Provider<PlatformIntegration>((ref) {
   if (Platform.isAndroid || Platform.isIOS) {
     final impl = MobileIntegrationImpl();
     ref.onDispose(impl.dispose);
@@ -143,6 +144,17 @@ final solveServiceProvider = Provider<SolveService>((ref) {
     deepSeek: ref.watch(deepSeekClientProvider),
     ocr: ref.watch(ocrServiceProvider),
     retriever: ref.watch(knowledgeRetrieverProvider),
+    databaseManager: ref.watch(subjectDatabaseManagerProvider),
+  );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+final practiceServiceProvider = Provider<PracticeService>((ref) {
+  final service = PracticeService(
+    credentials: ref.watch(credentialsRepositoryProvider),
+    deepSeek: ref.watch(deepSeekClientProvider),
+    ocr: ref.watch(ocrServiceProvider),
     databaseManager: ref.watch(subjectDatabaseManagerProvider),
   );
   ref.onDispose(service.dispose);

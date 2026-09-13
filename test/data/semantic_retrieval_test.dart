@@ -7,6 +7,7 @@ import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/data/subject_database/subject_database_manager.dart';
 import 'package:studee_pc/domain/entities/deepseek_answer_response.dart';
 import 'package:studee_pc/domain/entities/parsed_question.dart';
+import 'package:studee_pc/domain/entities/practice_turn.dart';
 import 'package:studee_pc/domain/enums/question_type.dart';
 import 'package:studee_pc/domain/enums/verification_status.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
@@ -119,6 +120,24 @@ class _FakeDeepSeek implements DeepSeekClient {
     required String heuristic,
   }) async =>
       heuristic;
+
+  @override
+  Future<PracticeTurnResponse> startPracticeTurn({
+    required String questionText,
+    ParsedQuestion? parsed,
+    int maxCheckSteps = 6,
+  }) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<PracticeTurnResponse> continuePracticeTurn({
+    required List<PracticeLlmMessage> history,
+    required String userAnswer,
+    required int attemptsOnStep,
+    int checkStepsSoFar = 0,
+    int maxCheckSteps = 6,
+  }) async =>
+      throw UnimplementedError();
 
   @override
   void beginCancellableSession() {}

@@ -51,13 +51,13 @@ extension SolvePipelineStageVi on SolvePipelineStage {
   String get labelVi => switch (this) {
         SolvePipelineStage.idle => 'Sẵn sàng',
         SolvePipelineStage.capturing => 'Đang chụp màn hình…',
-        SolvePipelineStage.recognizing => 'Đang nhận dạng văn bản…',
-        SolvePipelineStage.parsing => 'Đang phân tích câu hỏi…',
+        SolvePipelineStage.recognizing => 'Đang đọc chữ trong ảnh…',
+        SolvePipelineStage.parsing => 'Đang phân tích đề bài…',
         SolvePipelineStage.retrieving => 'Đang tìm kiến thức liên quan…',
-        SolvePipelineStage.generating => 'Đang tạo câu trả lời…',
-        SolvePipelineStage.completed => 'Hoàn tất',
-        SolvePipelineStage.partialFailure => 'Hoàn tất một phần',
-        SolvePipelineStage.offlineFailure => 'Không kết nối được',
+        SolvePipelineStage.generating => 'Đang soạn lời giải…',
+        SolvePipelineStage.completed => 'Xong!',
+        SolvePipelineStage.partialFailure => 'Xong một phần',
+        SolvePipelineStage.offlineFailure => 'Không có kết nối mạng',
       };
 
   /// True while work is in flight (spinner / Hủy should cancel).
@@ -196,7 +196,7 @@ class SolveService {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
       const f = ValidationFailure(
-        userMessage: 'Câu hỏi không được trống.',
+        userMessage: 'Chưa có câu hỏi. Hãy dán đề vào trước nhé.',
         code: 'question_empty',
       );
       _emitFailure(f);
@@ -231,7 +231,7 @@ class SolveService {
       return Failure(f);
     } on Object catch (e) {
       final f = UnknownFailure(
-        userMessage: 'Giải câu hỏi thất bại.',
+        userMessage: 'Chưa giải được câu hỏi. Thử lại nhé.',
         code: 'solve_failed',
         details: e.runtimeType.toString(),
       );
@@ -247,7 +247,7 @@ class SolveService {
   }) async {
     if (bytes.isEmpty) {
       const f = ValidationFailure(
-        userMessage: 'Ảnh trống — hãy chọn hoặc chụp lại.',
+        userMessage: 'Ảnh không có nội dung. Chọn hoặc chụp lại nhé.',
         code: 'image_empty',
       );
       _emitFailure(f);
@@ -294,7 +294,7 @@ class SolveService {
         return const Failure(
           ValidationFailure(
             userMessage:
-                'Độ tin cậy OCR thấp. Hãy kiểm tra và chỉnh sửa văn bản.',
+                'Chữ nhận dạng chưa rõ, hãy kiểm tra và chỉnh lại.',
             code: 'ocr_review_required',
           ),
         );
@@ -310,7 +310,7 @@ class SolveService {
       return Failure(f);
     } on Object catch (e) {
       final f = UnknownFailure(
-        userMessage: 'Giải câu hỏi từ ảnh thất bại.',
+        userMessage: 'Chưa giải được câu hỏi từ ảnh. Thử lại nhé.',
         code: 'solve_image_failed',
         details: e.runtimeType.toString(),
       );
@@ -327,7 +327,7 @@ class SolveService {
     final trimmed = reviewedText.trim();
     if (trimmed.isEmpty) {
       const f = ValidationFailure(
-        userMessage: 'Nội dung câu hỏi không được trống.',
+        userMessage: 'Nội dung câu hỏi đang trống. Hãy dán đề vào.',
         code: 'reviewed_text_empty',
       );
       _emitFailure(f);
@@ -367,7 +367,7 @@ class SolveService {
     if (text == null || text.trim().isEmpty) {
       return const Failure(
         ValidationFailure(
-          userMessage: 'Không có câu hỏi để giải lại.',
+          userMessage: 'Chưa có câu hỏi để giải lại. Hãy dán đề vào trước.',
           code: 'no_question_to_retry',
         ),
       );
@@ -381,7 +381,7 @@ class SolveService {
     if (text == null || text.trim().isEmpty) {
       return const Failure(
         ValidationFailure(
-          userMessage: 'Không có câu hỏi để giải lại.',
+          userMessage: 'Chưa có câu hỏi để giải lại. Hãy dán đề vào trước.',
           code: 'no_question_to_retry',
         ),
       );
@@ -417,7 +417,7 @@ class SolveService {
     if (result == null) {
       return const Failure(
         ValidationFailure(
-          userMessage: 'Chưa có kết quả để đánh dấu sai.',
+          userMessage: 'Chưa có kết quả nào để báo sai.',
           code: 'no_result',
         ),
       );
@@ -442,7 +442,7 @@ class SolveService {
     } on Object catch (e) {
       return Failure(
         DatabaseFailure(
-          userMessage: 'Không lưu được phản hồi.',
+          userMessage: 'Chưa ghi nhận được phản hồi. Thử lại nhé.',
           code: 'feedback_failed',
           details: e.runtimeType.toString(),
         ),
@@ -458,7 +458,7 @@ class SolveService {
     if (result == null || question == null) {
       return const Failure(
         ValidationFailure(
-          userMessage: 'Chưa có kết quả để lưu.',
+          userMessage: 'Chưa có kết quả nào để lưu.',
           code: 'no_result_to_save',
         ),
       );
@@ -537,7 +537,7 @@ class SolveService {
     } on Object catch (e) {
       return Failure(
         DatabaseFailure(
-          userMessage: 'Không lưu kết quả vào môn học.',
+          userMessage: 'Chưa lưu được vào môn học. Thử lại nhé.',
           code: 'save_result_failed',
           details: e.runtimeType.toString(),
         ),
@@ -560,7 +560,7 @@ class SolveService {
     _emit(
       const SolveSessionState(
         stage: SolvePipelineStage.idle,
-        errorMessage: 'Đã hủy giải câu hỏi.',
+        errorMessage: 'Đã hủy.',
       ),
     );
   }
@@ -723,7 +723,7 @@ class SolveService {
         _state.copyWith(
           stage: SolvePipelineStage.generating,
           errorMessage:
-              'Phản hồi AI chưa khớp. Đang thử lại…',
+              'Phản hồi của AI chưa đúng định dạng, đang thử lại…',
         ),
       );
       try {
@@ -795,7 +795,7 @@ class SolveService {
               } else {
                 final f = ValidationFailure(
                   userMessage:
-                      'Phản hồi AI vẫn không hợp lệ sau khi sửa. Thử giải lại.',
+                      'Phản hồi của AI chưa đúng định dạng. Hãy giải lại nhé.',
                   code: 'deepseek_response_invalid',
                   details: details,
                 );
@@ -1141,7 +1141,7 @@ class SolveService {
         return Failure(
           OcrFailure(
             userMessage: fail ??
-                'Không nhận dạng được văn bản. Hãy dán văn bản thủ công.',
+                'Không đọc được chữ trong ảnh. Bạn có thể nhập tay.',
             code: 'ocr_empty',
           ),
         );
@@ -1266,7 +1266,7 @@ class SolveService {
   Future<AppFailure?> _requireApiKey() async {
     if (!await _credentials.hasActivationCode()) {
       return const MissingApiKeyFailure(
-        userMessage: 'Nhập mã kích hoạt trong Cài đặt.',
+        userMessage: 'Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.',
       );
     }
     return null;

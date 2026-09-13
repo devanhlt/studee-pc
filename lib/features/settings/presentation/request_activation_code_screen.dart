@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/features/settings/application/activation_request_config.dart';
@@ -103,13 +104,13 @@ class _RequestActivationCodeScreenState
   @override
   Widget build(BuildContext context) {
     return StudeePageScaffold(
+      atmosphereIntensity: AppLayout.atmospherePage,
       topBar: const StudeeGlassAppBar(title: 'Yêu cầu mã'),
       body: ListView(
         padding: AppLayout.pageInsets(context),
         children: [
           StudeeGlass(
-            borderRadius: 16,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            padding: const EdgeInsets.all(AppLayout.gapLg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -123,7 +124,7 @@ class _RequestActivationCodeScreenState
                 const SizedBox(height: 6),
                 Text(
                   'Mỗi gói là một mã mới kèm số lượt giải. Hết lượt thì mua mã '
-                  'khác — không tính theo tháng.',
+                  'khác, không tính theo tháng.',
                   style: TextStyle(
                     color: AppColors.secondaryText.withValues(alpha: 0.95),
                     height: 1.4,
@@ -173,9 +174,9 @@ class _RequestActivationCodeScreenState
                 const SizedBox(height: 10),
                 Material(
                   color: AppColors.elevated,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppLayout.controlBorder,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: AppLayout.controlBorder,
                     onTap: _copyTransferCode,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -198,7 +199,7 @@ class _RequestActivationCodeScreenState
                           IconButton(
                             tooltip: 'Sao chép',
                             onPressed: _copyTransferCode,
-                            icon: const Icon(Icons.copy_rounded),
+                            icon: const Icon(AppIcons.copy),
                           ),
                         ],
                       ),
@@ -242,7 +243,7 @@ class _RequestActivationCodeScreenState
     const size = 220.0;
     if (_qrAssetExists == true) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppLayout.controlBorder,
         child: Image.asset(
           ActivationRequestConfig.paymentQrAsset,
           width: size,
@@ -258,7 +259,7 @@ class _RequestActivationCodeScreenState
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppLayout.controlBorder,
       ),
       child: QrImageView(
         key: ValueKey(_plan),
@@ -271,11 +272,11 @@ class _RequestActivationCodeScreenState
         backgroundColor: Colors.white,
         eyeStyle: const QrEyeStyle(
           eyeShape: QrEyeShape.square,
-          color: Color(0xFF111214),
+          color: AppColors.background,
         ),
         dataModuleStyle: const QrDataModuleStyle(
           dataModuleShape: QrDataModuleShape.square,
-          color: Color(0xFF111214),
+          color: AppColors.background,
         ),
       ),
     );

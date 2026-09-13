@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
 
-/// Compact desktop window targets — keep the main UI as small as practical.
+/// Desktop window mirrors the phone canvas so macOS/Windows match mobile UI.
 abstract final class AppWindowSize {
-  /// Default launch size.
-  static const Size initial = Size(400, 560);
+  /// Phone canvas the desktop window mirrors (iPhone 14/15/16 logical width).
+  static const double phoneWidth = 393;
 
-  /// Smallest allowed resize.
-  static const Size minimum = Size(320, 400);
+  /// Full phone height; clamped to the display at launch.
+  static const double preferredHeight = 852;
+  static const double minHeight = 620;
 
-  /// Fallback when restoring a missing width/height.
-  static const double fallbackWidth = 400;
-  static const double fallbackHeight = 560;
+  /// Default launch size (height may be clamped to the display).
+  static const Size initial = Size(phoneWidth, preferredHeight);
+
+  /// Width locked; height may grow or shrink.
+  static const Size minimum = Size(phoneWidth, minHeight);
+
+  /// Same width as [minimum] so horizontal resize is refused.
+  static const Size maximum = Size(phoneWidth, 4000);
+
+  /// Fallback when restoring a missing height.
+  static const double fallbackHeight = preferredHeight;
 }

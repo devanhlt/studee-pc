@@ -1,24 +1,34 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
-import 'package:studee_pc/domain/repositories/desktop_integration.dart';
+import 'package:studee_pc/domain/repositories/platform_integration.dart';
 
-/// Mobile adapter: no overlay/hotkeys; “capture” opens the photo library.
-///
-/// Live camera stays in UI ([showCameraCaptureDialog]). This covers shared
-/// [DesktopIntegration.captureRegion] call sites (Solve / Ingest screenshot).
-class MobileIntegrationImpl implements DesktopIntegration {
-  MobileIntegrationImpl();
+/// Mobile adapter: camera + gallery via [ImagePicker]; no overlay/hotkeys/
+/// screen capture.
+class MobileIntegrationImpl implements PlatformIntegration {
+  MobileIntegrationImpl({ImagePicker? picker})
+      : _picker = picker ?? ImagePicker();
 
   final AppLogger _log = AppLogger('MobileIntegration');
+  final ImagePicker _picker;
   final StreamController<DesktopShortcutEvent> _shortcutController =
       StreamController<DesktopShortcutEvent>.broadcast();
 
   void dispose() {
     unawaited(_shortcutController.close());
   }
+
+  @override
+  bool get supportsScreenCapture => false;
+
+  @override
+  bool get supportsCamera => true;
+
+  @override
+  bool get supportsOverlay => false;
 
   @override
   Stream<DesktopShortcutEvent> get shortcutEvents => _shortcutController.stream;
@@ -49,22 +59,41 @@ class MobileIntegrationImpl implements DesktopIntegration {
 
   @override
   Future<CapturedImage?> captureRegion() async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.image,
-        withData: true,
-        allowMultiple: false,
-      );
-      final files = result?.files;
-      if (files == null || files.isEmpty) return null;
-      final file = files.first;
-      final bytes = file.bytes;
-      if (bytes == null || bytes.isEmpty) return null;
+    // Mobile has no OS region screen capture.
+    return null;
+  }
 
-      final name = file.name.toLowerCase();
-      final mime = name.endsWith('.jpg') || name.endsWith('.jpeg')
-          ? 'image/jpeg'
-          : 'image/png';
+  @override
+  Future<CapturedImage?> captureFromCamera() =>
+      _pick(ImageSource.camera, logLabel: 'camera');
+
+  @override
+  Future<CapturedImage?> pickImage() =>
+      _pick(ImageSource.gallery, logLabel: 'gallery');
+
+  Future<CapturedImage?> _pick(
+    ImageSource source, {
+    required String logLabel,
+  }) async {
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        imageQuality: 92,
+      );
+      if (picked == null) return null;
+      final bytes = await picked.readAsBytes();
+      if (bytes.isEmpty) {
+        throw const ValidationFailure(
+          userMessage: 'Ảnh không có nội dung. Chọn hoặc chụp lại nhé.',
+          code: 'image_empty',
+        );
+      }
+
+      final name = picked.name.toLowerCase();
+      final path = picked.path.toLowerCase();
+      final mime = name.endsWith('.png') || path.endsWith('.png')
+          ? 'image/png'
+          : 'image/jpeg';
 
       return CapturedImage(
         bytes: Uint8List.fromList(bytes),
@@ -72,9 +101,34 @@ class MobileIntegrationImpl implements DesktopIntegration {
         height: 0,
         mimeType: mime,
       );
+    } on AppFailure {
+      rethrow;
+    } on PlatformException catch (e) {
+      _log.warning('$logLabel pick PlatformException: ${e.code}');
+      final denied = e.code.toLowerCase().contains('permission') ||
+          (e.message?.toLowerCase().contains('permission') ?? false) ||
+          e.code == 'camera_access_denied' ||
+          e.code == 'photo_access_denied';
+      throw ValidationFailure(
+        userMessage: denied
+            ? (source == ImageSource.camera
+                ? 'Chưa có quyền Camera. Mở Cài đặt hệ thống để cấp quyền nhé.'
+                : 'Chưa có quyền Ảnh. Mở Cài đặt hệ thống để cấp quyền nhé.')
+            : (source == ImageSource.camera
+                ? 'Không mở được camera. Thử lại nhé.'
+                : 'Không chọn được ảnh. Thử lại nhé.'),
+        code: denied ? 'media_permission_denied' : 'media_pick_failed',
+        details: e.code,
+      );
     } on Object catch (e) {
-      _log.warning('captureRegion (gallery) failed: ${e.runtimeType}');
-      return null;
+      _log.warning('$logLabel pick failed: ${e.runtimeType}');
+      throw ValidationFailure(
+        userMessage: source == ImageSource.camera
+            ? 'Không mở được camera. Thử lại nhé.'
+            : 'Không chọn được ảnh. Thử lại nhé.',
+        code: 'media_pick_failed',
+        details: e.runtimeType.toString(),
+      );
     }
   }
 }

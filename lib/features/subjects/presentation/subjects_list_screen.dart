@@ -9,7 +9,12 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_icons.dart';
+import 'package:studee_pc/app/theme/app_layout.dart';
+import 'package:studee_pc/app/theme/app_motion.dart';
+import 'package:studee_pc/app/theme/app_typography.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
+import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
@@ -23,7 +28,7 @@ class SubjectsListScreen extends ConsumerWidget {
     final asyncSubjects = ref.watch(subjectsListProvider);
 
     return StudeePageScaffold(
-      atmosphereIntensity: 1,
+      atmosphereIntensity: AppLayout.atmosphereHero,
       floatingActionButton: asyncSubjects.maybeWhen(
         data: (subjects) => subjects.isEmpty
             ? null
@@ -31,8 +36,8 @@ class SubjectsListScreen extends ConsumerWidget {
                 onPressed: () => _showCreateDialog(context, ref),
                 tooltip: 'Thêm môn học',
                 backgroundColor: AppColors.accent,
-                foregroundColor: const Color(0xFF1A1208),
-                child: const Icon(Icons.add),
+                foregroundColor: AppColors.onAccent,
+                child: const Icon(AppIcons.add),
               ),
         orElse: () => null,
       ),
@@ -41,18 +46,11 @@ class SubjectsListScreen extends ConsumerWidget {
         onSettings: () => context.push('/settings'),
       ),
       body: asyncSubjects.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
-        error: (e, _) => const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Không tải được danh sách môn học.',
-              style: TextStyle(color: AppColors.error),
-              textAlign: TextAlign.center,
-            ),
-          ),
+        loading: () => const StudeeSkeletonList(),
+        error: (e, _) => const StudeeStatusState(
+          icon: AppIcons.error,
+          title: 'Không tải được danh sách môn học',
+          message: 'Thử kéo để làm mới hoặc mở lại ứng dụng.',
         ),
         data: (subjects) {
           if (subjects.isEmpty) {
@@ -65,7 +63,12 @@ class SubjectsListScreen extends ConsumerWidget {
               await ref.read(subjectsListProvider.future);
             },
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 88),
+              padding: const EdgeInsets.fromLTRB(
+                AppLayout.pagePadding,
+                AppLayout.gapXs,
+                AppLayout.pagePadding,
+                88,
+              ),
               itemCount: subjects.length + 1,
               separatorBuilder: (_, index) =>
                   SizedBox(height: index == 0 ? 14 : 10),
@@ -73,7 +76,10 @@ class SubjectsListScreen extends ConsumerWidget {
                 if (index == 0) {
                   return const StudeeSectionLabel('Môn học của bạn');
                 }
-                return _SubjectCard(subject: subjects[index - 1]);
+                return _StaggeredEntrance(
+                  index: index - 1,
+                  child: _SubjectCard(subject: subjects[index - 1]),
+                );
               },
             ),
           );
@@ -95,8 +101,14 @@ class _HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
+    final theme = Theme.of(context).textTheme;
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, top + 14, 8, 8),
+      padding: EdgeInsets.fromLTRB(
+        AppLayout.pagePadding,
+        top + 14,
+        AppLayout.gapSm,
+        AppLayout.gapSm,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -107,33 +119,28 @@ class _HomeHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'STUDEE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        letterSpacing: 3.2,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.accent.withValues(alpha: 0.95),
+                    ShaderMask(
+                      blendMode: BlendMode.srcIn,
+                      shaderCallback: (bounds) =>
+                          AppColors.intelligence.createShader(bounds),
+                      child: Text(
+                        'STUDEE',
+                        style: AppTypography.eyebrow.copyWith(
+                          letterSpacing: 3.2,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'Học sâu.\nNhớ chắc.',
-                      style: TextStyle(
-                        fontSize: 28,
-                        height: 1.12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primaryText,
-                        letterSpacing: -0.4,
-                      ),
+                    Text(
+                      'Hiểu sâu.\nNhớ lâu.',
+                      style: theme.displayLarge,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Mỗi môn một không gian — nhập kiến thức, giải đề, ôn có định hướng.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: AppColors.secondaryText.withValues(alpha: 0.95),
+                      'Mỗi môn một không gian riêng: thêm tài liệu, giải đề và ôn lại khi cần.',
+                      style: theme.bodyMedium?.copyWith(
+                        color: AppColors.secondaryText,
                       ),
                     ),
                   ],
@@ -142,17 +149,45 @@ class _HomeHeader extends StatelessWidget {
               IconButton(
                 tooltip: 'Nhập từ ZIP',
                 onPressed: onImport,
-                icon: const Icon(Icons.unarchive_outlined),
+                icon: const Icon(AppIcons.importZip),
               ),
               IconButton(
                 tooltip: 'Cài đặt',
                 onPressed: onSettings,
-                icon: const Icon(Icons.settings_outlined),
+                icon: const Icon(AppIcons.settings),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+class _StaggeredEntrance extends StatelessWidget {
+  const _StaggeredEntrance({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (AppMotion.reduceMotion(context)) return child;
+    final delayMs = (index * 45).clamp(0, 360);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: AppMotion.slow + Duration(milliseconds: delayMs),
+      curve: AppMotion.easeOut,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 10),
+            child: child,
+          ),
+        );
+      },
+      child: child,
     );
   }
 }
@@ -164,7 +199,12 @@ class _EmptySubjectsState extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        padding: const EdgeInsets.fromLTRB(
+          AppLayout.gapLg,
+          AppLayout.gapSm,
+          AppLayout.gapLg,
+          28,
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: Column(
@@ -173,12 +213,11 @@ class _EmptySubjectsState extends ConsumerWidget {
               const _HeroArtCard(),
               const SizedBox(height: 22),
               StudeeGlass(
-                borderRadius: 16,
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                padding: const EdgeInsets.all(AppLayout.gapLg),
                 child: Column(
                   children: [
                     const Text(
-                      'Bắt đầu hành trình ôn tập',
+                      'Chưa có môn học nào',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
@@ -189,8 +228,8 @@ class _EmptySubjectsState extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Tạo môn học đầu tiên — nhập tài liệu, giải câu hỏi, '
-                      'và xây bộ nhớ kiến thức riêng của bạn.',
+                      'Tạo môn học đầu tiên, thêm tài liệu của bạn, rồi để '
+                      'Trợ lý Stud cùng bạn giải từng câu.',
                       style: TextStyle(
                         fontSize: 13.5,
                         height: 1.45,
@@ -206,7 +245,7 @@ class _EmptySubjectsState extends ConsumerWidget {
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: () => _showCreateDialog(context, ref),
-                  icon: const Icon(Icons.add),
+                  icon: const Icon(AppIcons.add),
                   label: const Text('Thêm môn học'),
                 ),
               ),
@@ -215,7 +254,7 @@ class _EmptySubjectsState extends ConsumerWidget {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () => _importSubjectZip(context, ref),
-                  icon: const Icon(Icons.unarchive_outlined),
+                  icon: const Icon(AppIcons.importZip),
                   label: const Text('Nhập từ ZIP'),
                 ),
               ),
@@ -236,20 +275,20 @@ class _HeroArtCard extends StatelessWidget {
       aspectRatio: 1.15,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: AppLayout.panelBorder,
           border: Border.all(
             color: AppColors.accent.withValues(alpha: 0.28),
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.accent.withValues(alpha: 0.14),
+              color: AppColors.violet.withValues(alpha: 0.16),
               blurRadius: 28,
               offset: const Offset(0, 12),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(17),
+          borderRadius: AppLayout.panelBorder,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -260,8 +299,8 @@ class _HeroArtCard extends StatelessWidget {
                   color: AppColors.elevated,
                   child: Center(
                     child: Icon(
-                      Icons.auto_stories_outlined,
-                      size: 48,
+                      AppIcons.stories,
+                      size: AppIcons.sizeEmptyState,
                       color: AppColors.accent,
                     ),
                   ),
@@ -274,7 +313,7 @@ class _HeroArtCard extends StatelessWidget {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.transparent,
-                      AppColors.background.withValues(alpha: 0.55),
+                      AppColors.background.withValues(alpha: 0.62),
                     ],
                   ),
                 ),
@@ -284,13 +323,10 @@ class _HeroArtCard extends StatelessWidget {
                 right: 14,
                 bottom: 12,
                 child: Text(
-                  'Ánh sáng cho từng trang ghi chú',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.2,
-                    color: AppColors.primaryText.withValues(alpha: 0.92),
-                  ),
+                  'Ánh sáng dịu nhẹ cho từng trang ghi chú',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: AppColors.primaryText.withValues(alpha: 0.92),
+                      ),
                 ),
               ),
             ],
@@ -310,37 +346,38 @@ class _SubjectCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final color = subject.color != null
         ? Color(subject.color!)
-        : AppColors.accent;
+        : AppColors.subjectDefault;
     final updated = DateFormat('dd/MM/yyyy HH:mm')
         .format(subject.updatedAt.toLocal());
+    final theme = Theme.of(context).textTheme;
 
     return StudeeCard(
       accentColor: color,
-      padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+      padding: const EdgeInsets.fromLTRB(12, 14, 4, 14),
       onTap: () => context.push('/subjects/${subject.id}'),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  color.withValues(alpha: 0.28),
-                  color.withValues(alpha: 0.08),
+                  color.withValues(alpha: 0.35),
+                  color.withValues(alpha: 0.1),
                 ],
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppLayout.controlBorder,
               border: Border.all(
-                color: color.withValues(alpha: 0.35),
+                color: color.withValues(alpha: 0.4),
               ),
             ),
             child: Icon(
               _iconFor(subject.icon),
-              size: 20,
+              size: AppIcons.sizeAction,
               color: color,
             ),
           ),
@@ -351,32 +388,33 @@ class _SubjectCard extends ConsumerWidget {
               children: [
                 Text(
                   subject.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primaryText,
-                    letterSpacing: -0.15,
-                  ),
+                  style: theme.titleMedium,
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  '${subject.sourceCount} nguồn · '
-                  '${subject.knowledgeCount} mục · '
-                  '${subject.questionCount} câu',
-                  softWrap: true,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.35,
-                    color: AppColors.secondaryText.withValues(alpha: 0.95),
-                  ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    StudeePill(
+                      label: '${subject.sourceCount} nguồn',
+                      color: color,
+                    ),
+                    StudeePill(
+                      label: '${subject.knowledgeCount} mục',
+                      color: AppColors.cyan,
+                    ),
+                    StudeePill(
+                      label: '${subject.questionCount} câu',
+                      color: AppColors.violet,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 6),
                 Text(
                   'Cập nhật $updated',
-                  softWrap: true,
-                  style: TextStyle(
+                  style: theme.bodySmall?.copyWith(
+                    color: AppColors.mutedText,
                     fontSize: 11.5,
-                    color: AppColors.secondaryText.withValues(alpha: 0.75),
                   ),
                 ),
               ],
@@ -422,11 +460,11 @@ class _SubjectCard extends ConsumerWidget {
 
   static IconData _iconFor(String? name) {
     return switch (name) {
-      'science' => Icons.science_outlined,
-      'calculate' => Icons.calculate_outlined,
-      'history_edu' => Icons.history_edu_outlined,
-      'language' => Icons.translate_outlined,
-      _ => Icons.menu_book_outlined,
+      'science' => AppIcons.subjectScience,
+      'calculate' => AppIcons.subjectMath,
+      'history_edu' => AppIcons.subjectHistory,
+      'language' => AppIcons.subjectLanguage,
+      _ => AppIcons.subjectDefault,
     };
   }
 }
@@ -441,7 +479,7 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
       void submit(void Function(void Function()) setLocal) {
         final trimmed = controller.text.trim();
         if (trimmed.isEmpty) {
-          setLocal(() => error = 'Nhập tên môn học.');
+          setLocal(() => error = 'Hãy nhập tên môn học.');
           return;
         }
         Navigator.of(ctx).pop(trimmed);
@@ -454,7 +492,7 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
             surfaceTintColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: AppLayout.panelBorder,
               side: BorderSide(
                 color: AppColors.border.withValues(alpha: 0.85),
               ),
@@ -474,12 +512,12 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
                           height: 36,
                           decoration: BoxDecoration(
                             color: AppColors.accent.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(11),
+                            borderRadius: AppLayout.controlBorder,
                           ),
                           child: const Icon(
-                            Icons.add,
+                            AppIcons.add,
                             color: AppColors.accent,
-                            size: 20,
+                            size: AppIcons.sizeAction,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -498,7 +536,10 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
                           tooltip: 'Đóng',
                           visualDensity: VisualDensity.compact,
                           onPressed: () => Navigator.of(ctx).pop(),
-                          icon: const Icon(Icons.close, size: 20),
+                          icon: const Icon(
+                            AppIcons.close,
+                            size: AppIcons.sizeAction,
+                          ),
                         ),
                       ],
                     ),
@@ -514,7 +555,7 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
                           fontWeight: FontWeight.w500,
                         ),
                         decoration: InputDecoration(
-                          hintText: 'Tên môn, ví dụ Đại số…',
+                          hintText: 'Tên môn, ví dụ: Đại số tuyến tính…',
                           errorText: error,
                           filled: true,
                           fillColor: AppColors.surface,
@@ -523,17 +564,17 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
                             vertical: 14,
                           ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                             borderSide: const BorderSide(color: AppColors.border),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                             borderSide: BorderSide(
                               color: AppColors.border.withValues(alpha: 0.9),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                             borderSide: const BorderSide(
                               color: AppColors.accent,
                               width: 1.4,
@@ -554,7 +595,7 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(44),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                           ),
                         ),
                         child: const Text('Tạo'),
@@ -605,7 +646,7 @@ Future<void> _showRenameDialog(
       void submit(void Function(void Function()) setLocal) {
         final trimmed = controller.text.trim();
         if (trimmed.isEmpty) {
-          setLocal(() => error = 'Nhập tên môn học.');
+          setLocal(() => error = 'Hãy nhập tên môn học.');
           return;
         }
         Navigator.of(ctx).pop(trimmed);
@@ -618,7 +659,7 @@ Future<void> _showRenameDialog(
             surfaceTintColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: AppLayout.panelBorder,
               side: BorderSide(
                 color: AppColors.border.withValues(alpha: 0.85),
               ),
@@ -638,12 +679,12 @@ Future<void> _showRenameDialog(
                           height: 36,
                           decoration: BoxDecoration(
                             color: AppColors.accent.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(11),
+                            borderRadius: AppLayout.controlBorder,
                           ),
                           child: const Icon(
-                            Icons.edit_outlined,
+                            AppIcons.edit,
                             color: AppColors.accent,
-                            size: 20,
+                            size: AppIcons.sizeAction,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -662,7 +703,10 @@ Future<void> _showRenameDialog(
                           tooltip: 'Đóng',
                           visualDensity: VisualDensity.compact,
                           onPressed: () => Navigator.of(ctx).pop(),
-                          icon: const Icon(Icons.close, size: 20),
+                          icon: const Icon(
+                            AppIcons.close,
+                            size: AppIcons.sizeAction,
+                          ),
                         ),
                       ],
                     ),
@@ -687,17 +731,17 @@ Future<void> _showRenameDialog(
                             vertical: 14,
                           ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                             borderSide: const BorderSide(color: AppColors.border),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                             borderSide: BorderSide(
                               color: AppColors.border.withValues(alpha: 0.9),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                             borderSide: const BorderSide(
                               color: AppColors.accent,
                               width: 1.4,
@@ -718,7 +762,7 @@ Future<void> _showRenameDialog(
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(44),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: AppLayout.controlBorder,
                           ),
                         ),
                         child: const Text('Lưu'),
@@ -753,7 +797,7 @@ Future<void> _showDeleteDialog(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Bạn sắp xóa "${subject.name}". Thao tác này không hoàn tác.'),
+            Text('Môn "${subject.name}" sẽ bị xóa và không thể hoàn tác.'),
             const SizedBox(height: 12),
             const Text(
               'Thư mục sẽ bị xóa:',
@@ -765,9 +809,7 @@ Future<void> _showDeleteDialog(
               child: SingleChildScrollView(
                 child: SelectableText(
                   subject.folderPath,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 12,
+                  style: AppTypography.mono.copyWith(
                     color: AppColors.warning,
                   ),
                 ),

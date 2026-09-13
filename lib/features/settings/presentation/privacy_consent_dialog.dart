@@ -17,7 +17,7 @@ Future<bool> ensureDeepSeekPrivacyConsent(
       final size = MediaQuery.sizeOf(ctx);
       return AlertDialog(
         backgroundColor: AppColors.surface,
-        title: const Text('Cho phép gửi dữ liệu'),
+        title: const Text('Cho phép Studee gửi dữ liệu'),
         content: ConstrainedBox(
           constraints: BoxConstraints(
             maxWidth: size.width * 0.9,
@@ -25,13 +25,13 @@ Future<bool> ensureDeepSeekPrivacyConsent(
           ),
             child: const SingleChildScrollView(
             child: Text(
-              'Để giải câu hỏi và nhận dạng chữ, Studee sẽ gửi dữ liệu tới '
+              'Để giải bài và đọc chữ trong ảnh, Studee sẽ gửi dữ liệu tới '
               'máy chủ Studee (proxy DeepSeek / OCR):\n'
               '• câu hỏi bạn đang xem,\n'
-              '• vài đoạn kiến thức đã lưu liên quan, và\n'
+              '• một vài đoạn kiến thức liên quan bạn đã lưu, và\n'
               '• ảnh hoặc PDF khi bạn dùng OCR.\n\n'
-              'Mã kích hoạt được lưu trên máy bạn và không ghi vào nhật ký.\n\n'
-              'Bạn có muốn tiếp tục không?',
+              'Mã kích hoạt chỉ lưu trên máy bạn và không được ghi vào nhật ký.\n\n'
+              'Bạn đồng ý để tiếp tục?',
               style: TextStyle(height: 1.45, color: AppColors.primaryText),
             ),
           ),
@@ -39,11 +39,11 @@ Future<bool> ensureDeepSeekPrivacyConsent(
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Không'),
+            child: const Text('Để sau'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Đồng ý'),
+            child: const Text('Đồng ý và tiếp tục'),
           ),
         ],
       );

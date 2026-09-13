@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:studee_pc/app/theme/app_window_size.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -9,9 +10,12 @@ import 'package:window_manager/window_manager.dart';
 /// desktop-only plugin APIs beyond transitive deps.
 Future<void> bootstrapDesktopWindow() async {
   await windowManager.ensureInitialized();
-  const windowOptions = WindowOptions(
-    size: AppWindowSize.initial,
+
+  final launchSize = await _clampedLaunchSize();
+  final windowOptions = WindowOptions(
+    size: launchSize,
     minimumSize: AppWindowSize.minimum,
+    maximumSize: AppWindowSize.maximum,
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
@@ -19,8 +23,9 @@ Future<void> bootstrapDesktopWindow() async {
     title: 'Studee',
   );
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.setSize(AppWindowSize.initial);
+    await windowManager.setSize(launchSize);
     await windowManager.setMinimumSize(AppWindowSize.minimum);
+    await windowManager.setMaximumSize(AppWindowSize.maximum);
     await windowManager.show();
     await windowManager.focus();
   });
@@ -29,5 +34,19 @@ Future<void> bootstrapDesktopWindow() async {
     await hotKeyManager.unregisterAll();
   } on Object {
     // Hotkeys may be unavailable in some desktop environments.
+  }
+}
+
+Future<Size> _clampedLaunchSize() async {
+  try {
+    final display = await screenRetriever.getPrimaryDisplay();
+    final visible = display.visibleSize ?? display.size;
+    final maxH = visible.height - 80; // leave room for menu / dock
+    final height = AppWindowSize.preferredHeight
+        .clamp(AppWindowSize.minHeight, maxH)
+        .toDouble();
+    return Size(AppWindowSize.phoneWidth, height);
+  } on Object {
+    return AppWindowSize.initial;
   }
 }

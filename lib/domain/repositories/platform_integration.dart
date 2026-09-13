@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:equatable/equatable.dart';
 
-/// Bytes captured from a screen region (never logged).
+/// Bytes captured from a screen region, camera, or gallery (never logged).
 class CapturedImage extends Equatable {
   const CapturedImage({
     required this.bytes,
@@ -52,8 +52,17 @@ class DesktopShortcutEvent extends Equatable {
   List<Object?> get props => [shortcutId, triggeredAt];
 }
 
-/// OS-level overlay window, capture, and shortcut integration.
-abstract interface class DesktopIntegration {
+/// OS-level capture, overlay, and shortcut integration for desktop and mobile.
+abstract interface class PlatformIntegration {
+  /// Region screen capture (desktop only).
+  bool get supportsScreenCapture;
+
+  /// Live camera capture (mobile only).
+  bool get supportsCamera;
+
+  /// Always-on-top overlay window (desktop only).
+  bool get supportsOverlay;
+
   Future<void> setAlwaysOnTop(bool enabled);
 
   Future<void> setClickThrough(bool enabled);
@@ -62,7 +71,14 @@ abstract interface class DesktopIntegration {
 
   Future<void> hideOverlay();
 
+  /// Desktop region capture. Returns null on platforms without screen capture.
   Future<CapturedImage?> captureRegion();
+
+  /// Mobile camera capture. Returns null on platforms without a camera UI.
+  Future<CapturedImage?> captureFromCamera();
+
+  /// Pick an existing image (file picker on desktop, gallery on mobile).
+  Future<CapturedImage?> pickImage();
 
   /// Opens macOS Screen Recording privacy settings (no-op elsewhere).
   Future<void> openScreenCaptureSettings();

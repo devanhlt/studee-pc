@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
+import 'package:studee_pc/app/theme/app_typography.dart';
 
 /// Renders study markdown with LaTeX (`$…$`, `$$…$$`, `\(...\)`, `\[…\]`).
 ///
@@ -42,11 +43,22 @@ class StudyMarkdown extends StatelessWidget {
     final prepared = _prepareLatex(data);
     if (prepared.trim().isEmpty) return const SizedBox.shrink();
 
+    final theme = Theme.of(context).textTheme;
     final baseStyle = style ??
+        (compact
+            ? theme.bodyMedium?.copyWith(
+                  color: AppColors.primaryText,
+                  height: 1.55,
+                )
+            : theme.bodyLarge?.copyWith(
+                  color: AppColors.primaryText,
+                  height: 1.55,
+                )) ??
         TextStyle(
+          fontFamily: AppTypography.fontFamily,
           color: AppColors.primaryText,
-          height: 1.45,
-          fontSize: compact ? 13 : 14,
+          height: 1.55,
+          fontSize: compact ? 15 : 16,
         );
 
     return LayoutBuilder(
@@ -148,16 +160,19 @@ class _FormulaBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseSize = textStyle.fontSize ?? (inline ? 15.0 : 16.0);
+    // Formulas render smaller than body text at the same point size — bump them.
+    final mathTextStyle = textStyle.copyWith(
+      fontSize: inline ? baseSize * 1.25 : baseSize * 1.4,
+    );
+
     final math = Math.tex(
       tex,
-      textStyle: textStyle,
+      textStyle: mathTextStyle,
       mathStyle: inline ? MathStyle.text : MathStyle.display,
       onErrorFallback: (_) => SelectableText(
         inline ? '\$$tex\$' : '\$\$$tex\$\$',
-        style: textStyle.copyWith(
-          fontFamily: 'monospace',
-          color: AppColors.secondaryText,
-        ),
+        style: mathTextStyle.merge(AppTypography.mono),
       ),
     );
 
@@ -175,7 +190,7 @@ class _FormulaBox extends StatelessWidget {
 
     // Block formulas: own line + vertical breathing room + horizontal scroll.
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Align(
         alignment: Alignment.centerLeft,
         child: boxed,
