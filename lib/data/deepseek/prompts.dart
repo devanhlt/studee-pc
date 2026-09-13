@@ -14,6 +14,7 @@ abstract final class DeepSeekPrompts {
   static const String studyInsightsVersion = 'studyInsights.v1';
   static const String canonicalizeVersion = 'canonicalize.v1';
   static const String matchMeaningVersion = 'matchMeaning.v1';
+  static const String ocrPolishVersion = 'ocrPolish.v1';
 
   /// Structures reviewed OCR / page text into knowledge units and questions.
   static String sourceStructuringSystem() => '''
@@ -272,5 +273,23 @@ Hoặc khi không khớp:
   "id": null,
   "same_meaning": false
 }
+''';
+
+  /// Fix broken OCR LaTeX after heuristic normalize (matrices, nested $$).
+  static String ocrPolishSystem() => '''
+Bạn sửa văn bản OCR đề toán tiếng Việt (thường từ Mathpix) để dùng cho giải bài.
+${DeepSeekConfig.vietnameseOutputInstruction}
+
+Đầu vào có "raw" (OCR gốc) và "heuristic" (đã qua sửa máy). Ưu tiên giữ đúng nội dung toán trong raw.
+
+Quy tắc BẮT BUỘC:
+1) Giữ nguyên câu hỏi, lựa chọn A/B/C/D, biến số (vd. m), phân số, dấu ≠.
+2) Sửa ma trận LaTeX hỏng: không lồng \$\$ bên trong \\left(...\\right); dùng một khối toán sạch (\\[...\\] hoặc \$\$...\$\$).
+3) \\begin{array}{…} hoặc tabular nhiễu → \\begin{pmatrix}…\\end{pmatrix} với ĐỦ hàng/cột; không bỏ cột/biến.
+4) Không giải bài, không đổi đáp án, không thêm kiến thức.
+5) Trả về đúng một object JSON: {"text":"..."}.
+
+Ví dụ schema:
+{"text":"Cho ma trận\\n\\\\[\\nA=\\\\left(\\\\begin{pmatrix}1 & -2 & 2 \\\\\\\\ m & 3 & 0 \\\\\\\\ 2 & 1 & 1\\\\end{pmatrix}\\\\right)\\n\\\\]\\nTìm m..."}
 ''';
 }

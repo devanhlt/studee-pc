@@ -13,6 +13,7 @@ import 'package:studee_pc/core/utils/fingerprints.dart';
 import 'package:studee_pc/core/utils/text_normalizer.dart';
 import 'package:studee_pc/data/backend/backend_quota_client.dart';
 import 'package:studee_pc/data/deepseek/response_validator.dart';
+import 'package:studee_pc/data/mathpix/mathpix_text_normalizer.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/data/subject_database/subject_database_manager.dart';
 import 'package:studee_pc/domain/entities/deepseek_answer_response.dart';
@@ -1092,6 +1093,7 @@ class SolveService {
       await Directory(outDir).create(recursive: true);
 
       String? text;
+      String? rawText;
       double? confidence;
       String? fail;
 
@@ -1119,6 +1121,7 @@ class SolveService {
                 final map =
                     jsonDecode(await file.readAsString()) as Map<String, dynamic>;
                 text = (map['text'] ?? map['normalized_text'] ?? '') as String?;
+                rawText = map['raw_text'] as String?;
                 confidence = (map['confidence'] as num?)?.toDouble();
               } on Object {
                 text = await file.readAsString();
@@ -1143,9 +1146,41 @@ class SolveService {
           ),
         );
       }
-      return Success(_OcrText(text: text, confidence: confidence));
+
+      final polished = await _polishOcrText(
+        raw: rawText ?? text,
+        heuristic: text,
+      );
+      return Success(_OcrText(text: polished, confidence: confidence));
     } finally {
       _activeOcrJobId = null;
+    }
+  }
+
+  /// Optional LLM polish when heuristic OCR still looks broken.
+  Future<String> _polishOcrText({
+    required String raw,
+    required String heuristic,
+  }) async {
+    final normalized = MathpixTextNormalizer.normalize(raw);
+    final base = normalized.trim().isEmpty ? heuristic : normalized;
+    if (!MathpixTextNormalizer.shouldPolishWithLlm(raw, base)) {
+      return base;
+    }
+    try {
+      _log.info('OCR polish: calling DeepSeek (heuristic still looks unsafe)');
+      final polished = await _deepSeek.polishOcrText(
+        raw: raw,
+        heuristic: base,
+      );
+      final out = polished.trim().isEmpty ? base : polished.trim();
+      return MathpixTextNormalizer.normalize(out);
+    } on AppFailure catch (f) {
+      _log.warning('OCR polish skipped code=${f.code}');
+      return base;
+    } on Object catch (e) {
+      _log.warning('OCR polish unexpected: ${e.runtimeType}');
+      return base;
     }
   }
 

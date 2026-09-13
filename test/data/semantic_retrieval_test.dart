@@ -114,6 +114,13 @@ class _FakeDeepSeek implements DeepSeekClient {
       '- Tóm tắt giả lập cho $subjectName';
 
   @override
+  Future<String> polishOcrText({
+    required String raw,
+    required String heuristic,
+  }) async =>
+      heuristic;
+
+  @override
   void beginCancellableSession() {}
 
   @override

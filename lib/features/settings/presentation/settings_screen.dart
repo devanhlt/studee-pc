@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
@@ -189,6 +190,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => context.push('/settings/request-code'),
+                  icon: const Icon(Icons.qr_code_2_rounded),
+                  label: const Text('Yêu cầu mã'),
+                ),
+                const SizedBox(height: 16),
                 TextField(
                   controller: _codeController,
                   obscureText: _obscureCode,

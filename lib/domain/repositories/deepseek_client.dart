@@ -154,6 +154,14 @@ abstract interface class DeepSeekClient {
     required List<MeaningMatchCandidate> candidates,
   });
 
+  /// Clean OCR / Mathpix LaTeX after heuristic normalize (matrices, nested $$).
+  /// Returns polished plain text (may include LaTeX). Falls through to caller
+  /// on failure — do not throw for soft polish misses when possible.
+  Future<String> polishOcrText({
+    required String raw,
+    required String heuristic,
+  });
+
   /// Start a cancellable API session (cancels any previous one).
   void beginCancellableSession();
 

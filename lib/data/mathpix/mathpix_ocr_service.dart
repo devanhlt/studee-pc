@@ -143,6 +143,7 @@ class MathpixOcrService implements OcrService {
       outputDirectory: request.outputDirectory,
       page: 1,
       text: normalized,
+      rawText: rawText,
       confidence: result.confidence,
       raw: result.raw,
       method: 'mathpix_v3_text',
@@ -300,6 +301,7 @@ class MathpixOcrService implements OcrService {
     required double confidence,
     required Map<String, dynamic> raw,
     required String method,
+    String? rawText,
     bool mock = false,
   }) async {
     final fileName = 'page_${page.toString().padLeft(4, '0')}.json';
@@ -310,6 +312,7 @@ class MathpixOcrService implements OcrService {
       'method': method,
       'text': text,
       'normalized_text': text,
+      if (rawText != null) 'raw_text': rawText,
       'blocks': <Map<String, dynamic>>[],
       'bbox': <Map<String, dynamic>>[],
       'confidence': confidence,

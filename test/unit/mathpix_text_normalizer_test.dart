@@ -100,5 +100,49 @@ Tính 2A-3B
       );
       expect(out, isNot(contains(r'1 & 2 & 0 & 2 & 1 & -1')));
     });
+
+    test('preserves symbolic 3x3 array inside left/right without nested dollars',
+        () {
+      const raw = r'''
+Cho ma trận
+\[
+A=\left(\begin{array}{ccc}
+1 & -2 & 2 \\
+m & 3 & 0 \\
+2 & 1 & 1
+\end{array}\right)
+\]
+
+Tìm m để ma trận A khả nghịch
+◯ A. $\mathrm{m}=\frac{9}{4}$
+◯ B. $\mathrm{m}=-\frac{9}{4}$
+◯ C. $\mathrm{m} \neq-\frac{9}{4}$
+◯ D. $\mathrm{m} \neq \frac{9}{4}$
+''';
+      final out = MathpixTextNormalizer.normalize(raw);
+      expect(out, contains(r'\begin{pmatrix}'));
+      expect(out, contains(r'1 & -2 & 2'));
+      expect(out, contains(r'm & 3 & 0'));
+      expect(out, contains(r'2 & 1 & 1'));
+      expect(out, isNot(contains(r'\begin{array}')));
+      expect(out, isNot(contains(r'\left($$')));
+      expect(out, isNot(contains(r'$$\begin{pmatrix}')));
+      expect(out, contains('A.'));
+      expect(out, isNot(contains('◯')));
+      // Must not drop the third column into a 3x2.
+      expect(out, isNot(contains(r'1 & -2 \\')));
+    });
+
+    test('shouldPolishWithLlm detects nested dollar breakage', () {
+      const broken = r'''
+$$A=\left(
+$$\begin{pmatrix}1 & -2 \\ 3 & 0 \\ 2 & 1\end{pmatrix}$$
+\right)$$
+''';
+      expect(
+        MathpixTextNormalizer.shouldPolishWithLlm(broken, broken),
+        isTrue,
+      );
+    });
   });
 }

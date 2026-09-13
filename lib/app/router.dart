@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:studee_pc/features/history/presentation/history_list.dart';
 import 'package:studee_pc/features/ingestion/presentation/ingestion_screen.dart';
 import 'package:studee_pc/features/overlay/presentation/overlay_panel.dart';
+import 'package:studee_pc/features/settings/presentation/request_activation_code_screen.dart';
 import 'package:studee_pc/features/settings/presentation/settings_screen.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
 import 'package:studee_pc/features/subjects/presentation/subject_detail_screen.dart';
@@ -63,6 +64,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         name: 'settings',
         builder: (context, state) => const SettingsScreen(),
+        routes: [
+          GoRoute(
+            path: 'request-code',
+            name: 'requestActivationCode',
+            builder: (context, state) => const RequestActivationCodeScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/history',

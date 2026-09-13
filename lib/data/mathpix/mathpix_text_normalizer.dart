@@ -5,6 +5,10 @@ import 'package:studee_pc/core/logging/app_logger.dart';
 /// Mathpix often wraps matrices in `\begin{tabular}` / `\begin{array}` with
 /// OCR noise (`A=(`, `),B=(`, empty cells). This rewrites those into
 /// `\begin{pmatrix}` — keeping A and B as **two** matrices when side-by-side.
+///
+/// Clean Mathpix `array` blocks (consistent columns, symbols like `m`) are
+/// converted in place **without** wrapping in `$$`, so surrounding
+/// `\left(…\right)` / `\[…\]` stay valid.
 abstract final class MathpixTextNormalizer {
   static final AppLogger _log = AppLogger('MathpixTextNormalizer');
 
@@ -25,13 +29,14 @@ abstract final class MathpixTextNormalizer {
     final before = text;
 
     text = text.replaceAllMapped(_tabularRe, (m) {
+      final env = (m.group(1) ?? 'array').toLowerCase();
       final body = m.group(2) ?? '';
-      final replacement = _tabularToMatrix(body);
+      final replacement = _tabularToMatrix(body, env: env);
       if (replacement == null) {
         _log.info('tabular→matrix: no rewrite (kept raw tabular)');
         return m.group(0)!;
       }
-      _log.info('tabular→matrix: rewrote block');
+      _log.info('tabular→matrix: rewrote block env=$env');
       return replacement;
     });
 
@@ -39,7 +44,10 @@ abstract final class MathpixTextNormalizer {
       final a = _parsePlainMatrixBody(m.group(1) ?? '');
       final b = _parsePlainMatrixBody(m.group(2) ?? '');
       if (a == null || b == null) return m.group(0)!;
-      _log.info('plain A=/B= → two pmatrices (${a.length}x${a.first.length}, ${b.length}x${b.first.length})');
+      _log.info(
+        'plain A=/B= → two pmatrices '
+        '(${a.length}x${a.first.length}, ${b.length}x${b.first.length})',
+      );
       return '\n\$\$A = ${_toPmatrix(a)}, \\quad B = ${_toPmatrix(b)}\$\$\n';
     });
 
@@ -70,13 +78,59 @@ abstract final class MathpixTextNormalizer {
     return text;
   }
 
-  static String? _tabularToMatrix(String body) {
+  /// True when heuristic output (or raw) still looks unsafe for the solver —
+  /// prefer an LLM polish pass.
+  static bool shouldPolishWithLlm(String raw, String heuristic) {
+    if (_looksBroken(heuristic)) return true;
+    // Dual/tabular OCR noise is where heuristics are least reliable.
+    final hasTable = RegExp(
+      r'\\begin\{(tabular|array)\}',
+      caseSensitive: false,
+    ).hasMatch(raw);
+    if (hasTable && _looksBroken(heuristic)) return true;
+    if (hasTable && heuristic.contains(r'\begin{tabular}')) return true;
+    // Nested display math after rewrite.
+    if (RegExp(r'\\left\s*\(\s*\$\$').hasMatch(heuristic)) return true;
+    if (RegExp(r'\$\$\s*\\begin\{pmatrix\}').hasMatch(heuristic) &&
+        RegExp(r'\\left\s*\(').hasMatch(heuristic)) {
+      return true;
+    }
+    // Symbolic entry lost vs raw (e.g. matrix variable `m`).
+    if (RegExp(r'(^|[^A-Za-z\\])m([^A-Za-z]|$)').hasMatch(raw) &&
+        !RegExp(r'(^|[^A-Za-z\\])m([^A-Za-z]|$)').hasMatch(heuristic) &&
+        raw.contains('array')) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _looksBroken(String text) {
+    if (RegExp(r'\\left\s*\(\s*\$\$').hasMatch(text)) return true;
+    if (RegExp(r'\$\$\s*\\begin\{pmatrix\}[\s\S]*?\$\$\s*\\right').hasMatch(
+      text,
+    )) {
+      return true;
+    }
+    // Orphaned display delimiters stacked.
+    final dollars = '\$\$'.allMatches(text).length;
+    if (dollars >= 4 && text.contains(r'\left')) return true;
+    return false;
+  }
+
+  static String? _tabularToMatrix(String body, {required String env}) {
     final rows = _parseRows(body);
     if (rows.isEmpty) return null;
 
     _log.info(
       'tabular rows=${rows.length} cols=${rows.map((r) => r.length).join(',')}',
     );
+
+    // Clean Mathpix `array` (e.g. inside \left(\begin{array}{ccc}…)): keep
+    // every cell (including symbols like m) and do not wrap with $$.
+    if (env == 'array') {
+      final clean = _tryCleanConsistentMatrix(rows, preferInPlace: true);
+      if (clean != null) return clean;
+    }
 
     final dual = _tryDualLabeledMatrices(rows);
     if (dual != null) return dual;
@@ -88,6 +142,38 @@ abstract final class MathpixTextNormalizer {
     if (single != null) return single;
 
     return null;
+  }
+
+  /// Same column count on every row → rewrite to pmatrix, keep every cell.
+  /// [preferInPlace]: no surrounding `$$` (safe inside `\left(` / `\[`).
+  static String? _tryCleanConsistentMatrix(
+    List<List<String>> rows, {
+    required bool preferInPlace,
+  }) {
+    if (rows.length < 2) return null;
+    final width = rows.first.length;
+    if (width < 2) return null;
+    if (rows.any((r) => r.length != width)) return null;
+
+    // Skip if this looks like OCR dual-label noise (empty gutter columns).
+    final emptyColCount = List.generate(width, (c) {
+      return rows.every((r) => r[c].trim().isEmpty) ? 1 : 0;
+    }).fold<int>(0, (a, b) => a + b);
+    if (emptyColCount > 0 && width >= 6) return null;
+
+    final matrix = rows
+        .map((r) => r.map(_normalizeMatrixEntry).toList(growable: false))
+        .toList(growable: false);
+    if (matrix.any((r) => r.any((c) => c.isEmpty))) {
+      // Allow empty only if rare; otherwise fall through.
+      final empties =
+          matrix.expand((r) => r).where((c) => c.isEmpty).length;
+      if (empties > matrix.length) return null;
+    }
+
+    _log.info('clean consistent matrix ${matrix.length}x$width');
+    final p = _toPmatrix(matrix);
+    return preferInPlace ? p : '\n\$\$$p\$\$\n';
   }
 
   static List<List<String>> _parseRows(String body) {
@@ -125,6 +211,12 @@ abstract final class MathpixTextNormalizer {
     return t;
   }
 
+  static String _normalizeMatrixEntry(String cell) {
+    final t = cell.trim();
+    if (_isNumericToken(t)) return _normalizeNumber(t);
+    return t;
+  }
+
   /// Side-by-side A / B matrices with OCR labels like `A=(` and `),B=(`.
   static String? _tryDualLabeledMatrices(List<List<String>> rows) {
     final colCount =
@@ -159,9 +251,9 @@ abstract final class MathpixTextNormalizer {
           .where((v) => v.isNotEmpty)
           .toList();
       if (values.isEmpty) continue;
-      final numericish =
-          values.where(_isNumericToken).length >= (values.length / 2).ceil();
-      if (!numericish) continue;
+      final entryish =
+          values.where(_isMatrixEntry).length >= (values.length / 2).ceil();
+      if (!entryish) continue;
       if (c > aLabelCol && c < bLabelCol) {
         aCols.add(c);
       } else if (c > bLabelCol) {
@@ -183,7 +275,10 @@ abstract final class MathpixTextNormalizer {
       return null;
     }
 
-    _log.info('dual labeled OK A=${a.length}x${a.first.length} B=${b.length}x${b.first.length}');
+    _log.info(
+      'dual labeled OK A=${a.length}x${a.first.length} '
+      'B=${b.length}x${b.first.length}',
+    );
     return '\n\$\$A = ${_toPmatrix(a)}, \\quad B = ${_toPmatrix(b)}\$\$\n';
   }
 
@@ -240,15 +335,17 @@ abstract final class MathpixTextNormalizer {
     for (final row in rows) {
       final cells = <String>[];
       for (var cell in row) {
-        cell = cell.replaceAll(RegExp(r'[()]'), '').trim();
+        cell = cell.replaceAll(RegExp(r'^[()]+|[()]+$'), '').trim();
         if (cell.isEmpty) continue;
-        if (_isNumericToken(cell)) {
-          cells.add(_normalizeNumber(cell));
+        if (_isMatrixEntry(cell)) {
+          cells.add(_normalizeMatrixEntry(cell));
         }
       }
       if (cells.isNotEmpty) cleaned.add(cells);
     }
     if (cleaned.length < 2) return null;
+
+    // Prefer max shared width without dropping trailing symbolic columns.
     final width = cleaned.map((r) => r.length).reduce((a, b) => a < b ? a : b);
     if (width < 2) return null;
 
@@ -266,7 +363,8 @@ abstract final class MathpixTextNormalizer {
     final matrix =
         cleaned.map((r) => r.take(width).toList()).toList(growable: false);
     _log.info('single matrix ${matrix.length}x$width');
-    return '\n\$\$${_toPmatrix(matrix)}\$\$\n';
+    // In-place: caller embeds this inside existing math delimiters.
+    return _toPmatrix(matrix);
   }
 
   static List<List<String>>? _parsePlainMatrixBody(String body) {
@@ -301,9 +399,9 @@ abstract final class MathpixTextNormalizer {
       final values = <String>[];
       for (final c in cols) {
         final raw = c < row.length ? row[c] : '';
-        final token = raw.replaceAll(RegExp(r'[()]'), '').trim();
-        if (_isNumericToken(token)) {
-          values.add(_normalizeNumber(token));
+        final token = raw.replaceAll(RegExp(r'^[()]+|[()]+$'), '').trim();
+        if (_isMatrixEntry(token)) {
+          values.add(_normalizeMatrixEntry(token));
         } else if (token.isEmpty) {
           // skip empty
         } else {
@@ -324,6 +422,21 @@ abstract final class MathpixTextNormalizer {
     final t = s.replaceAll(RegExp(r'[()]'), '').trim();
     if (t.isEmpty) return false;
     return RegExp(r'^-?\d+(?:[.,]\d+)?$').hasMatch(t);
+  }
+
+  /// Numbers, single-letter variables, and simple LaTeX atoms used in matrices.
+  static bool _isMatrixEntry(String s) {
+    final t = s.replaceAll(RegExp(r'^[()]+|[()]+$'), '').trim();
+    if (t.isEmpty) return false;
+    if (_isNumericToken(t)) return true;
+    if (RegExp(r'^[A-Za-z](?:_\{[^}]+\}|_\d+)?$').hasMatch(t)) return true;
+    if (RegExp(r'^\\(?:mathrm|mathbf|mathit)\{[A-Za-z0-9]+\}$').hasMatch(t)) {
+      return true;
+    }
+    if (t.startsWith(r'\frac') || t.startsWith(r'\dfrac')) return true;
+    // Reject prose / labels.
+    if (t.contains('=') || t.contains(',') || t.length > 32) return false;
+    return false;
   }
 
   static String _normalizeNumber(String s) {

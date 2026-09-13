@@ -367,6 +367,35 @@ class DeepSeekClientImpl implements DeepSeekClient {
     return _parseMeaningMatch(raw, expectedIds: capped.map((e) => e.id).toSet());
   }
 
+  @override
+  Future<String> polishOcrText({
+    required String raw,
+    required String heuristic,
+  }) async {
+    final version = DeepSeekPrompts.ocrPolishVersion;
+    final userPayload = {
+      'raw': raw,
+      'heuristic': heuristic,
+    };
+    final response = await _chatJson(
+      systemPrompt: DeepSeekPrompts.ocrPolishSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: version,
+      maxTokensOverride: 2048,
+    );
+    final map = _requireJsonObject(response);
+    final text = (map['text'] ?? map['polished'] ?? '').toString().trim();
+    if (text.isEmpty) {
+      _log.warning('OCR polish returned empty text; keeping heuristic');
+      return heuristic;
+    }
+    _log.info(
+      'OCR polish ok in=${raw.length}c heuristic=${heuristic.length}c '
+      'out=${text.length}c',
+    );
+    return text;
+  }
+
   MeaningMatchResult _parseMeaningMatch(
     String raw, {
     required Set<String> expectedIds,
