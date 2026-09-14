@@ -24,7 +24,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: dart analyze lib --fatal-infos=false
+        run: dart analyze lib
 
       - name: Test
         run: flutter test
