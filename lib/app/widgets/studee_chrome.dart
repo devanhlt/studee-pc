@@ -216,14 +216,13 @@ class StudeePageScaffold extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           StudeeAtmosphere(intensity: atmosphereIntensity),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const StudeeTokenStatusBar(),
-              Expanded(
-                child: MediaQuery.removePadding(
-                  context: context,
-                  removeTop: true,
+          SafeArea(
+            bottom: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const StudeeTokenStatusBar(),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -233,8 +232,8 @@ class StudeePageScaffold extends StatelessWidget {
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

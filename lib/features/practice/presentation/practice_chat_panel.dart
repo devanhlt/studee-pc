@@ -92,10 +92,11 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView.builder(
+          child: ListView.separated(
             controller: _scrollController,
             padding: AppLayout.pageInsets(context).copyWith(bottom: 8),
             itemCount: state.messages.length + (thinking ? 1 : 0),
+            separatorBuilder: (_, __) => const SizedBox(height: AppLayout.gapMd),
             itemBuilder: (context, i) {
               if (i >= state.messages.length) {
                 return const Padding(
@@ -398,7 +399,6 @@ class PracticeMessageBubble extends StatelessWidget {
     );
 
     Widget bubble = Container(
-      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
         color: bg,
