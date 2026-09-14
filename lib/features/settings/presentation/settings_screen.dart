@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,9 +7,11 @@ import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
+import 'package:studee_pc/features/settings/application/activation_request_config.dart';
+import 'package:studee_pc/features/settings/application/quota_revision.dart';
 import 'package:studee_pc/features/settings/application/settings_service.dart';
 
-final _settingsCredentialsProvider =
+final settingsCredentialsProvider =
     FutureProvider.autoDispose<StoredApiCredentials>((ref) {
   return ref.watch(settingsServiceProvider).loadCredentials();
 });
@@ -39,7 +39,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   SettingsService get _service => ref.read(settingsServiceProvider);
 
   void _refreshCredentials() {
-    ref.invalidate(_settingsCredentialsProvider);
+    ref.invalidate(settingsCredentialsProvider);
+    ref.read(quotaRevisionProvider.notifier).state++;
   }
 
   Color get _statusColor {
@@ -105,8 +106,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       success: (info) {
         setState(() {
           _entitlement = info;
-          _status =
-              'Đã kết nối · ${info.plan} · còn ${info.remaining}/${info.maxSolves} lượt giải';
+          _status = null;
         });
       },
       failure: (f) => setState(() {
@@ -116,32 +116,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _resetScreenCapture() async {
-    setState(() {
-      _busy = true;
-      _status = null;
-    });
-    try {
-      await ref
-          .read(platformIntegrationProvider)
-          .resetAndRequestScreenCaptureAccess();
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _status = 'Đã đặt lại. Hãy thoát hẳn Studee rồi mở lại để cấp quyền.';
-      });
-    } on Object catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _status = 'Không đặt lại được. Thử lại hoặc cấp quyền trong Cài đặt hệ thống.';
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final credsAsync = ref.watch(_settingsCredentialsProvider);
+    final credsAsync = ref.watch(settingsCredentialsProvider);
 
     var hasCode = false;
     String? maskedCode;
@@ -167,7 +144,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _SectionTitle(
-                  'Mã kích hoạt',
+                  'Nhập mã kích hoạt',
                   trailing: credsAsync.isLoading
                       ? null
                       : Text(
@@ -182,7 +159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Dán mã bạn nhận được sau khi đăng ký gói.',
+                  'Dán mã bạn đã có để sử dụng.',
                   style: TextStyle(
                     color: AppColors.secondaryText.withValues(alpha: 0.95),
                     height: 1.4,
@@ -190,12 +167,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => context.push('/settings/request-code'),
-                  icon: const Icon(AppIcons.qrCode),
-                  label: const Text('Yêu cầu mã'),
-                ),
-                const SizedBox(height: 16),
                 TextField(
                   controller: _codeController,
                   obscureText: _obscureCode,
@@ -224,7 +195,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const SizedBox(height: 12),
                   Text(
                     'Gói ${_entitlement!.plan} · '
-                    '${_entitlement!.solvesUsed}/${_entitlement!.maxSolves} đã dùng · '
+                    '${ActivationRequestConfig.formatTokens(_entitlement!.solvesUsed)}/${ActivationRequestConfig.formatTokens(_entitlement!.maxSolves)} token đã dùng · '
                     'trạng thái ${_entitlement!.status}',
                     style: const TextStyle(
                       color: AppColors.secondaryText,
@@ -233,6 +204,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const _OrDivider(),
+          const SizedBox(height: 16),
+          StudeeGlass(
+            padding: const EdgeInsets.all(AppLayout.cardPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SectionTitle('Yêu cầu mã'),
+                const SizedBox(height: 8),
+                Text(
+                  'Chưa có mã? Chọn gói và thanh toán để nhận mã kích hoạt ngay.',
+                  style: TextStyle(
+                    color: AppColors.secondaryText.withValues(alpha: 0.95),
+                    height: 1.4,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => context.push('/settings/request-code'),
+                  icon: const Icon(AppIcons.qrCode),
+                  label: const Text('Yêu cầu mã'),
+                ),
               ],
             ),
           ),
@@ -251,50 +249,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ],
-          if (Platform.isMacOS) ...[
-            const SizedBox(height: 12),
-            StudeeGlass(
-              padding: const EdgeInsets.all(AppLayout.cardPadding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const StudeeSectionLabel('Hệ thống'),
-                  const SizedBox(height: 10),
-                  const _SectionTitle('Ghi màn hình'),
-                  const SizedBox(height: 10),
-                  OutlinedButton(
-                    onPressed: _busy ? null : _resetScreenCapture,
-                    child: const Text('Đặt lại quyền'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) ...[
-            const SizedBox(height: 12),
-            StudeeGlass(
-              padding: const EdgeInsets.all(AppLayout.cardPadding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const StudeeSectionLabel('Phím tắt'),
-                  const SizedBox(height: 10),
-                  Text(
-                    Platform.isMacOS
-                        ? '⌘↵ giải câu hỏi'
-                        : 'Ctrl+Enter giải câu hỏi',
-                    style: TextStyle(
-                      color: AppColors.secondaryText.withValues(alpha: 0.95),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: AppColors.border)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'Hoặc',
+            style: TextStyle(
+              color: AppColors.secondaryText.withValues(alpha: 0.95),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(color: AppColors.border)),
+      ],
     );
   }
 }
@@ -339,20 +321,21 @@ class _ActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Row(
       children: [
         FilledButton(
           onPressed: busy ? null : onSave,
           child: const Text('Lưu'),
         ),
+        const SizedBox(width: 8),
         OutlinedButton(
           onPressed: busy ? null : onTest,
           child: const Text('Kiểm tra'),
         ),
+        const Spacer(),
         TextButton(
           onPressed: busy ? null : onDelete,
+          style: TextButton.styleFrom(foregroundColor: AppColors.error),
           child: const Text('Xóa'),
         ),
       ],

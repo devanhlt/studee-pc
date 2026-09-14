@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:studee_pc/data/backend/checkout_client.dart';
+import 'package:studee_pc/data/backend/backend_quota_client.dart';
 import 'package:studee_pc/data/catalog_database/catalog_database.dart';
 import 'package:studee_pc/data/deepseek/deepseek_client_impl.dart';
 import 'package:studee_pc/data/file_storage/app_paths.dart';
@@ -20,6 +22,7 @@ import 'package:studee_pc/domain/repositories/subject_repository.dart';
 import 'package:studee_pc/features/ingestion/application/ingestion_service.dart';
 import 'package:studee_pc/features/practice/application/practice_service.dart';
 import 'package:studee_pc/features/settings/application/privacy_consent_store.dart';
+import 'package:studee_pc/features/settings/application/quota_revision.dart';
 import 'package:studee_pc/features/settings/application/settings_service.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/platform/desktop_bootstrap.dart';
@@ -61,6 +64,19 @@ final subjectRepositoryProvider = Provider<SubjectRepository>((ref) {
 
 final credentialsRepositoryProvider = Provider<CredentialsRepository>((ref) {
   return CredentialsRepositoryImpl();
+});
+
+final checkoutClientProvider = Provider<CheckoutClient>((ref) {
+  return CheckoutClient();
+});
+
+final backendQuotaClientProvider = Provider<BackendQuotaClient>((ref) {
+  return BackendQuotaClient(
+    credentials: ref.watch(credentialsRepositoryProvider),
+    onConsumed: () {
+      ref.read(quotaRevisionProvider.notifier).state++;
+    },
+  );
 });
 
 final deepSeekClientProvider = Provider<DeepSeekClient>((ref) {
@@ -145,6 +161,7 @@ final solveServiceProvider = Provider<SolveService>((ref) {
     ocr: ref.watch(ocrServiceProvider),
     retriever: ref.watch(knowledgeRetrieverProvider),
     databaseManager: ref.watch(subjectDatabaseManagerProvider),
+    quota: ref.watch(backendQuotaClientProvider),
   );
   ref.onDispose(service.dispose);
   return service;
@@ -156,6 +173,7 @@ final practiceServiceProvider = Provider<PracticeService>((ref) {
     deepSeek: ref.watch(deepSeekClientProvider),
     ocr: ref.watch(ocrServiceProvider),
     databaseManager: ref.watch(subjectDatabaseManagerProvider),
+    quota: ref.watch(backendQuotaClientProvider),
   );
   ref.onDispose(service.dispose);
   return service;

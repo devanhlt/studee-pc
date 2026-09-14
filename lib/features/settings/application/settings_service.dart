@@ -160,7 +160,7 @@ class SettingsService {
       if (response.statusCode == 402) {
         return const Failure(
           QuotaFailure(
-            userMessage: 'Đã hết lượt giải của mã này.',
+            userMessage: 'Đã hết token của mã này.',
             code: 'quota_exhausted',
           ),
         );

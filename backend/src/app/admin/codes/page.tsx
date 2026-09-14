@@ -36,7 +36,7 @@ export default async function AdminCodesPage() {
           Mã kích hoạt
         </h1>
         <p className="muted" style={{ margin: "0.4rem 0 0" }}>
-          Tạo và theo dõi quota lượt giải (solves).
+          Tạo và theo dõi quota token. Giải bằng chữ = 100 token, bằng ảnh = 200 token.
         </p>
       </header>
 

@@ -5,6 +5,7 @@ import {
   findCodeByValue,
   isUsable,
 } from "./codes";
+import { TOKEN_COSTS, type SolveKind } from "./plans";
 import type { ActivationCodeRow } from "./db";
 
 export function extractBearer(req: NextRequest): string | null {
@@ -45,7 +46,7 @@ export async function requireActivationCode(
     return jsonError(403, "Activation code expired", "code_expired");
   }
   if (row.status === "exhausted" || row.solves_used >= row.max_solves) {
-    return jsonError(402, "Solve quota exhausted", "quota_exhausted");
+    return jsonError(402, "Token quota exhausted", "quota_exhausted");
   }
   if (!isUsable(row)) {
     return jsonError(403, "Activation code not usable", "code_unusable");
@@ -53,16 +54,17 @@ export async function requireActivationCode(
   return { code: token, row };
 }
 
-/** Validate + consume one solve before forwarding a billable request. */
+/** Validate + consume tokens before forwarding a billable request. */
 export async function requireAndConsumeSolve(
   req: NextRequest,
+  kind: SolveKind = "text",
 ): Promise<{ code: string; row: ActivationCodeRow } | NextResponse> {
   const auth = await requireActivationCode(req);
   if (auth instanceof NextResponse) return auth;
 
-  const updated = await consumeSolve(auth.code);
+  const updated = await consumeSolve(auth.code, TOKEN_COSTS[kind]);
   if (!updated) {
-    return jsonError(402, "Solve quota exhausted", "quota_exhausted");
+    return jsonError(402, "Token quota exhausted", "quota_exhausted");
   }
   return { code: auth.code, row: updated };
 }

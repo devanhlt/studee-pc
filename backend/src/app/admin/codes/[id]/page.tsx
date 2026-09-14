@@ -48,7 +48,7 @@ export default async function AdminCodeDetailPage({ params }: Props) {
           <dd style={{ margin: 0 }}>{code.plan}</dd>
           <dt className="muted">Quota</dt>
           <dd style={{ margin: 0 }} className="mono">
-            {code.solves_used} / {code.max_solves} (còn {remainingSolves(code)})
+            {code.solves_used} / {code.max_solves} token (còn {remainingSolves(code)})
           </dd>
           <dt className="muted">Trạng thái</dt>
           <dd style={{ margin: 0 }}>

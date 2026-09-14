@@ -53,11 +53,14 @@ export async function createCode(input: {
   maxSolves?: number;
   note?: string;
   expiresAt?: string | null;
+  source?: "admin" | "checkout";
+  externalRef?: string | null;
 }): Promise<ActivationCodeRow> {
   if (!isPlanId(input.plan)) {
     throw new Error("Invalid plan");
   }
   const maxSolves = input.maxSolves ?? PLAN_PRESETS[input.plan].maxSolves;
+  const source = input.source ?? "admin";
   const sql = getSql();
 
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -65,13 +68,14 @@ export async function createCode(input: {
     try {
       const rows = await sql`
         INSERT INTO activation_codes (
-          code, plan, max_solves, note, source, expires_at
+          code, plan, max_solves, note, source, external_ref, expires_at
         ) VALUES (
           ${code},
           ${input.plan},
           ${maxSolves},
           ${input.note?.trim() || null},
-          'admin',
+          ${source},
+          ${input.externalRef?.trim() || null},
           ${input.expiresAt || null}
         )
         RETURNING *
@@ -98,23 +102,28 @@ export async function revokeCode(id: string): Promise<ActivationCodeRow | null> 
   return (rows[0] as ActivationCodeRow | undefined) ?? null;
 }
 
-/** Atomically consume one solve. Returns updated row or null if not usable. */
+/** Atomically consume [tokens]. Returns updated row or null if not enough quota. */
 export async function consumeSolve(
   code: string,
+  tokens: number,
 ): Promise<ActivationCodeRow | null> {
+  const amount = Math.floor(tokens);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
   const sql = getSql();
   const rows = await sql`
     UPDATE activation_codes
     SET
-      solves_used = solves_used + 1,
+      solves_used = solves_used + ${amount},
       last_used_at = now(),
       status = CASE
-        WHEN solves_used + 1 >= max_solves THEN 'exhausted'
+        WHEN solves_used + ${amount} >= max_solves THEN 'exhausted'
         ELSE status
       END
     WHERE code = ${code.trim()}
       AND status = 'active'
-      AND solves_used < max_solves
+      AND (max_solves - solves_used) >= ${amount}
       AND (expires_at IS NULL OR expires_at > now())
     RETURNING *
   `;
@@ -128,6 +137,9 @@ export function entitlementPayload(row: ActivationCodeRow) {
     max_solves: row.max_solves,
     solves_used: row.solves_used,
     remaining: remainingSolves(row),
+    max_tokens: row.max_solves,
+    tokens_used: row.solves_used,
+    remaining_tokens: remainingSolves(row),
     status: row.status,
     expires_at: row.expires_at,
   };

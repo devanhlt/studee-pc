@@ -62,7 +62,7 @@ final class RateLimitFailure extends AppFailure {
 final class QuotaFailure extends AppFailure {
   const QuotaFailure({
     super.userMessage =
-        'Đã hết lượt giải. Nạp thêm lượt để tiếp tục nhé.',
+        'Đã hết token. Mua thêm mã để tiếp tục nhé.',
     super.code,
     super.details,
   });

@@ -6,6 +6,7 @@ import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/theme/app_motion.dart';
+import 'package:studee_pc/app/widgets/studee_token_status_bar.dart';
 
 /// Soft aurora atmosphere used behind every primary Studee screen.
 class StudeeAtmosphere extends StatelessWidget {
@@ -218,9 +219,21 @@ class StudeePageScaffold extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ?topBar,
-              Expanded(child: body),
-              ?bottomBar,
+              const StudeeTokenStatusBar(),
+              Expanded(
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ?topBar,
+                      Expanded(child: body),
+                      ?bottomBar,
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ],

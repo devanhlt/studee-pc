@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS activation_codes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   code text NOT NULL UNIQUE,
   plan text NOT NULL CHECK (plan IN ('basic', 'pro', '3xpro')),
+  -- Token quota (legacy "lượt giải" × 100). Text = 100 token, picture = 200 token.
   max_solves integer NOT NULL CHECK (max_solves > 0),
   solves_used integer NOT NULL DEFAULT 0 CHECK (solves_used >= 0),
   status text NOT NULL DEFAULT 'active'

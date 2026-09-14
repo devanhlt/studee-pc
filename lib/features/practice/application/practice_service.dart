@@ -10,6 +10,7 @@ import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/data/backend/backend_quota_client.dart';
+import 'package:studee_pc/data/backend/quota_tokens.dart';
 import 'package:studee_pc/data/mathpix/mathpix_text_normalizer.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/data/subject_database/subject_database_manager.dart';
@@ -242,6 +243,7 @@ class PracticeService {
       subjectId: subjectId,
       questionText: trimmed,
       inputType: inputType,
+      kind: QuotaSolveKind.text,
     );
   }
 
@@ -291,6 +293,7 @@ class PracticeService {
         questionText: ocr.valueOrNull!.text,
         inputType: inputType,
         sessionId: sessionId,
+        kind: QuotaSolveKind.picture,
       );
     } on AppFailure catch (f) {
       _emit(_state.copyWith(stage: PracticeStage.failed, errorMessage: f.userMessage));
@@ -310,6 +313,7 @@ class PracticeService {
     required String subjectId,
     required String questionText,
     required String inputType,
+    required QuotaSolveKind kind,
     String? sessionId,
   }) async {
     _cancelled = false;
@@ -346,7 +350,7 @@ class PracticeService {
         );
       }
 
-      final quotaFail = await _quota.consumeOneSolve();
+      final quotaFail = await _quota.consumeSolve(kind);
       if (quotaFail != null) {
         _emit(_state.copyWith(
           stage: PracticeStage.failed,

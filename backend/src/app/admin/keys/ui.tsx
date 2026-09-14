@@ -111,6 +111,7 @@ export function AdminKeysClient({
         <nav style={{ display: "flex", gap: "0.85rem", fontSize: "0.92rem" }}>
           <Link href="/admin/codes">Mã kích hoạt</Link>
           <span className="muted">API keys</span>
+          <Link href="/admin/payment">Thanh toán</Link>
         </nav>
         <button className="btn btn-ghost" type="button" onClick={logout}>
           Đăng xuất

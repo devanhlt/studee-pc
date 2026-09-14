@@ -12,6 +12,7 @@ import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/core/utils/fingerprints.dart';
 import 'package:studee_pc/core/utils/text_normalizer.dart';
 import 'package:studee_pc/data/backend/backend_quota_client.dart';
+import 'package:studee_pc/data/backend/quota_tokens.dart';
 import 'package:studee_pc/data/deepseek/response_validator.dart';
 import 'package:studee_pc/data/mathpix/mathpix_text_normalizer.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
@@ -225,6 +226,7 @@ class SolveService {
         subjectId: subjectId,
         sessionId: sessionId,
         rawText: trimmed,
+        kind: QuotaSolveKind.text,
       );
     } on AppFailure catch (f) {
       _emitFailure(f);
@@ -304,6 +306,7 @@ class SolveService {
         subjectId: subjectId,
         sessionId: sessionId,
         rawText: text.text,
+        kind: QuotaSolveKind.picture,
       );
     } on AppFailure catch (f) {
       _emitFailure(f);
@@ -353,6 +356,7 @@ class SolveService {
         subjectId: subjectId,
         sessionId: sessionId,
         rawText: trimmed,
+        kind: QuotaSolveKind.picture,
       );
     } on AppFailure catch (f) {
       _emitFailure(f);
@@ -580,6 +584,7 @@ class SolveService {
     required String subjectId,
     required String sessionId,
     required String rawText,
+    required QuotaSolveKind kind,
   }) async {
     // Keychain / API key only when DeepSeek is about to be called.
     final gate = await _requireApiKey();
@@ -588,8 +593,7 @@ class SolveService {
       return Failure(gate);
     }
 
-    // One solve = one question pipeline (OCR hops + N LLM calls count as 1).
-    final quotaFailure = await _quota.consumeOneSolve();
+    final quotaFailure = await _quota.consumeSolve(kind);
     if (quotaFailure != null) {
       _emitFailure(quotaFailure);
       return Failure(quotaFailure);

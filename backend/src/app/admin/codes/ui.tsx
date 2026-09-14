@@ -112,6 +112,7 @@ export function AdminCodesClient({
         <nav style={{ display: "flex", gap: "0.85rem", fontSize: "0.92rem" }}>
           <span className="muted">Mã kích hoạt</span>
           <Link href="/admin/keys">API keys</Link>
+          <Link href="/admin/payment">Thanh toán</Link>
         </nav>
         <button className="btn btn-ghost" type="button" onClick={logout}>
           Đăng xuất
@@ -138,13 +139,13 @@ export function AdminCodesClient({
             >
               {(Object.keys(presets) as PlanId[]).map((id) => (
                 <option key={id} value={id}>
-                  {presets[id].label} ({presets[id].maxSolves} solves)
+                  {presets[id].label} ({presets[id].maxSolves} token)
                 </option>
               ))}
             </select>
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="max">Max solves</label>
+            <label htmlFor="max">Max token</label>
             <input
               id="max"
               type="number"
@@ -220,7 +221,7 @@ export function AdminCodesClient({
                   </td>
                   <td>{c.plan}</td>
                   <td className="mono">
-                    {c.solves_used}/{c.max_solves}
+                    {c.solves_used}/{c.max_solves} token
                   </td>
                   <td>
                     <span className={`badge badge-${c.status}`}>{c.status}</span>

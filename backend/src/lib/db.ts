@@ -15,6 +15,22 @@ export type ActivationCodeRow = {
   last_used_at: string | null;
 };
 
+export type CheckoutSessionRow = {
+  id: string;
+  pay_code: string;
+  plan: string;
+  amount_vnd: number;
+  status: string;
+  client_secret: string;
+  contact: string | null;
+  activation_code_id: string | null;
+  sepay_tx_id: number | null;
+  paid_amount_vnd: number | null;
+  created_at: string;
+  expires_at: string;
+  paid_at: string | null;
+};
+
 export function getSql() {
   const url = process.env.DATABASE_URL;
   if (!url) {

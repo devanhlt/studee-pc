@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
@@ -162,10 +165,12 @@ class _FormulaBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final baseSize = textStyle.fontSize ?? (inline ? 15.0 : 16.0);
-    // Formulas render smaller than body text at the same point size — bump them.
-    final mathTextStyle = textStyle.copyWith(
-      fontSize: inline ? baseSize * 1.25 : baseSize * 1.4,
-    );
+    // Formulas render smaller than body text at the same point size on mobile.
+    // Desktop already looks oversized at that bump — keep mobile as-is.
+    final sizeScale = _isDesktop
+        ? (inline ? 1.0 : 1.1)
+        : (inline ? 1.25 : 1.4);
+    final mathTextStyle = textStyle.copyWith(fontSize: baseSize * sizeScale);
 
     final math = Math.tex(
       tex,
@@ -199,3 +204,6 @@ class _FormulaBox extends StatelessWidget {
     );
   }
 }
+
+bool get _isDesktop =>
+    !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
