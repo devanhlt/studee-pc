@@ -43,6 +43,9 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   /// Last Giải / Luyện / Ôn tập tab — kept while viewing Kiến thức or Lịch sử.
   _WorkspaceMode _primaryTab = _WorkspaceMode.solve;
 
+  /// Set after discard confirm so [PopScope] can complete the pop.
+  bool _allowPop = false;
+
   @override
   void initState() {
     super.initState();
@@ -110,8 +113,12 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
     }
   }
 
-  Future<bool> _confirmLeaveCurrentTab() async {
-    if (!_hasIncompleteWork(_mode)) return true;
+  Future<void> _discardAllSessions() async {
+    await _discardIncomplete(_WorkspaceMode.solve);
+    await _discardIncomplete(_WorkspaceMode.practice);
+  }
+
+  Future<bool> _showDiscardProgressDialog() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -128,9 +135,35 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
         ],
       ),
     );
-    if (confirmed != true) return false;
+    return confirmed == true;
+  }
+
+  Future<bool> _confirmLeaveCurrentTab() async {
+    if (!_hasIncompleteWork(_mode)) return true;
+    if (!await _showDiscardProgressDialog()) return false;
     await _discardIncomplete(_mode);
     return true;
+  }
+
+  /// Back from subject detail: same dialog as tab change; clears every session.
+  Future<bool> _confirmLeaveSubject() async {
+    final hasWork = _hasIncompleteWork(_WorkspaceMode.solve) ||
+        _hasIncompleteWork(_WorkspaceMode.practice) ||
+        _hasIncompleteWork(_mode);
+    if (!hasWork) return true;
+    if (!await _showDiscardProgressDialog()) return false;
+    await _discardAllSessions();
+    return true;
+  }
+
+  Future<void> _handleBack() async {
+    if (!await _confirmLeaveSubject()) return;
+    if (!mounted) return;
+    setState(() => _allowPop = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).maybePop();
+    });
   }
 
   Future<void> _setMode(_WorkspaceMode mode) async {
@@ -284,7 +317,13 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                 ? _primaryTab
                 : _mode;
 
-        return Focus(
+        return PopScope(
+          canPop: _allowPop,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            await _handleBack();
+          },
+          child: Focus(
           canRequestFocus: false,
           child: StudeePageScaffold(
             atmosphereIntensity: AppLayout.atmospherePage,
@@ -293,7 +332,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
               subtitle: subtitle,
               leading: IconButton(
                 tooltip: 'Quay lại',
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: _handleBack,
                 icon: const Icon(AppIcons.back),
               ),
               actions: [
@@ -414,6 +453,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
               ],
             ),
           ),
+        ),
         );
       },
     );

@@ -569,11 +569,28 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                               ),
                               IconButton(
                                 tooltip: 'Sửa',
+                                visualDensity: VisualDensity.compact,
                                 onPressed: inputsLocked
                                     ? null
                                     : _openQuestionEditor,
+                                style: IconButton.styleFrom(
+                                  foregroundColor: AppColors.accent,
+                                  backgroundColor:
+                                      AppColors.accent.withValues(alpha: 0.14),
+                                  disabledForegroundColor: AppColors.mutedText,
+                                  disabledBackgroundColor:
+                                      AppColors.border.withValues(alpha: 0.4),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    side: BorderSide(
+                                      color: AppColors.accent
+                                          .withValues(alpha: 0.35),
+                                    ),
+                                  ),
+                                ),
                                 icon: const Icon(AppIcons.edit),
                               ),
+                              const SizedBox(width: 4),
                               _inputSourceMenu(inputsLocked: inputsLocked),
                             ],
                           ),

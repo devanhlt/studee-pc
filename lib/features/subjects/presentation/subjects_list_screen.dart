@@ -210,8 +210,6 @@ class _EmptySubjectsState extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const _HeroArtCard(),
-              const SizedBox(height: 22),
               StudeeGlass(
                 padding: const EdgeInsets.all(AppLayout.gapLg),
                 child: Column(
@@ -256,77 +254,6 @@ class _EmptySubjectsState extends ConsumerWidget {
                   onPressed: () => _importSubjectZip(context, ref),
                   icon: const Icon(AppIcons.importZip),
                   label: const Text('Nhập từ ZIP'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroArtCard extends StatelessWidget {
-  const _HeroArtCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 1.15,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: AppLayout.panelBorder,
-          border: Border.all(
-            color: AppColors.accent.withValues(alpha: 0.28),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.violet.withValues(alpha: 0.16),
-              blurRadius: 28,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: AppLayout.panelBorder,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                'assets/images/studee-home-hero.png',
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const ColoredBox(
-                  color: AppColors.elevated,
-                  child: Center(
-                    child: Icon(
-                      AppIcons.stories,
-                      size: AppIcons.sizeEmptyState,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                ),
-              ),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      AppColors.background.withValues(alpha: 0.62),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 14,
-                right: 14,
-                bottom: 12,
-                child: Text(
-                  'Ánh sáng dịu nhẹ cho từng trang ghi chú',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: AppColors.primaryText.withValues(alpha: 0.92),
-                      ),
                 ),
               ),
             ],
