@@ -21,6 +21,7 @@ import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/domain/repositories/ocr_service.dart';
 import 'package:studee_pc/features/practice/application/practice_mcq_grade.dart';
 import 'package:studee_pc/features/practice/application/practice_mcq_tips.dart';
+import 'package:studee_pc/features/review/application/review_answer_style.dart';
 import 'package:uuid/uuid.dart';
 
 enum PracticeStage {
@@ -166,6 +167,9 @@ class PracticeService {
   bool _cancelled = false;
   String? _activeOcrJobId;
   ParsedQuestion? _parsed;
+  String _resultShortAnswer = 'Luyện tập';
+  bool _reviewMode = false;
+  String? _knownAnswerContent;
 
   Stream<PracticeSessionState> get states => _states.stream;
   PracticeSessionState get current => _state;
@@ -198,6 +202,7 @@ class PracticeService {
           .get();
       if (rows.isEmpty) return false;
       final row = rows.first;
+      if (row.inputType.startsWith('review')) return false;
       final raw = row.parsedQuestionJson;
       if (raw == null || raw.trim().isEmpty) return false;
       final draft = jsonDecode(raw);
@@ -229,6 +234,10 @@ class PracticeService {
     required String subjectId,
     required String text,
     String inputType = 'practice_text',
+    String resultShortAnswer = 'Luyện tập',
+    bool previewQuestionInChat = true,
+    bool reviewMode = false,
+    String? knownAnswerContent,
   }) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
@@ -244,6 +253,10 @@ class PracticeService {
       questionText: trimmed,
       inputType: inputType,
       kind: QuotaSolveKind.text,
+      resultShortAnswer: resultShortAnswer,
+      previewQuestionInChat: previewQuestionInChat,
+      reviewMode: reviewMode,
+      knownAnswerContent: knownAnswerContent,
     );
   }
 
@@ -315,10 +328,17 @@ class PracticeService {
     required String inputType,
     required QuotaSolveKind kind,
     String? sessionId,
+    String resultShortAnswer = 'Luyện tập',
+    bool previewQuestionInChat = true,
+    bool reviewMode = false,
+    String? knownAnswerContent,
   }) async {
     _cancelled = false;
     _history.clear();
     _parsed = null;
+    _resultShortAnswer = resultShortAnswer;
+    _reviewMode = reviewMode;
+    _knownAnswerContent = knownAnswerContent?.trim();
     final id = sessionId ?? _uuid.v4();
 
     try {
@@ -333,11 +353,12 @@ class PracticeService {
         subjectId: subjectId,
         questionText: questionText,
         messages: [
-          PracticeUiMessage(
-            id: _uuid.v4(),
-            role: PracticeMessageRole.system,
-            text: 'Câu hỏi:\n$questionText',
-          ),
+          if (previewQuestionInChat)
+            PracticeUiMessage(
+              id: _uuid.v4(),
+              role: PracticeMessageRole.system,
+              text: 'Câu hỏi:\n$questionText',
+            ),
         ],
       ),
     );
@@ -382,6 +403,8 @@ class PracticeService {
         questionText: questionText,
         parsed: _parsed,
         maxCheckSteps: maxCheckSteps,
+        reviewMode: _reviewMode,
+        knownAnswerContent: _knownAnswerContent,
       );
       if (_cancelled) {
         return const Failure(CancelledFailure(code: 'cancelled'));
@@ -471,6 +494,7 @@ class PracticeService {
         attemptsOnStep: attempts,
         checkStepsSoFar: _state.checkStepsSoFar,
         maxCheckSteps: maxCheckSteps,
+        reviewMode: _reviewMode,
       );
       if (_cancelled) {
         return const Failure(CancelledFailure(code: 'cancelled'));
@@ -494,7 +518,11 @@ class PracticeService {
 
       final eval = turn.evaluation;
       var feedbackText = eval?.feedback.trim() ?? '';
-      final coachText = turn.coachMessage.trim();
+      var coachText = turn.coachMessage.trim();
+      if (_reviewMode) {
+        feedbackText = stripMcqChoiceLetters(feedbackText);
+        coachText = stripMcqChoiceLetters(coachText);
+      }
       final localCorrect = PracticeMcqGrade.grade(
         answer: trimmed,
         correctLabel: _state.currentCorrectLabel,
@@ -528,6 +556,9 @@ class PracticeService {
         nextCheck: turn.checkQuestion,
         nextChoices: turn.checkChoices,
       );
+      if (_reviewMode) {
+        feedbackText = stripMcqChoiceLetters(feedbackText);
+      }
 
       var nextMessages = List<PracticeUiMessage>.from(_state.messages);
 
@@ -552,12 +583,15 @@ class PracticeService {
           turn.reveal != null &&
           turn.reveal!.trim().isNotEmpty &&
           !_similarText(reply ?? '', turn.reveal!.trim())) {
+        final reveal = _reviewMode
+            ? stripMcqChoiceLetters(turn.reveal!.trim())
+            : turn.reveal!.trim();
         nextMessages = [
           ...nextMessages,
           PracticeUiMessage(
             id: _uuid.v4(),
             role: PracticeMessageRole.coach,
-            text: 'Gợi ý: ${turn.reveal!.trim()}',
+            text: 'Gợi ý: $reveal',
           ),
         ];
       }
@@ -623,6 +657,14 @@ class PracticeService {
     var isComplete = turn.isComplete;
     var summary = turn.finalSummary?.trim();
     var mcqTip = turn.mcqTip?.trim();
+    if (_reviewMode) {
+      coach = stripMcqChoiceLetters(coach);
+      summary = summary == null || summary.isEmpty
+          ? summary
+          : stripMcqChoiceLetters(summary);
+      mcqTip =
+          mcqTip == null || mcqTip.isEmpty ? mcqTip : stripMcqChoiceLetters(mcqTip);
+    }
 
     // Hard cap: never show more than [maxCheckSteps] check questions.
     if (!isComplete && hasCheck && _state.checkStepsSoFar >= maxCheckSteps) {
@@ -806,6 +848,8 @@ class PracticeService {
     await _markSessionCancelled(_state.sessionId);
     _history.clear();
     _parsed = null;
+    _reviewMode = false;
+    _knownAnswerContent = null;
     _emit(const PracticeSessionState(stage: PracticeStage.idle));
   }
 
@@ -814,6 +858,8 @@ class PracticeService {
     final sessionId = _state.sessionId;
     _history.clear();
     _parsed = null;
+    _reviewMode = false;
+    _knownAnswerContent = null;
     _deepSeek.cancelActiveSession();
     unawaited(_markSessionCancelled(sessionId));
     _emit(const PracticeSessionState(stage: PracticeStage.idle));
@@ -1029,7 +1075,7 @@ class PracticeService {
               sessionId: sessionId,
               questionType: 'text_response',
               finalAnswerContent: Value(_state.finalSummary),
-              shortAnswer: const Value('Luyện tập'),
+              shortAnswer: Value(_resultShortAnswer),
               explanationMarkdown: Value(transcript),
               confidenceLevel: 'medium',
               createdAt: now,

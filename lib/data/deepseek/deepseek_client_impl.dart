@@ -402,13 +402,20 @@ class DeepSeekClientImpl implements DeepSeekClient {
     required String questionText,
     ParsedQuestion? parsed,
     int maxCheckSteps = 6,
+    bool reviewMode = false,
+    String? knownAnswerContent,
   }) async {
-    final version = DeepSeekPrompts.practiceVersion;
+    final version = reviewMode
+        ? DeepSeekPrompts.practiceReviewVersion
+        : DeepSeekPrompts.practiceVersion;
     final userPayload = <String, dynamic>{
       'action': 'start',
       'question_text': questionText,
       'max_check_steps': maxCheckSteps,
       'check_steps_so_far': 0,
+      if (reviewMode) 'review_mode': true,
+      if (knownAnswerContent != null && knownAnswerContent.trim().isNotEmpty)
+        'known_answer_content': knownAnswerContent.trim(),
       if (parsed != null)
         'parsed': {
           'question_type': parsed.questionType.wireName,
@@ -420,7 +427,7 @@ class DeepSeekClientImpl implements DeepSeekClient {
         },
     };
     final raw = await _chatJson(
-      systemPrompt: DeepSeekPrompts.practiceSystem(),
+      systemPrompt: DeepSeekPrompts.practiceSystem(reviewMode: reviewMode),
       userContent: jsonEncode(userPayload),
       promptVersion: version,
       maxTokensOverride: 2048,
@@ -435,8 +442,11 @@ class DeepSeekClientImpl implements DeepSeekClient {
     required int attemptsOnStep,
     int checkStepsSoFar = 0,
     int maxCheckSteps = 6,
+    bool reviewMode = false,
   }) async {
-    final version = DeepSeekPrompts.practiceVersion;
+    final version = reviewMode
+        ? DeepSeekPrompts.practiceReviewVersion
+        : DeepSeekPrompts.practiceVersion;
     final messages = <Map<String, String>>[
       for (final m in history) m.toApiMap(),
       {
@@ -447,11 +457,12 @@ class DeepSeekClientImpl implements DeepSeekClient {
           'attempts_on_step': attemptsOnStep,
           'check_steps_so_far': checkStepsSoFar,
           'max_check_steps': maxCheckSteps,
+          if (reviewMode) 'review_mode': true,
         }),
       },
     ];
     final raw = await _chatJsonMessages(
-      systemPrompt: DeepSeekPrompts.practiceSystem(),
+      systemPrompt: DeepSeekPrompts.practiceSystem(reviewMode: reviewMode),
       messages: messages,
       promptVersion: version,
       maxTokensOverride: 2048,

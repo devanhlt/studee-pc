@@ -6,30 +6,31 @@
     <title>Studee — Học &amp; Giải đề</title>
     <meta
       name="description"
-      content="Trợ lý học tập cá nhân: nhập kiến thức, giải câu hỏi, ôn tập. Tải Studee miễn phí, nhận mã kích hoạt, học trên máy bạn."
+      content="Trợ lý học tập cá nhân: nhập kiến thức, giải câu hỏi, luyện và ôn tập. Tải Studee miễn phí, nhận mã kích hoạt, học trên máy bạn."
     />
+    <meta name="theme-color" content="#0B0F19" />
     <link rel="icon" type="image/png" href="/app-icon.png" />
     <link rel="apple-touch-icon" href="/app-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="atmosphere" aria-hidden="true">
-      <div class="orb orb-a"></div>
-      <div class="orb orb-b"></div>
-      <div class="orb orb-c"></div>
-      <div class="grain"></div>
+      <div class="orb orb-violet"></div>
+      <div class="orb orb-cyan"></div>
+      <div class="orb orb-indigo"></div>
+      <div class="mesh"></div>
     </div>
 
-    <header class="nav reveal">
+    <header class="nav glass reveal">
       <a class="brand" href="/">
-        <img src="/app-icon.png" width="36" height="36" alt="" />
-        <span>STUDEE</span>
+        <img src="/app-icon.png" width="32" height="32" alt="" />
+        <span>Studee</span>
       </a>
       <nav class="nav-links" aria-label="Điều hướng">
         <a href="#features">Tính năng</a>
@@ -40,74 +41,65 @@
     </header>
 
     <main>
-      <!-- 1. Hero -->
       <section class="hero">
-        <div class="hero-stage">
-          <img
-            class="hero-bleed"
-            src="/home-hero.jpg"
-            alt=""
-            width="1280"
-            height="720"
-          />
-          <div class="hero-veil"></div>
-
-          <div class="hero-copy reveal">
-            <p class="badge">macOS · Windows · iOS · Android</p>
-            <h1>
-              <span class="brand-hero">Studee</span>
-              <span class="tagline">Học &amp; Giải đề</span>
-            </h1>
-            <p class="lede">
-              Trợ lý học tập cá nhân — kiến thức cá nhân hóa, cách giải cá nhân
-              hóa. Tập trung &amp; riêng tư.
-            </p>
-            <div class="cta-row">
-              <a class="btn btn-primary glow-pulse" href="#download">
-                Tải Studee miễn phí
-                <span class="btn-sub">Bước 1 · Chọn nền tảng</span>
-              </a>
-              <a class="link-quiet" href="#how">Xem 3 bước</a>
-            </div>
+        <div class="hero-copy reveal">
+          <p class="badge">macOS · Windows · Android</p>
+          <h1>
+            <span class="brand-hero">Studee</span>
+            <span class="tagline">Học &amp; Giải đề</span>
+          </h1>
+          <p class="lede">
+            Trợ lý học tập cá nhân — kiến thức của bạn, lời giải theo ngữ cảnh
+            môn học. Giải, luyện và ôn trên máy, riêng tư.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="#download">
+              Tải Studee miễn phí
+            </a>
+            <a class="link-quiet" href="#how">Xem 3 bước</a>
           </div>
+        </div>
 
-          <div class="hero-device reveal delay-1" aria-hidden="false">
-            <div class="mac-window float-y">
-              <div class="mac-chrome">
-                <span></span><span></span><span></span>
-                <p>Studee</p>
+        <div class="hero-device reveal delay-1" aria-hidden="true">
+          <div class="app-window glass-strong">
+            <div class="app-chrome">
+              <span></span><span></span><span></span>
+              <p>Toán 12</p>
+            </div>
+            <div class="token-bar" title="Token còn lại">
+              <i style="width: 68%"></i>
+            </div>
+            <div class="app-body">
+              <div class="seg">
+                <button class="seg-item on" type="button">Giải</button>
+                <button class="seg-item" type="button">Luyện</button>
+                <button class="seg-item" type="button">Ôn tập</button>
               </div>
-              <div class="mac-body">
-                <img
-                  class="mac-art"
-                  src="/home-hero.jpg"
-                  alt="Giao diện cảm hứng học tập của Studee"
-                  width="1280"
-                  height="720"
-                />
-                <div class="mac-overlay">
-                  <img
-                    class="mac-app-icon spin-soft"
-                    src="/app-icon.png"
-                    alt="Biểu tượng Studee"
-                    width="96"
-                    height="96"
-                  />
+              <div class="q-card">
+                <div class="q-head">
+                  <span>Câu hỏi</span>
+                  <span class="q-edit">Sửa</span>
                 </div>
+                <p class="q-text">
+                  Cho hàm số y = x³ − 3x + 2. Tìm các khoảng đồng biến của hàm số.
+                </p>
               </div>
+              <div class="app-cta">Giải</div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 2. Value / Features -->
       <section class="features" id="features" aria-label="Tính năng">
         <div class="section-head">
-          <p class="section-kicker">Tính năng</p>
-          <h2>Học sâu hơn với ít thao tác hơn</h2>
-          <p>Ba việc chính — nhập, giải, ôn — trong một không gian tập trung.</p>
+          <p class="section-kicker">Không gian học</p>
+          <h2>Ba việc chính, một giao diện tập trung</h2>
+          <p>
+            Cùng hệ thống thẻ kính, aurora và nút gradient như trong app —
+            nhập kiến thức rồi giải, luyện hoặc ôn.
+          </p>
         </div>
-        <div class="features-grid">
+        <div class="bento">
           <article class="feature glass reveal">
             <div class="feature-icon" aria-hidden="true">
               <svg viewBox="0 0 48 48" fill="none">
@@ -122,16 +114,15 @@
                   stroke-width="2.2"
                   stroke-linecap="round"
                 />
-                <circle cx="34" cy="14" r="5" fill="currentColor" opacity=".35" />
               </svg>
             </div>
             <h3>Nhập kiến thức</h3>
             <p>
-              Dán văn bản, ảnh hoặc PDF — Studee cấu trúc lại thành kiến thức theo
-              môn.
+              Dán văn bản, ảnh hoặc PDF — Studee cấu trúc lại thành kiến thức
+              theo từng môn, lưu trên máy bạn.
             </p>
           </article>
-          <article class="feature glass reveal delay-1">
+          <article class="feature glass reveal delay-1 featured-card">
             <div class="feature-icon" aria-hidden="true">
               <svg viewBox="0 0 48 48" fill="none">
                 <rect
@@ -160,8 +151,8 @@
             </div>
             <h3>Giải câu hỏi</h3>
             <p>
-              Chụp đề, chọn ảnh, hoặc dán câu hỏi — nhận lời giải kèm ngữ cảnh môn
-              học.
+              Chụp đề, chọn ảnh hoặc dán câu hỏi. Xem đề đã định dạng, chỉnh
+              lại, rồi mới bấm Giải — lời giải kèm ngữ cảnh môn học.
             </p>
           </article>
           <article class="feature glass reveal delay-2">
@@ -188,30 +179,29 @@
                 />
               </svg>
             </div>
-            <h3>Ôn &amp; xuất ghi chú</h3>
+            <h3>Luyện &amp; ôn tập</h3>
             <p>
-              Lịch sử giải, thống kê dạng bài, xuất tài liệu ôn tập khi bạn cần.
+              Luyện Socratic trên câu mới, hoặc ôn lần lượt mọi câu đã lưu —
+              không lộ đáp án A/B/C/D trước khi bạn tự nghĩ.
             </p>
           </article>
         </div>
       </section>
 
-      <!-- 3. How / 3 steps -->
       <section class="how reveal" id="how" aria-label="Hướng dẫn 3 bước">
         <div class="section-head">
           <p class="section-kicker">Bắt đầu nhanh</p>
           <h2>Chỉ 3 bước để học với Studee</h2>
           <p>Tải app miễn phí, nhận mã kích hoạt, rồi nhập mã trong Cài đặt.</p>
         </div>
-
         <ol class="how-steps">
           <li class="how-step glass">
             <span class="how-num" aria-hidden="true">1</span>
             <div class="how-body">
               <h3>Tải app miễn phí</h3>
               <p>
-                Cài Studee trên máy của bạn. macOS đã sẵn sàng; các nền tảng khác
-                sắp ra mắt.
+                Cài Studee trên macOS, Windows hoặc Android. Dữ liệu môn học
+                lưu cục bộ trên thiết bị của bạn.
               </p>
               <a class="how-link" href="#download">Đến phần tải xuống →</a>
             </div>
@@ -221,8 +211,8 @@
             <div class="how-body">
               <h3>Nhận mã kích hoạt</h3>
               <p>
-                Chọn gói theo số lượt giải bạn cần. Mỗi mã mang sẵn hạn mức;
-                hết lượt thì mua mã mới.
+                Chọn gói theo số token. Văn bản tốn 100 token / câu, ảnh tốn
+                200 token. Hết token thì mua mã mới.
               </p>
               <a class="how-link" href="#pricing">Xem bảng giá →</a>
             </div>
@@ -232,8 +222,8 @@
             <div class="how-body">
               <h3>Kích hoạt trong app</h3>
               <p>
-                Mở Studee → Cài đặt → nhập mã. Kiểm tra số lượt giải còn lại ngay
-                trên máy.
+                Mở Studee → Cài đặt → nhập mã. Thanh token trên đầu màn hình
+                cho biết hạn mức còn lại.
               </p>
               <a class="how-link" href="#activate">Xem cách kích hoạt →</a>
             </div>
@@ -241,7 +231,6 @@
         </ol>
       </section>
 
-      <!-- 4. Download (step 1 action) -->
       <section class="downloads reveal" id="download" aria-label="Tải xuống">
         <div class="section-head">
           <p class="section-kicker">Bước 1</p>
@@ -251,7 +240,7 @@
         <div class="download-grid">
           <a
             class="download-card glass available"
-            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.4/Studee-1.0.4-macos.dmg"
+            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.5/Studee-1.0.5-macos.dmg"
           >
             <div class="download-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32" fill="currentColor">
@@ -262,14 +251,14 @@
             </div>
             <div class="download-meta">
               <h3>macOS</h3>
-              <p>Apple Silicon · DMG · v1.0.4</p>
+              <p>Apple Silicon · DMG · v1.0.5</p>
             </div>
             <span class="download-action">Tải xuống</span>
           </a>
 
           <a
             class="download-card glass available"
-            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.4/Studee-1.0.4-windows.zip"
+            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.5/Studee-1.0.5-windows.zip"
           >
             <div class="download-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32" fill="currentColor">
@@ -280,7 +269,7 @@
             </div>
             <div class="download-meta">
               <h3>Windows</h3>
-              <p>x64 · ZIP · v1.0.4</p>
+              <p>x64 · ZIP · v1.0.5</p>
             </div>
             <span class="download-action">Tải xuống</span>
           </a>
@@ -302,7 +291,7 @@
 
           <a
             class="download-card glass available"
-            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.4/Studee-1.0.4-android.apk"
+            href="https://github.com/devanhlt/studee-pc/releases/download/v1.0.5/Studee-1.0.5-android.apk"
           >
             <div class="download-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32" fill="currentColor">
@@ -313,73 +302,65 @@
             </div>
             <div class="download-meta">
               <h3>Android</h3>
-              <p>APK · v1.0.4</p>
+              <p>APK · v1.0.5</p>
             </div>
             <span class="download-action">Tải xuống</span>
           </a>
         </div>
       </section>
 
-      <!-- 5. Pricing (step 2) -->
       <section class="pricing reveal" id="pricing" aria-label="Bảng giá">
         <div class="section-head">
           <p class="section-kicker">Bước 2</p>
-          <h2>Chọn gói</h2>
+          <h2>Chọn gói token</h2>
           <p>
-            Bán theo hạn mức giải: mỗi gói là một mã kích hoạt kèm số lượt.
-            Hết lượt thì mua mã mới với mức bạn muốn — không tính theo tháng.
+            Mỗi mã kích hoạt kèm hạn mức token — không tính theo tháng.
+            Giải / luyện / ôn từ văn bản: 100 token. Từ ảnh: 200 token.
           </p>
         </div>
         <div class="pricing-grid">
           <article class="price-card glass">
             <h3>Basic</h3>
             <p class="price-amount">19.000<span>₫</span></p>
-            <p class="price-note">100 lượt giải / mã</p>
+            <p class="price-note">10,000 token · 30 ngày</p>
           </article>
-
           <article class="price-card glass featured">
             <p class="price-badge">Phổ biến</p>
             <h3>Pro</h3>
             <p class="price-amount">49.000<span>₫</span></p>
-            <p class="price-note">500 lượt giải / mã</p>
+            <p class="price-note">50,000 token · 60 ngày</p>
           </article>
-
           <article class="price-card glass">
             <h3>3xPro</h3>
             <p class="price-amount">88.000<span>₫</span></p>
-            <p class="price-note">1.500 lượt giải / mã</p>
+            <p class="price-note">150,000 token · 90 ngày</p>
           </article>
         </div>
       </section>
 
-      <!-- 6. Activate (step 3) -->
       <section class="activate reveal" id="activate" aria-label="Kích hoạt mã">
         <div class="section-head">
           <p class="section-kicker">Bước 3</p>
           <h2>Kích hoạt mã trong app</h2>
-          <p>
-            Sau khi có mã, nhập trong app để mở hạn mức giải tương ứng.
-          </p>
+          <p>Sau khi có mã, nhập trong app để mở hạn mức token tương ứng.</p>
         </div>
         <ol class="activate-steps glass">
-          <li>
-            Mở <strong>Studee</strong> và vào <strong>Cài đặt</strong>.
-          </li>
+          <li>Mở <strong>Studee</strong> và vào <strong>Cài đặt</strong>.</li>
           <li>
             Dán <strong>mã kích hoạt</strong> bạn nhận qua email, rồi chọn
             <strong>Lưu</strong>.
           </li>
           <li>
-            Bấm <strong>Kiểm tra</strong> để xem gói và số lượt giải còn lại.
+            Bấm <strong>Kiểm tra</strong> để xem gói và số token còn lại.
           </li>
         </ol>
       </section>
     </main>
 
     <footer class="footer">
-      <span>Studee v1.0.4</span>
+      <span>Studee v1.0.5</span>
       <span>Dữ liệu học lưu trên máy bạn.</span>
-      <a href="https://github.com/devanhlt/studee-pc/releases/tag/v1.0.4"
+      <a href="https://github.com/devanhlt/studee-pc/releases/tag/v1.0.5"
         >GitHub Releases</a
       >
     </footer>

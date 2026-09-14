@@ -168,6 +168,8 @@ abstract interface class DeepSeekClient {
     required String questionText,
     ParsedQuestion? parsed,
     int maxCheckSteps = 6,
+    bool reviewMode = false,
+    String? knownAnswerContent,
   });
 
   /// Continue practice with prior LLM [history] plus the latest user answer.
@@ -177,6 +179,7 @@ abstract interface class DeepSeekClient {
     required int attemptsOnStep,
     int checkStepsSoFar = 0,
     int maxCheckSteps = 6,
+    bool reviewMode = false,
   });
 
   /// Start a cancellable API session (cancels any previous one).

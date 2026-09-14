@@ -165,7 +165,10 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
 
   Future<void> _solveText() async {
     if (_isProcessing || _pickingRegion || _practiceBusy) return;
-    final text = _textController.text.trim();
+    var text = _textController.text.trim();
+    if (text.isEmpty) {
+      text = _service.current.rawText?.trim() ?? '';
+    }
     if (text.isEmpty) {
       _toast(_surfaceMode == SolveSurfaceMode.practice
           ? 'Hãy dán câu hỏi trước khi luyện.'
@@ -223,20 +226,29 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
       return;
     }
     if (_isProcessing) return;
-    final result = await _service.solveFromImage(
+    final result = await _service.recognizeQuestionFromImage(
       subjectId: widget.subjectId,
       bytes: bytes,
       inputType: inputType,
     );
-    if (result is Failure &&
-        result.failureOrNull?.code == 'ocr_review_required') {
-      if (mounted) {
-        _ocrController.text = _service.current.rawText ?? '';
+    if (!mounted) return;
+    result.when(
+      success: (text) {
+        _textController.text = text;
+        _syncTabDraft();
         setState(() {});
-      }
-      return;
-    }
-    _handle(result);
+        final confidence = _service.current.ocrConfidence;
+        if (confidence != null && confidence < 0.65) {
+          _toast('Chữ nhận dạng chưa rõ, hãy kiểm tra trước khi giải.');
+        }
+      },
+      failure: (f) {
+        if (f is CancelledFailure || f.code == 'cancelled') return;
+        if (f is MissingApiKeyFailure) context.push('/settings');
+        _toast(f.userMessage);
+        setState(() {});
+      },
+    );
   }
 
   Future<void> _solveImage() async {
@@ -475,9 +487,12 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   Future<void> _openQuestionEditor() async {
     if (_isProcessing || _pickingRegion || _practiceBusy) return;
     final isPractice = _surfaceMode == SolveSurfaceMode.practice;
+    final initial = _textController.text.trim().isNotEmpty
+        ? _textController.text
+        : (_service.current.rawText ?? '');
     final text = await QuestionInputScreen.open(
       context,
-      initialText: _textController.text,
+      initialText: initial,
       hintText: isPractice
           ? 'Dán câu hỏi cần luyện…'
           : 'Dán nội dung câu hỏi…',
@@ -534,10 +549,13 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
 
   Widget _idleQuestionPreview({
     required bool inputsLocked,
+    String? recognizedText,
     List<Widget> belowFooter = const [],
   }) {
     final isPractice = _surfaceMode == SolveSurfaceMode.practice;
-    final question = _textController.text.trim();
+    final typed = _textController.text.trim();
+    final question =
+        typed.isNotEmpty ? typed : (recognizedText?.trim() ?? '');
     final hasQuestion = question.isNotEmpty;
 
     return Column(
@@ -802,6 +820,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     } else if (showInputForm) {
       body = _idleQuestionPreview(
         inputsLocked: inputsLocked,
+        recognizedText: state.rawText,
         belowFooter: [
           if (widget.embedded &&
               (state.stage == SolvePipelineStage.offlineFailure ||

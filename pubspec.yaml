@@ -1,7 +1,7 @@
 name: studee_pc
 description: Personal desktop study overlay assistant for Vietnamese learners.
 publish_to: 'none'
-version: 1.0.4+5
+version: 1.0.5+6
 
 environment:
   sdk: ^3.12.2

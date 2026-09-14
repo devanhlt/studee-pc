@@ -22,10 +22,16 @@ class PracticeChatPanel extends ConsumerStatefulWidget {
     super.key,
     required this.onNewQuestion,
     required this.onCancel,
+    this.completedMessage,
+    this.nextQuestionLabel,
+    this.showCancelAlways = false,
   });
 
   final VoidCallback onNewQuestion;
   final VoidCallback onCancel;
+  final String? completedMessage;
+  final String? nextQuestionLabel;
+  final bool showCancelAlways;
 
   @override
   ConsumerState<PracticeChatPanel> createState() => _PracticeChatPanelState();
@@ -120,15 +126,16 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
                     color: AppColors.success,
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Đã xong bài luyện này. Bấm “Câu hỏi mới” để luyện tiếp.',
-                      style: TextStyle(fontSize: 15, height: 1.35),
+                      widget.completedMessage ??
+                          'Đã xong bài luyện này. Bấm “Câu hỏi mới” để luyện tiếp.',
+                      style: const TextStyle(fontSize: 15, height: 1.35),
                     ),
                   ),
                   TextButton(
                     onPressed: widget.onNewQuestion,
-                    child: const Text('Câu hỏi mới'),
+                    child: Text(widget.nextQuestionLabel ?? 'Câu hỏi mới'),
                   ),
                 ],
               ),
@@ -190,7 +197,7 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
           padding: AppLayout.footerInsets,
           child: Row(
             children: [
-              if (state.stage.isBusy)
+              if (state.stage.isBusy || widget.showCancelAlways)
                 TextButton(
                   onPressed: widget.onCancel,
                   child: const Text('Hủy'),
@@ -223,7 +230,7 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
               if (state.stage == PracticeStage.completed ||
                   state.stage == PracticeStage.failed)
                 IconButton(
-                  tooltip: 'Câu hỏi mới',
+                  tooltip: widget.nextQuestionLabel ?? 'Câu hỏi mới',
                   onPressed: widget.onNewQuestion,
                   icon: const Icon(AppIcons.refresh),
                 ),

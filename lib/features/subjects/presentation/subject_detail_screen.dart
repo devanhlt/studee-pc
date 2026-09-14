@@ -17,6 +17,8 @@ import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/history/presentation/history_list.dart';
+import 'package:studee_pc/features/review/application/review_service.dart';
+import 'package:studee_pc/features/review/presentation/review_panel.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
@@ -86,8 +88,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
         return ref.read(practiceServiceProvider).hasIncompleteSession ||
             draft.isNotEmpty;
       case _WorkspaceMode.review:
-        // Ôn tập has no session yet — hook incomplete checks here later.
-        return false;
+        return ref.read(reviewServiceProvider).hasIncompleteSession;
       case _WorkspaceMode.knowledge:
       case _WorkspaceMode.history:
         return false;
@@ -107,6 +108,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
         await ref.read(practiceServiceProvider).cancel();
         ref.read(practiceTabDraftProvider.notifier).state = '';
       case _WorkspaceMode.review:
+        await ref.read(reviewServiceProvider).cancel();
       case _WorkspaceMode.knowledge:
       case _WorkspaceMode.history:
         break;
@@ -116,6 +118,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   Future<void> _discardAllSessions() async {
     await _discardIncomplete(_WorkspaceMode.solve);
     await _discardIncomplete(_WorkspaceMode.practice);
+    await _discardIncomplete(_WorkspaceMode.review);
   }
 
   Future<bool> _showDiscardProgressDialog() async {
@@ -438,7 +441,9 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                         showModeToggle: false,
                         initialSurfaceMode: SolveSurfaceMode.practice,
                       ),
-                    _WorkspaceMode.review => const _ReviewPanel(),
+                    _WorkspaceMode.review => ReviewPanel(
+                        subjectId: widget.subjectId,
+                      ),
                     _WorkspaceMode.knowledge => _KnowledgePanel(
                         subjectId: widget.subjectId,
                         onImport: _openImport,
@@ -461,15 +466,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
 }
 
 enum _HeaderMenuAction { knowledge, history, export, refresh }
-
-class _ReviewPanel extends StatelessWidget {
-  const _ReviewPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.expand();
-  }
-}
 
 class _KnowledgePanel extends ConsumerWidget {
   const _KnowledgePanel({

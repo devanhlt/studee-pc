@@ -126,6 +126,8 @@ class _FakeDeepSeek implements DeepSeekClient {
     required String questionText,
     ParsedQuestion? parsed,
     int maxCheckSteps = 6,
+    bool reviewMode = false,
+    String? knownAnswerContent,
   }) async =>
       throw UnimplementedError();
 
@@ -136,6 +138,7 @@ class _FakeDeepSeek implements DeepSeekClient {
     required int attemptsOnStep,
     int checkStepsSoFar = 0,
     int maxCheckSteps = 6,
+    bool reviewMode = false,
   }) async =>
       throw UnimplementedError();
 

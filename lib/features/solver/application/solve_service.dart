@@ -183,6 +183,9 @@ class SolveService {
   SolveSessionState _state = const SolveSessionState(stage: SolvePipelineStage.idle);
   bool _cancelled = false;
   String? _activeOcrJobId;
+  /// Image OCR already ran; Giải should still consume picture tokens.
+  QuotaSolveKind _pendingQuotaKind = QuotaSolveKind.text;
+  String _pendingInputType = 'pasted_text';
 
   Stream<SolveSessionState> get states => _states.stream;
   SolveSessionState get current => _state;
@@ -206,11 +209,15 @@ class SolveService {
 
     _cancelled = false;
     final sessionId = _uuid.v4();
+    final kind = _pendingQuotaKind;
+    final sessionInputType =
+        _pendingInputType == 'pasted_text' ? inputType : _pendingInputType;
     _emit(
       SolveSessionState(
         stage: SolvePipelineStage.parsing,
         sessionId: sessionId,
         rawText: trimmed,
+        ocrConfidence: _state.ocrConfidence,
       ),
     );
 
@@ -219,14 +226,14 @@ class SolveService {
       await _dbManager.open(subjectId);
       await _insertSession(
         sessionId: sessionId,
-        inputType: inputType,
+        inputType: sessionInputType,
         rawText: trimmed,
       );
       return await _runPipeline(
         subjectId: subjectId,
         sessionId: sessionId,
         rawText: trimmed,
-        kind: QuotaSolveKind.text,
+        kind: kind,
       );
     } on AppFailure catch (f) {
       _emitFailure(f);
@@ -275,7 +282,9 @@ class SolveService {
       );
 
       final ocrText = await _ocrImageToText(bytes, sessionId);
-      if (ocrText.isFailure) return Failure(ocrText.failureOrNull!);
+      if (ocrText.isFailure) {
+        return _failOcr(ocrText.failureOrNull!);
+      }
 
       final text = ocrText.valueOrNull!;
       final lowConfidence = text.confidence != null && text.confidence! < 0.65;
@@ -315,6 +324,66 @@ class SolveService {
       final f = UnknownFailure(
         userMessage: 'Chưa giải được câu hỏi từ ảnh. Thử lại nhé.',
         code: 'solve_image_failed',
+        details: e.runtimeType.toString(),
+      );
+      _emitFailure(f);
+      return Failure(f);
+    }
+  }
+
+  /// OCR an image into formatted question text and pause on the idle preview.
+  ///
+  /// Does not consume quota or call DeepSeek until [solveFromText] / Giải.
+  Future<Result<String>> recognizeQuestionFromImage({
+    required String subjectId,
+    required Uint8List bytes,
+    String inputType = 'image',
+  }) async {
+    if (bytes.isEmpty) {
+      const f = ValidationFailure(
+        userMessage: 'Ảnh không có nội dung. Chọn hoặc chụp lại nhé.',
+        code: 'image_empty',
+      );
+      _emitFailure(f);
+      return const Failure(f);
+    }
+
+    _cancelled = false;
+    final jobId = _uuid.v4();
+    _emit(
+      SolveSessionState(
+        stage: SolvePipelineStage.recognizing,
+        sessionId: jobId,
+      ),
+    );
+
+    try {
+      await prepareCredentials();
+      await _dbManager.open(subjectId);
+
+      final ocrText = await _ocrImageToText(bytes, jobId);
+      if (ocrText.isFailure) {
+        return _failOcr(ocrText.failureOrNull!);
+      }
+
+      final text = ocrText.valueOrNull!;
+      _pendingQuotaKind = QuotaSolveKind.picture;
+      _pendingInputType = inputType;
+      _emit(
+        SolveSessionState(
+          stage: SolvePipelineStage.idle,
+          rawText: text.text,
+          ocrConfidence: text.confidence,
+        ),
+      );
+      return Success(text.text);
+    } on AppFailure catch (f) {
+      _emitFailure(f);
+      return Failure(f);
+    } on Object catch (e) {
+      final f = UnknownFailure(
+        userMessage: 'Chưa đọc được câu hỏi từ ảnh. Thử lại nhé.',
+        code: 'recognize_image_failed',
         details: e.runtimeType.toString(),
       );
       _emitFailure(f);
@@ -561,6 +630,7 @@ class SolveService {
       }
     }
     _activeOcrJobId = null;
+    _clearPendingImageSolve();
     _emit(
       const SolveSessionState(
         stage: SolvePipelineStage.idle,
@@ -573,6 +643,7 @@ class SolveService {
     _cancelled = false;
     _deepSeek.cancelActiveSession();
     _activeOcrJobId = null;
+    _clearPendingImageSolve();
     _emit(const SolveSessionState(stage: SolvePipelineStage.idle));
   }
 
@@ -598,6 +669,7 @@ class SolveService {
       _emitFailure(quotaFailure);
       return Failure(quotaFailure);
     }
+    _clearPendingImageSolve();
 
     _cancelled = false;
     _deepSeek.beginCancellableSession();
@@ -1279,6 +1351,18 @@ class SolveService {
   void _emit(SolveSessionState state) {
     _state = state;
     if (!_states.isClosed) _states.add(state);
+  }
+
+  void _clearPendingImageSolve() {
+    _pendingQuotaKind = QuotaSolveKind.text;
+    _pendingInputType = 'pasted_text';
+  }
+
+  Result<T> _failOcr<T>(AppFailure f) {
+    if (f is! CancelledFailure && f.code != 'cancelled') {
+      _emitFailure(f);
+    }
+    return Failure(f);
   }
 
   void _emitFailure(AppFailure f) {

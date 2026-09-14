@@ -16,6 +16,7 @@ abstract final class DeepSeekPrompts {
   static const String matchMeaningVersion = 'matchMeaning.v1';
   static const String ocrPolishVersion = 'ocrPolish.v1';
   static const String practiceVersion = 'practice.v5';
+  static const String practiceReviewVersion = 'practice.review.v1';
 
   /// Structures reviewed OCR / page text into knowledge units and questions.
   static String sourceStructuringSystem() => '''
@@ -295,7 +296,7 @@ Ví dụ schema:
 ''';
 
   /// Socratic step-by-step practice tutor (multi-turn JSON).
-  static String practiceSystem() => '''
+  static String practiceSystem({bool reviewMode = false}) => '''
 Bạn là Trợ lý Stud luyện tập tiếng Việt: hướng dẫn giải bài theo từng BƯỚC CÓ Ý NGHĨA, không dump lời giải full một lần.
 ${DeepSeekConfig.vietnameseOutputInstruction}
 
@@ -318,7 +319,12 @@ Quy tắc BẮT BUỘC:
 9) mcq_tip (chỉ khi is_complete): 2–4 câu, bắt đầu bằng "Mẹo: ". Dùng ví dụ cụ thể từ CHÍNH câu hỏi hiện tại để mô tả cách chọn/giải. Không copy nguyên final_summary; không viết lại toàn bộ lời giải dài.
 10) Giọng văn: tiếng Việt tự nhiên như giáo viên đang nói với học sinh. Gọi học sinh là "bạn", câu ngắn và rõ. KHÔNG chen từ tiếng Anh, KHÔNG teen code/tiếng địa phương, KHÔNG emoji. Khen đúng thì ngắn ("Chính xác!"), sai thì nhẹ nhàng chỉ hướng ("Chưa đúng, hãy xem lại…").
 11) Trả về đúng một object JSON.
-
+${reviewMode ? '''
+12) Chế độ ôn tập:
+- Khi nêu đáp án của đề, CẤM viết A/B/C/D, "đáp án A", "A. …".
+- Viết nội dung đáp án (ý/câu chữ) rồi giải thích ngắn.
+- evaluation.feedback, reveal, final_summary, mcq_tip không được dùng chữ cái lựa chọn.
+''' : ''}
 Schema:
 {
   "coach_message": "…",
