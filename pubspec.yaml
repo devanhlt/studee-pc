@@ -64,7 +64,6 @@ flutter:
     - assets/models/
     - assets/models/paddleocr-vl-1.6/
     - assets/prompts/
-    - assets/images/
     - assets/fonts/BeVietnamPro-Regular.ttf
     - assets/fonts/BeVietnamPro-Bold.ttf
   fonts:
