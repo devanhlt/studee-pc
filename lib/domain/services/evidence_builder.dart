@@ -146,18 +146,15 @@ class EvidenceBuilder {
   List<RankedCandidate> _dedupeAgreeingQaPairs(List<RankedCandidate> ordered) {
     final seen = <String>{};
     final out = <RankedCandidate>[];
-    var dropped = 0;
     for (final c in ordered) {
       if (_isQuestionPair(c) && c.hasAnswer) {
         final key = AnswerPrecedence.evidenceDedupeKey(c);
         if (key.isNotEmpty && !seen.add(key)) {
-          dropped++;
           continue;
         }
       }
       out.add(c);
     }
-    // Soft signal for diagnostics only — not shown as conflict to the model.
     return out;
   }
 

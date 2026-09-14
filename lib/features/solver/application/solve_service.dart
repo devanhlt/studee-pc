@@ -221,7 +221,7 @@ class SolveService {
         inputType: inputType,
         rawText: trimmed,
       );
-      return _runPipeline(
+      return await _runPipeline(
         subjectId: subjectId,
         sessionId: sessionId,
         rawText: trimmed,
@@ -300,7 +300,7 @@ class SolveService {
         );
       }
 
-      return _runPipeline(
+      return await _runPipeline(
         subjectId: subjectId,
         sessionId: sessionId,
         rawText: text.text,
@@ -349,7 +349,7 @@ class SolveService {
     try {
       await prepareCredentials();
       await _dbManager.open(subjectId);
-      return _runPipeline(
+      return await _runPipeline(
         subjectId: subjectId,
         sessionId: sessionId,
         rawText: trimmed,

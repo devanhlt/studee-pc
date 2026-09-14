@@ -286,7 +286,7 @@ class PracticeService {
       if (_cancelled) {
         return const Failure(CancelledFailure(code: 'cancelled'));
       }
-      return _startSession(
+      return await _startSession(
         subjectId: subjectId,
         questionText: ocr.valueOrNull!.text,
         inputType: inputType,

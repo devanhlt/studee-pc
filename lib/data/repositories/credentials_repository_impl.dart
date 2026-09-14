@@ -42,11 +42,6 @@ class CredentialsRepositoryImpl implements CredentialsRepository {
   StoredApiCredentials? _cache;
   Future<StoredApiCredentials>? _inFlight;
 
-  void _invalidateCache() {
-    _cache = null;
-    _inFlight = null;
-  }
-
   static String? _trimOrNull(String? value) {
     if (value == null) return null;
     final trimmed = value.trim();

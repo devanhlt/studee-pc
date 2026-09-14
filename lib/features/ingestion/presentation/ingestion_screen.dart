@@ -399,7 +399,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
               },
               icon: const Icon(AppIcons.more),
             ),
-          ] else if (state != null && !state.status.isTerminal)
+          ] else if (!state.status.isTerminal)
             TextButton(
               onPressed: () => _service.cancel(),
               child: const Text('Hủy'),
@@ -413,7 +413,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
               focusNode: _pasteFocus,
             )
           : _IngestionBody(
-              state: state!,
+              state: state,
               pageControllers: _pageControllers,
               onSubmitText: () => _submitTextReview(state),
               onSubmitStructure: () => _submitStructure(state),
