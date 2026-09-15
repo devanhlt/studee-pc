@@ -11,15 +11,21 @@ class PracticeMcqTips {
   ];
 
   /// Pick one tip matching [question] / [choices] / [context]; rotates by [seed].
+  ///
+  /// When [includeSnippet] is false, returns only the tip line (use when the
+  /// full question is already visible, e.g. Ôn tập Giải đề).
   static String pick({
     required String question,
     required List<String> choices,
     String context = '',
     int seed = 0,
+    bool includeSnippet = true,
   }) {
     final hay = '$question\n${choices.join('\n')}\n$context'.toLowerCase();
     final matched = <String>[];
-    final snippet = _snippet(question.isNotEmpty ? question : context);
+    final snippet = includeSnippet
+        ? _snippet(question.isNotEmpty ? question : context)
+        : null;
 
     void addIf(bool cond, String tip) {
       if (cond) matched.add(tip);
@@ -94,6 +100,8 @@ class PracticeMcqTips {
         'matrix',
         'định thức',
         'det',
+        'hạng',
+        'rank',
         'tích phân',
         'integral',
       ]),
@@ -134,18 +142,18 @@ class PracticeMcqTips {
 
     final pool = matched.isNotEmpty ? matched : _general;
     final base = pool[seed.abs() % pool.length];
-    if (snippet == null) return base;
+    if (!includeSnippet || snippet == null) return base;
     if (matched.isEmpty) {
       return 'Mẹo: với đề “$snippet”, hãy thay lần lượt các đáp án vào điều kiện chính để chọn nhanh.';
     }
     return '$base Áp dụng với đề này: $snippet';
   }
 
+  /// Full question text for the tip — never mid-cut with “…”.
   static String? _snippet(String raw) {
     final t = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (t.length < 12) return null;
-    if (t.length <= 90) return t;
-    return '${t.substring(0, 87)}…';
+    return t;
   }
 
   static bool _hasAny(String hay, List<String> keys) =>

@@ -327,6 +327,8 @@ class ReviewService {
       choices: choices.map((c) => c.display).toList(),
       context: answerMeaning,
       seed: _state.currentIndex + _state.completedCount,
+      // Question is already shown above — avoid truncated re-paste.
+      includeSnippet: false,
     );
     tip = stripMcqChoiceLetters(tip);
     if (!tip.startsWith('Mẹo:') && !tip.startsWith('Mẹo :')) {
