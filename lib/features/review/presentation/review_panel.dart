@@ -7,14 +7,17 @@ import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/app/widgets/studee_controls.dart';
+import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/domain/entities/question.dart';
+import 'package:studee_pc/domain/entities/question_choice.dart';
 import 'package:studee_pc/features/practice/application/practice_service.dart';
 import 'package:studee_pc/features/practice/presentation/practice_chat_panel.dart';
 import 'package:studee_pc/features/review/application/review_service.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
+import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
-/// Ôn tập: Socratic chat over every saved question, with progress and cancel.
+/// Ôn tập: quiz (Giải đề) or Socratic coach (Giải & luyện đề).
 class ReviewPanel extends ConsumerWidget {
   const ReviewPanel({super.key, required this.subjectId});
 
@@ -35,8 +38,9 @@ class ReviewPanel extends ConsumerWidget {
       ReviewStage.completed => _CompletedReview(
           subjectId: subjectId,
           total: review.total,
+          mode: review.mode,
         ),
-      ReviewStage.running => const _RunningReview(),
+      ReviewStage.running => _RunningReview(mode: review.mode),
     };
   }
 }
@@ -82,7 +86,9 @@ class _IdleReview extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    StudeeSectionLabel('Ôn $count câu đã lưu với Trợ lý Stud.'),
+                    StudeeSectionLabel(
+                      'Ôn $count câu đã lưu với Stud.',
+                    ),
                     if (errorMessage != null) ...[
                       const SizedBox(height: AppLayout.gapSm),
                       Text(
@@ -91,14 +97,47 @@ class _IdleReview extends ConsumerWidget {
                       ),
                     ],
                     const SizedBox(height: AppLayout.gapMd),
-                    FilledButton.icon(
-                      onPressed: () => startReviewSession(
-                        context,
-                        ref,
-                        subjectId,
-                      ),
-                      icon: const Icon(AppIcons.review),
-                      label: const Text('Bắt đầu ôn tập'),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final narrow = constraints.maxWidth < 420;
+                        final coach = FilledButton.icon(
+                          onPressed: () => startReviewSession(
+                            context,
+                            ref,
+                            subjectId,
+                            mode: ReviewPlayMode.coach,
+                          ),
+                          icon: const Icon(AppIcons.review),
+                          label: const Text('Giải & luyện đề'),
+                        );
+                        final quiz = OutlinedButton.icon(
+                          onPressed: () => startReviewSession(
+                            context,
+                            ref,
+                            subjectId,
+                            mode: ReviewPlayMode.quiz,
+                          ),
+                          icon: const Icon(AppIcons.checkCircle),
+                          label: const Text('Giải đề'),
+                        );
+                        if (narrow) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              coach,
+                              const SizedBox(height: AppLayout.gapSm),
+                              quiz,
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: coach),
+                            const SizedBox(width: AppLayout.gapSm),
+                            Expanded(child: quiz),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -115,25 +154,48 @@ class _CompletedReview extends ConsumerWidget {
   const _CompletedReview({
     required this.subjectId,
     required this.total,
+    required this.mode,
   });
 
   final String subjectId;
   final int total;
+  final ReviewPlayMode mode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final againLabel =
+        mode == ReviewPlayMode.quiz ? 'Giải đề lại' : 'Luyện lại từ đầu';
     return StudeeStatusState(
       icon: AppIcons.checkCircle,
       title: 'Đã ôn xong $total câu',
       message: 'Bạn có thể ôn lại từ đầu, hoặc chuyển sang Luyện / Giải.',
-      actionLabel: 'Ôn lại từ đầu',
-      onAction: () => startReviewSession(context, ref, subjectId),
+      actionLabel: againLabel,
+      onAction: () => startReviewSession(
+        context,
+        ref,
+        subjectId,
+        mode: mode,
+      ),
     );
   }
 }
 
 class _RunningReview extends ConsumerWidget {
-  const _RunningReview();
+  const _RunningReview({required this.mode});
+
+  final ReviewPlayMode mode;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (mode == ReviewPlayMode.quiz) {
+      return const _RunningQuizReview();
+    }
+    return const _RunningCoachReview();
+  }
+}
+
+class _RunningCoachReview extends ConsumerWidget {
+  const _RunningCoachReview();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -148,45 +210,7 @@ class _RunningReview extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppLayout.pagePadding,
-            0,
-            AppLayout.pagePadding,
-            AppLayout.gapSm,
-          ),
-          child: StudeeGlass(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Câu ${review.displayNumber} / ${review.total}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () =>
-                          ref.read(reviewServiceProvider).cancel(),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.error,
-                      ),
-                      child: const Text('Hủy'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                StudeeGradientProgress(value: review.progress),
-              ],
-            ),
-          ),
-        ),
+        _ReviewProgressHeader(review: review),
         Expanded(
           child: PracticeChatPanel(
             showCancelAlways: false,
@@ -215,33 +239,383 @@ class _RunningReview extends ConsumerWidget {
   }
 }
 
+class _RunningQuizReview extends ConsumerWidget {
+  const _RunningQuizReview();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final service = ref.read(reviewServiceProvider);
+    final review = ref.watch(reviewStateProvider).asData?.value ?? service.current;
+    final question = service.currentQuestion;
+    final choices = service.currentQuizChoices;
+    final lastDone = review.isLastQuestion && review.quizAnswered;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ReviewProgressHeader(review: review),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppLayout.pagePadding,
+              0,
+              AppLayout.pagePadding,
+              AppLayout.pagePadding,
+            ),
+            child: StudeeGlass(
+              padding: const EdgeInsets.all(AppLayout.cardPadding),
+              child: question == null
+                  ? const Center(child: Text('Không có câu hỏi.'))
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                StudyMarkdown(
+                                  StudyNotesMarkdownCode.formatBody(
+                                    question.content.trim(),
+                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                        color: AppColors.primaryText,
+                                        height: 1.45,
+                                      ),
+                                ),
+                                const SizedBox(height: AppLayout.gapMd),
+                                if (choices.isEmpty)
+                                  const Text(
+                                    'Câu này chưa có đáp án lựa chọn đã lưu.',
+                                    style: TextStyle(
+                                      color: AppColors.secondaryText,
+                                    ),
+                                  )
+                                else
+                                  ...choices.map(
+                                    (c) => Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: AppLayout.gapSm,
+                                      ),
+                                      child: _QuizChoiceButton(
+                                        choice: c,
+                                        selectedLabel: review.quizSelectedLabel,
+                                        answered: review.quizAnswered,
+                                        isCorrectPick: review.quizIsCorrect,
+                                        correctLabel:
+                                            question.answerLabel?.trim(),
+                                        onTap: review.quizAnswered
+                                            ? null
+                                            : () => service
+                                                .submitQuizChoice(c),
+                                      ),
+                                    ),
+                                  ),
+                                if (review.quizAnswered) ...[
+                                  const SizedBox(height: AppLayout.gapSm),
+                                  _QuizFeedback(
+                                    isCorrect: review.quizIsCorrect,
+                                    correctLabel: question.answerLabel?.trim(),
+                                    choices: choices,
+                                  ),
+                                  if (review.quizTip != null &&
+                                      review.quizTip!.trim().isNotEmpty) ...[
+                                    const SizedBox(height: AppLayout.gapMd),
+                                    _QuizTipCard(tip: review.quizTip!),
+                                  ],
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppLayout.gapMd),
+                        FilledButton(
+                          onPressed: (!review.quizAnswered &&
+                                  choices.isNotEmpty)
+                              ? null
+                              : () {
+                                  if (!review.quizAnswered &&
+                                      choices.isEmpty) {
+                                    service.skipQuizWithoutChoices();
+                                  }
+                                  service.continueNext();
+                                },
+                          child: Text(
+                            !review.quizAnswered && choices.isEmpty
+                                ? (review.isLastQuestion
+                                    ? 'Bỏ qua & xong'
+                                    : 'Bỏ qua & câu tiếp')
+                                : (lastDone ? 'Xong' : 'Câu tiếp'),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewProgressHeader extends ConsumerWidget {
+  const _ReviewProgressHeader({required this.review});
+
+  final ReviewSessionState review;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppLayout.pagePadding,
+        0,
+        AppLayout.pagePadding,
+        AppLayout.gapSm,
+      ),
+      child: StudeeGlass(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Câu ${review.displayNumber} / ${review.total}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => ref.read(reviewServiceProvider).cancel(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                  ),
+                  child: const Text('Hủy'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            StudeeGradientProgress(value: review.progress),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuizChoiceButton extends StatelessWidget {
+  const _QuizChoiceButton({
+    required this.choice,
+    required this.selectedLabel,
+    required this.answered,
+    required this.isCorrectPick,
+    required this.correctLabel,
+    required this.onTap,
+  });
+
+  final QuestionChoice choice;
+  final String? selectedLabel;
+  final bool answered;
+  final bool? isCorrectPick;
+  final String? correctLabel;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = choice.label.trim().toUpperCase();
+    final selected =
+        selectedLabel != null && selectedLabel!.toUpperCase() == label;
+    final isKey = correctLabel != null &&
+        correctLabel!.toUpperCase() == label;
+
+    Color? border;
+    Color? fill;
+    if (answered) {
+      if (isKey) {
+        border = AppColors.success;
+        fill = AppColors.success.withValues(alpha: 0.12);
+      } else if (selected && isCorrectPick == false) {
+        border = AppColors.error;
+        fill = AppColors.error.withValues(alpha: 0.10);
+      }
+    } else if (selected) {
+      border = AppColors.accent;
+      fill = AppColors.accent.withValues(alpha: 0.10);
+    }
+
+    final body = StudyNotesMarkdownCode.formatBody(choice.content.trim());
+    final display = label.isEmpty ? body : '$label. $body';
+
+    return Material(
+      color: fill ?? Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: border ?? AppColors.border,
+            ),
+          ),
+          child: StudyMarkdown(
+            display,
+            compact: true,
+            style: const TextStyle(
+              height: 1.35,
+              fontWeight: FontWeight.w500,
+              color: AppColors.primaryText,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuizTipCard extends StatelessWidget {
+  const _QuizTipCard({required this.tip});
+
+  final String tip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: AppColors.accent.withValues(alpha: 0.08),
+        border: Border.all(
+          color: AppColors.accent.withValues(alpha: 0.35),
+        ),
+      ),
+      child: StudyMarkdown(
+        tip,
+        compact: true,
+        style: const TextStyle(
+          color: AppColors.primaryText,
+          height: 1.45,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+class _QuizFeedback extends StatelessWidget {
+  const _QuizFeedback({
+    required this.isCorrect,
+    required this.correctLabel,
+    required this.choices,
+  });
+
+  final bool? isCorrect;
+  final String? correctLabel;
+  final List<QuestionChoice> choices;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isCorrect == true) {
+      return const Text(
+        'Chính xác!',
+        style: TextStyle(
+          color: AppColors.success,
+          fontWeight: FontWeight.w700,
+        ),
+      );
+    }
+
+    String correctText = '';
+    if (correctLabel != null && correctLabel!.isNotEmpty) {
+      for (final c in choices) {
+        if (c.label.trim().toUpperCase() == correctLabel!.toUpperCase()) {
+          final body =
+              StudyNotesMarkdownCode.formatBody(c.content.trim());
+          correctText =
+              c.label.isEmpty ? body : '${c.label}. $body';
+          break;
+        }
+      }
+      if (correctText.isEmpty) correctText = correctLabel!;
+    }
+
+    if (correctText.isEmpty) {
+      return const Text(
+        'Chưa đúng.',
+        style: TextStyle(
+          color: AppColors.error,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Chưa đúng. Đáp án:',
+          style: TextStyle(
+            color: AppColors.error,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        StudyMarkdown(
+          correctText,
+          compact: true,
+          style: const TextStyle(
+            color: AppColors.primaryText,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 Future<void> startReviewSession(
   BuildContext context,
   WidgetRef ref,
-  String subjectId,
-) async {
-  final practice = ref.read(practiceServiceProvider);
-  try {
-    await practice.prepareCredentials();
-  } on Object catch (_) {}
-  if (!await practice.hasApiKey()) {
+  String subjectId, {
+  ReviewPlayMode mode = ReviewPlayMode.coach,
+}) async {
+  if (mode == ReviewPlayMode.coach) {
+    final practice = ref.read(practiceServiceProvider);
+    try {
+      await practice.prepareCredentials();
+    } on Object catch (_) {}
+    if (!await practice.hasApiKey()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.'),
+        ),
+      );
+      context.push('/settings');
+      return;
+    }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.'),
-      ),
+    final ok = await ensureDeepSeekPrivacyConsent(
+      context,
+      store: ref.read(privacyConsentStoreProvider),
     );
-    context.push('/settings');
-    return;
+    if (!ok || !context.mounted) return;
   }
-  if (!context.mounted) return;
-  final ok = await ensureDeepSeekPrivacyConsent(
-    context,
-    store: ref.read(privacyConsentStoreProvider),
-  );
-  if (!ok || !context.mounted) return;
 
-  final result = await ref.read(reviewServiceProvider).start(subjectId);
+  final result = await ref.read(reviewServiceProvider).start(
+        subjectId,
+        mode: mode,
+      );
   if (!context.mounted) return;
   result.when(
     success: (_) {},

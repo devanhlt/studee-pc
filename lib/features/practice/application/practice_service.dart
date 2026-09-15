@@ -19,9 +19,11 @@ import 'package:studee_pc/domain/entities/practice_turn.dart';
 import 'package:studee_pc/domain/repositories/credentials_repository.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/domain/repositories/ocr_service.dart';
+import 'package:studee_pc/app/widgets/question_display_format.dart';
 import 'package:studee_pc/features/practice/application/practice_mcq_grade.dart';
 import 'package:studee_pc/features/practice/application/practice_mcq_tips.dart';
 import 'package:studee_pc/features/review/application/review_answer_style.dart';
+import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
 import 'package:uuid/uuid.dart';
 
 enum PracticeStage {
@@ -357,7 +359,8 @@ class PracticeService {
             PracticeUiMessage(
               id: _uuid.v4(),
               role: PracticeMessageRole.system,
-              text: 'Câu hỏi:\n$questionText',
+              text:
+                  'Câu hỏi:\n${StudyNotesMarkdownCode.formatBody(questionText)}',
             ),
         ],
       ),
@@ -397,6 +400,10 @@ class PracticeService {
       }
       if (_cancelled) {
         return const Failure(CancelledFailure(code: 'cancelled'));
+      }
+
+      if (previewQuestionInChat) {
+        _refreshQuestionPreview(questionText, _parsed);
       }
 
       final turn = await _deepSeek.startPracticeTurn(
@@ -851,6 +858,31 @@ class PracticeService {
       return true;
     }
     return false;
+  }
+
+  /// Replace the opening system preview with LLM-parsed LaTeX when available.
+  void _refreshQuestionPreview(String fallbackText, ParsedQuestion? parsed) {
+    final pretty = parsed == null
+        ? StudyNotesMarkdownCode.formatBody(fallbackText)
+        : QuestionDisplayFormat.fromParsed(
+            content: StudyNotesMarkdownCode.formatBody(parsed.content),
+            choices: [
+              for (final c in parsed.choices)
+                (
+                  label: c.label,
+                  content: StudyNotesMarkdownCode.formatBody(c.content),
+                ),
+            ],
+          );
+    final msgs = [..._state.messages];
+    final idx = msgs.indexWhere((m) => m.role == PracticeMessageRole.system);
+    if (idx < 0) return;
+    msgs[idx] = PracticeUiMessage(
+      id: msgs[idx].id,
+      role: PracticeMessageRole.system,
+      text: 'Câu hỏi:\n$pretty',
+    );
+    _emit(_state.copyWith(messages: msgs));
   }
 
   Future<void> cancel() async {

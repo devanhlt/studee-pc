@@ -24,6 +24,7 @@ import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/mobile_image_crop.dart';
 import 'package:studee_pc/features/solver/presentation/question_input_screen.dart';
 import 'package:studee_pc/features/solver/presentation/scan_question_screen.dart';
+import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 final solveStateProvider = StreamProvider.autoDispose<SolveSessionState>((ref) {
@@ -624,7 +625,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                                   ),
                             )
                           else
-                            StudyMarkdown(question),
+                            StudyMarkdown(
+                              StudyNotesMarkdownCode.formatBody(question),
+                            ),
                         ],
                       ),
                     ),
@@ -1049,7 +1052,9 @@ class CollapsedQuestionTile extends StatelessWidget {
           children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: StudyMarkdown(text),
+              child: StudyMarkdown(
+                StudyNotesMarkdownCode.formatBody(text),
+              ),
             ),
           ],
         ),

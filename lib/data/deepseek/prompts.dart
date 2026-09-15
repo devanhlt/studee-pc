@@ -100,6 +100,8 @@ Quy tắc:
 - Không giải câu hỏi; chỉ phân tích cấu trúc.
 - Giữ nguyên dấu tiếng Việt.
 - Công thức toán trong content/choices phải dùng LaTeX với \$...\$ hoặc \$\$...\$\$.
+- Nếu nguồn viết ma trận kiểu Python/list (ví dụ [[1,2],[3,4]]), hãy đổi thành LaTeX \\begin{bmatrix}...\\end{bmatrix} (bọc \$...\$).
+- Đoạn mã nguồn (C/Python/…) giữ trong content; có thể để nguyên để UI bọc code fence.
 
 Trả về đúng một đối tượng JSON theo schema ví dụ:
 {

@@ -6,6 +6,7 @@ import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_typography.dart';
+import 'package:studee_pc/app/widgets/question_display_format.dart';
 
 /// Renders study markdown with LaTeX (`$…$`, `$$…$$`, `\(...\)`, `\[…\]`).
 ///
@@ -34,6 +35,8 @@ class StudyMarkdown extends StatelessWidget {
     return t.contains(r'$') ||
         t.contains(r'\(') ||
         t.contains(r'\[') ||
+        t.contains('[[') ||
+        t.contains('```') ||
         t.contains('**') ||
         t.contains('##') ||
         t.contains('\n- ') ||
@@ -106,7 +109,8 @@ class StudyMarkdown extends StatelessWidget {
 
   /// Normalize common model / OCR LaTeX quirks before rendering.
   static String _prepareLatex(String input) {
-    var text = input.replaceAll('\r\n', '\n');
+    // Python-style matrices etc. → LaTeX before delimiter normalization.
+    var text = QuestionDisplayFormat.enrich(input.replaceAll('\r\n', '\n'));
 
     // Some models emit \\( \\) with double backslashes still escaped.
     text = text.replaceAll(r'\\(', r'\(').replaceAll(r'\\)', r'\)');
