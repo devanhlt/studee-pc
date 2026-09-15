@@ -74,6 +74,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'import',
             name: 'import',
+            redirect: (context, state) {
+              if (!_isDesktop) {
+                final id = state.pathParameters['id'];
+                return id == null ? '/' : '/subjects/$id';
+              }
+              return null;
+            },
             pageBuilder: (context, state) {
               final id = state.pathParameters['id']!;
               return _fadeRisePage(

@@ -68,6 +68,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   }
 
   void _openImport() {
+    if (_isMobile) return;
     context.push('/subjects/${widget.subjectId}/import');
   }
 
@@ -349,11 +350,12 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   ),
-                IconButton(
-                  tooltip: 'Nhập kiến thức',
-                  onPressed: _openImport,
-                  icon: const Icon(AppIcons.libraryAdd),
-                ),
+                if (!_isMobile)
+                  IconButton(
+                    tooltip: 'Nhập kiến thức',
+                    onPressed: _openImport,
+                    icon: const Icon(AppIcons.libraryAdd),
+                  ),
                 PopupMenuButton<_HeaderMenuAction>(
                   tooltip: 'Thêm',
                   icon: const Icon(AppIcons.moreVert),
@@ -481,6 +483,7 @@ class _KnowledgePanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(subjectKnowledgeProvider(subjectId));
+    final canImport = !_isMobile;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -499,27 +502,39 @@ class _KnowledgePanel extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppLayout.gapXs),
                 Text(
-                  'Càng nhiều tài liệu, đáp án càng sát với giáo trình bạn đang học.',
+                  canImport
+                      ? 'Càng nhiều tài liệu, đáp án càng sát với giáo trình bạn đang học.'
+                      : 'Kiến thức đã lưu trên máy. Trên điện thoại, thêm môn bằng Nhập từ ZIP.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppLayout.gapMd),
                 Row(
                   children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: onImport,
-                        icon: const Icon(
-                          AppIcons.libraryAdd,
-                          size: AppIcons.sizeInline,
+                    if (canImport) ...[
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: onImport,
+                          icon: const Icon(
+                            AppIcons.libraryAdd,
+                            size: AppIcons.sizeInline,
+                          ),
+                          label: const Text('Nhập thêm'),
                         ),
-                        label: const Text('Nhập thêm'),
                       ),
-                    ),
-                    const SizedBox(width: AppLayout.gapSm),
-                    OutlinedButton(
-                      onPressed: onBackToSolve,
-                      child: const Text('Giải ngay'),
-                    ),
+                      const SizedBox(width: AppLayout.gapSm),
+                    ],
+                    if (canImport)
+                      OutlinedButton(
+                        onPressed: onBackToSolve,
+                        child: const Text('Giải ngay'),
+                      )
+                    else
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: onBackToSolve,
+                          child: const Text('Giải ngay'),
+                        ),
+                      ),
                   ],
                 ),
               ],
@@ -540,10 +555,11 @@ class _KnowledgePanel extends ConsumerWidget {
                 return StudeeStatusState(
                   icon: AppIcons.book,
                   title: 'Chưa có kiến thức nào',
-                  message:
-                      'Thêm tài liệu vào đây để Trợ lý Stud giải bài dựa trên những gì bạn đã lưu.',
-                  actionLabel: 'Nhập kiến thức',
-                  onAction: onImport,
+                  message: canImport
+                      ? 'Thêm tài liệu vào đây để Trợ lý Stud giải bài dựa trên những gì bạn đã lưu.'
+                      : 'Trên điện thoại hãy dùng Nhập từ ZIP để mang môn học (kèm kiến thức) từ máy tính.',
+                  actionLabel: canImport ? 'Nhập kiến thức' : null,
+                  onAction: canImport ? onImport : null,
                 );
               }
               return ListView.separated(
