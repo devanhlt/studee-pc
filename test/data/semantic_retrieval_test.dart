@@ -107,6 +107,30 @@ class _FakeDeepSeek implements DeepSeekClient {
       {};
 
   @override
+  Future<String> generateMcqStrategyTip({
+    required String question,
+    required List<String> choices,
+    String? correctAnswer,
+  }) async =>
+      'Mẹo: tip giả lập.';
+
+  @override
+  Future<QuizAnswerResolution> resolveQuizAnswer({
+    required String question,
+    required List<({String label, String content})> choices,
+  }) async {
+    if (choices.isEmpty) {
+      return const QuizAnswerResolution(label: '', content: '');
+    }
+    final first = choices.first;
+    return QuizAnswerResolution(
+      label: first.label,
+      content: first.content,
+      briefReason: 'Giả lập',
+    );
+  }
+
+  @override
   Future<String> generateKnowledgeSummary({
     required String subjectName,
     required List<KnowledgeSummaryUnit> units,

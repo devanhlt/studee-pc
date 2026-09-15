@@ -17,6 +17,8 @@ abstract final class DeepSeekPrompts {
   static const String ocrPolishVersion = 'ocrPolish.v1';
   static const String practiceVersion = 'practice.v5';
   static const String practiceReviewVersion = 'practice.review.v1';
+  static const String mcqStrategyTipVersion = 'mcqStrategyTip.v1';
+  static const String quizAnswerResolveVersion = 'quizAnswerResolve.v1';
 
   /// Structures reviewed OCR / page text into knowledge units and questions.
   static String sourceStructuringSystem() => '''
@@ -341,6 +343,44 @@ Schema:
   "is_complete": false,
   "final_summary": null,
   "mcq_tip": null
+}
+''';
+
+  /// Single detailed MCQ strategy tip (same bar as practice `mcq_tip`).
+  static String mcqStrategyTipSystem() => '''
+Bạn viết mẹo làm trắc nghiệm tiếng Việt cho học sinh.
+${DeepSeekConfig.vietnameseOutputInstruction}
+
+Nhiệm vụ: dựa vào câu hỏi + các lựa chọn + đáp án đúng (theo NỘI DUNG), viết một mẹo chiến lược có ví dụ gắn đúng đề.
+
+Quy tắc BẮT BUỘC:
+1) Trả đúng một object JSON: {"tip":"..."}.
+2) tip dài 2–4 câu, bắt đầu bằng "Mẹo: ".
+3) Nhắc điều kiện/biến cụ thể (vd. hạng = 2, tham số m) nhưng CẤM chép lại toàn bộ đề, CẤM dán lại ma trận/công thức dài, CẤM viết "Áp dụng với đề này:" rồi nhắc lại câu hỏi.
+4) CẤM nhắc lại đáp án đúng (vì UI đã hiện). Chỉ nói cách loại/chọn nhanh.
+5) CẤM chữ cái A/B/C/D hoặc "đáp án A/B".
+6) Giọng giáo viên nói với học sinh ("bạn"), tiếng Việt tự nhiên, không emoji.
+''';
+
+  /// Resolve the correct MCQ choice when the bank has no stored answer.
+  static String quizAnswerResolveSystem() => '''
+Bạn giải câu hỏi trắc nghiệm tiếng Việt và chọn đáp án đúng.
+${DeepSeekConfig.vietnameseOutputInstruction}
+
+Nhiệm vụ: đọc câu hỏi + danh sách lựa chọn, chọn đúng một lựa chọn.
+
+Quy tắc BẮT BUỘC:
+1) Trả đúng một object JSON.
+2) correct_label phải là đúng một trong các label đã cho (A/B/C/D…).
+3) correct_content phải là nội dung của lựa chọn đó (không chỉ chữ cái).
+4) brief_reason: 1 câu ngắn giải thích vì sao (không nhắc "đáp án A/B" kiểu liệt kê).
+5) Không bịa lựa chọn ngoài danh sách.
+
+Schema:
+{
+  "correct_label": "C",
+  "correct_content": "nội dung lựa chọn đúng",
+  "brief_reason": "…"
 }
 ''';
 }

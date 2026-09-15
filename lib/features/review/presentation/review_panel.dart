@@ -305,26 +305,56 @@ class _RunningQuizReview extends ConsumerWidget {
                                         selectedLabel: review.quizSelectedLabel,
                                         answered: review.quizAnswered,
                                         isCorrectPick: review.quizIsCorrect,
-                                        correctLabel:
+                                        correctLabel: review.quizCorrectLabel ??
                                             question.answerLabel?.trim(),
-                                        onTap: review.quizAnswered
+                                        onTap: (review.quizAnswered ||
+                                                review.quizResolvingAnswer)
                                             ? null
                                             : () => service
                                                 .submitQuizChoice(c),
                                       ),
                                     ),
                                   ),
+                                if (review.quizResolvingAnswer) ...[
+                                  const SizedBox(height: AppLayout.gapMd),
+                                  const Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                      SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Đề chưa có đáp án lưu — Stud đang suy luận…',
+                                          style: TextStyle(
+                                            color: AppColors.secondaryText,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                                 if (review.quizAnswered) ...[
                                   const SizedBox(height: AppLayout.gapSm),
                                   _QuizFeedback(
                                     isCorrect: review.quizIsCorrect,
-                                    correctLabel: question.answerLabel?.trim(),
+                                    correctLabel: review.quizCorrectLabel ??
+                                        question.answerLabel?.trim(),
+                                    correctContent: review.quizCorrectContent,
+                                    fromLlm: review.quizAnswerFromLlm,
                                     choices: choices,
                                   ),
                                   if (review.quizTip != null &&
                                       review.quizTip!.trim().isNotEmpty) ...[
                                     const SizedBox(height: AppLayout.gapMd),
-                                    _QuizTipCard(tip: review.quizTip!),
+                                    _QuizTipCard(
+                                      tip: review.quizTip!,
+                                      loading: review.quizTipLoading,
+                                    ),
                                   ],
                                 ],
                               ],
@@ -334,7 +364,8 @@ class _RunningQuizReview extends ConsumerWidget {
                         const SizedBox(height: AppLayout.gapMd),
                         FilledButton(
                           onPressed: (!review.quizAnswered &&
-                                  choices.isNotEmpty)
+                                      choices.isNotEmpty) ||
+                                  review.quizResolvingAnswer
                               ? null
                               : () {
                                   if (!review.quizAnswered &&
@@ -483,9 +514,10 @@ class _QuizChoiceButton extends StatelessWidget {
 }
 
 class _QuizTipCard extends StatelessWidget {
-  const _QuizTipCard({required this.tip});
+  const _QuizTipCard({required this.tip, this.loading = false});
 
   final String tip;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
@@ -499,14 +531,39 @@ class _QuizTipCard extends StatelessWidget {
           color: AppColors.accent.withValues(alpha: 0.35),
         ),
       ),
-      child: StudyMarkdown(
-        tip,
-        compact: true,
-        style: const TextStyle(
-          color: AppColors.primaryText,
-          height: 1.45,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StudyMarkdown(
+            tip,
+            compact: true,
+            style: const TextStyle(
+              color: AppColors.primaryText,
+              height: 1.45,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (loading) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Đang soạn mẹo chi tiết…',
+                  style: TextStyle(
+                    color: AppColors.secondaryText,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -517,21 +574,41 @@ class _QuizFeedback extends StatelessWidget {
     required this.isCorrect,
     required this.correctLabel,
     required this.choices,
+    this.correctContent,
+    this.fromLlm = false,
   });
 
   final bool? isCorrect;
   final String? correctLabel;
+  final String? correctContent;
+  final bool fromLlm;
   final List<QuestionChoice> choices;
 
   @override
   Widget build(BuildContext context) {
     if (isCorrect == true) {
-      return const Text(
-        'Chính xác!',
-        style: TextStyle(
-          color: AppColors.success,
-          fontWeight: FontWeight.w700,
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Chính xác!',
+            style: TextStyle(
+              color: AppColors.success,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (fromLlm)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'Đáp án do Stud suy luận (đề chưa có đáp án lưu).',
+                style: TextStyle(
+                  color: AppColors.secondaryText,
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+        ],
       );
     }
 
@@ -546,13 +623,24 @@ class _QuizFeedback extends StatelessWidget {
           break;
         }
       }
-      if (correctText.isEmpty) correctText = correctLabel!;
+    }
+    if (correctText.isEmpty &&
+        correctContent != null &&
+        correctContent!.trim().isNotEmpty) {
+      final label = correctLabel?.trim();
+      final body = StudyNotesMarkdownCode.formatBody(correctContent!.trim());
+      correctText = (label != null && label.isNotEmpty) ? '$label. $body' : body;
+    }
+    if (correctText.isEmpty && correctLabel != null) {
+      correctText = correctLabel!;
     }
 
     if (correctText.isEmpty) {
-      return const Text(
-        'Chưa đúng.',
-        style: TextStyle(
+      return Text(
+        fromLlm
+            ? 'Chưa đúng. Stud chưa suy ra được đáp án.'
+            : 'Chưa đúng.',
+        style: const TextStyle(
           color: AppColors.error,
           fontWeight: FontWeight.w600,
         ),
@@ -578,6 +666,17 @@ class _QuizFeedback extends StatelessWidget {
             fontWeight: FontWeight.w500,
           ),
         ),
+        if (fromLlm)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'Đáp án do Stud suy luận (đề chưa có đáp án lưu).',
+              style: TextStyle(
+                color: AppColors.secondaryText,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
       ],
     );
   }

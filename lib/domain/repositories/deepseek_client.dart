@@ -136,6 +136,19 @@ abstract interface class DeepSeekClient {
     List<StudyTipItem> items,
   );
 
+  /// Detailed MCQ strategy tip (2–4 sentences, same rules as practice `mcq_tip`).
+  Future<String> generateMcqStrategyTip({
+    required String question,
+    required List<String> choices,
+    String? correctAnswer,
+  });
+
+  /// Pick the correct MCQ choice when no stored answer exists.
+  Future<QuizAnswerResolution> resolveQuizAnswer({
+    required String question,
+    required List<({String label, String content})> choices,
+  });
+
   /// Clustered study insights for export (stats + examples; no full Q&A dump).
   /// Returns Markdown body (no document title / disclaimer).
   Future<String> generateKnowledgeSummary({
@@ -187,6 +200,22 @@ abstract interface class DeepSeekClient {
 
   /// Abort the active cancellable session (in-flight waits / retries).
   void cancelActiveSession();
+}
+
+/// LLM-resolved correct choice for a quiz question without a stored answer.
+class QuizAnswerResolution extends Equatable {
+  const QuizAnswerResolution({
+    required this.label,
+    required this.content,
+    this.briefReason,
+  });
+
+  final String label;
+  final String content;
+  final String? briefReason;
+
+  @override
+  List<Object?> get props => [label, content, briefReason];
 }
 
 /// One question used when asking DeepSeek for a memorization tip.

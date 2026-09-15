@@ -149,6 +149,81 @@ class PracticeMcqTips {
     return '$base Áp dụng với đề này: $snippet';
   }
 
+  /// Longer tip (2–4 sentences) with strategy only — never restate the stem
+  /// or correct answer (those are already on screen in Giải đề).
+  static String pickDetailed({
+    required String question,
+    required List<String> choices,
+    String context = '',
+    String? correctAnswerMeaning,
+    int seed = 0,
+  }) {
+    final base = pick(
+      question: question,
+      choices: choices,
+      context: context,
+      seed: seed,
+      includeSnippet: false,
+    );
+    final hay = '$question\n${choices.join('\n')}\n$context'.toLowerCase();
+    final parts = <String>[base];
+
+    if (_hasAny(hay, const ['ma trận', 'matrix', 'hạng', 'rank', 'định thức', 'det'])) {
+      parts.add(
+        'Với đề ma trận, hãy nhìn điều kiện đề hỏi (hạng, khả nghịch, định thức…) '
+        'rồi thử các giá trị đặc biệt của tham số (thường là 0 hoặc 1) để loại nhanh '
+        'trước khi khai triển hết.',
+      );
+    } else if (_hasAny(hay, const ['phương trình', 'nghiệm', 'equation'])) {
+      parts.add(
+        'Thay lần lượt từng lựa chọn vào điều kiện chính của đề; lựa chọn nào '
+        'làm phương trình/điều kiện đúng thì giữ, còn lại loại.',
+      );
+    } else if (choices.length >= 2) {
+      parts.add(
+        'So sánh các lựa chọn: tập trung vào chỗ khác nhau (dấu, miền, đẳng thức), '
+        'loại đáp án mâu thuẫn với điều kiện đề rồi mới tính chi tiết.',
+      );
+    }
+
+    parts.add(
+      'Sau khi loại, kiểm tra lại một lần xem lựa chọn còn lại có thỏa '
+      'đúng điều kiện đề hỏi không.',
+    );
+
+    // correctAnswerMeaning is intentionally unused in the tip text — the
+    // feedback line already shows the answer; avoid duplicating it here.
+    return withoutQuestionEcho(parts.join(' '), question);
+  }
+
+  /// Drop pasted question / “Áp dụng với đề này: …” tails from tip text.
+  static String withoutQuestionEcho(String tip, String question) {
+    var t = tip.trim();
+    // Strip common re-paste prefixes and everything after.
+    t = t.replaceAll(
+      RegExp(r'\s*Áp dụng với đề này\s*[:：].*$', caseSensitive: false),
+      '',
+    );
+    t = t.replaceAll(
+      RegExp(r'\s*với đề\s*[“"][^”"]+[”"].*$', caseSensitive: false),
+      '',
+    );
+
+    final stem = question.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (stem.length >= 24) {
+      // If tip contains a long chunk of the stem, cut from that point.
+      final probeLen = stem.length > 48 ? 48 : stem.length;
+      final probe = stem.substring(0, probeLen);
+      final idx = t.indexOf(probe);
+      if (idx >= 8) {
+        t = t.substring(0, idx).trim();
+      }
+    }
+    // Also cut at "Câu N" restarts that look like a stem dump.
+    t = t.replaceAll(RegExp(r'\s*Câu\s+\d+\s+Cho\b.*$', caseSensitive: false), '');
+    return t.trim();
+  }
+
   /// Full question text for the tip — never mid-cut with “…”.
   static String? _snippet(String raw) {
     final t = raw.replaceAll(RegExp(r'\s+'), ' ').trim();

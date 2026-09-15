@@ -224,6 +224,101 @@ class DeepSeekClientImpl implements DeepSeekClient {
   }
 
   @override
+  Future<String> generateMcqStrategyTip({
+    required String question,
+    required List<String> choices,
+    String? correctAnswer,
+  }) async {
+    final userPayload = {
+      'question': question,
+      'choices': choices,
+      if (correctAnswer != null && correctAnswer.trim().isNotEmpty)
+        'correct_answer_content': correctAnswer.trim(),
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.mcqStrategyTipSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: DeepSeekPrompts.mcqStrategyTipVersion,
+      maxTokensOverride: 512,
+    );
+    final map = _requireJsonObject(raw);
+    var tip = '${map['tip'] ?? map['mcq_tip'] ?? ''}'.trim();
+    if (tip.isEmpty) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi mẹo không có nội dung.',
+        code: 'mcq_strategy_tip_empty',
+      );
+    }
+    if (!tip.startsWith('Mẹo:') && !tip.startsWith('Mẹo :')) {
+      tip = 'Mẹo: $tip';
+    }
+    return tip;
+  }
+
+  @override
+  Future<QuizAnswerResolution> resolveQuizAnswer({
+    required String question,
+    required List<({String label, String content})> choices,
+  }) async {
+    final userPayload = {
+      'question': question,
+      'choices': [
+        for (final c in choices)
+          {
+            'label': c.label,
+            'content': c.content,
+          },
+      ],
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.quizAnswerResolveSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: DeepSeekPrompts.quizAnswerResolveVersion,
+      maxTokensOverride: 512,
+    );
+    final map = _requireJsonObject(raw);
+    var label = '${map['correct_label'] ?? ''}'.trim().toUpperCase();
+    var content = '${map['correct_content'] ?? ''}'.trim();
+    final reason = '${map['brief_reason'] ?? ''}'.trim();
+
+    // Prefer matching an offered choice by label, then by content.
+    ({String label, String content})? matched;
+    for (final c in choices) {
+      if (c.label.trim().toUpperCase() == label) {
+        matched = c;
+        break;
+      }
+    }
+    if (matched == null && content.isNotEmpty) {
+      for (final c in choices) {
+        final cc = c.content.trim().toLowerCase();
+        final got = content.toLowerCase();
+        if (cc == got || cc.contains(got) || got.contains(cc)) {
+          matched = c;
+          break;
+        }
+      }
+    }
+    if (matched != null) {
+      label = matched.label.trim().toUpperCase();
+      if (matched.content.trim().isNotEmpty) {
+        content = matched.content.trim();
+      }
+    }
+    if (label.isEmpty && content.isEmpty) {
+      throw const UnknownFailure(
+        userMessage: 'Không suy ra được đáp án từ mô hình.',
+        code: 'quiz_answer_resolve_empty',
+      );
+    }
+    return QuizAnswerResolution(
+      label: label,
+      content: content,
+      briefReason: reason.isEmpty ? null : reason,
+    );
+  }
+
+  @override
   Future<String> generateKnowledgeSummary({
     required String subjectName,
     required List<KnowledgeSummaryUnit> units,

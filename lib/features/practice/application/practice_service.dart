@@ -741,7 +741,7 @@ class PracticeService {
       // One MCQ strategy tip at the end (LLM first, heuristic fallback).
       var tip = (mcqTip != null && mcqTip.isNotEmpty)
           ? mcqTip
-          : PracticeMcqTips.pick(
+          : PracticeMcqTips.pickDetailed(
               question: _state.questionText ??
                   _state.currentCheckQuestion ??
                   summary ??
