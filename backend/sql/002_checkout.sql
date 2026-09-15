@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS checkout_sessions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   pay_code text NOT NULL UNIQUE,
-  plan text NOT NULL CHECK (plan IN ('basic', 'pro', '3xpro')),
+  plan text NOT NULL,
   amount_vnd integer NOT NULL CHECK (amount_vnd > 0),
   status text NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'claimed', 'paid', 'expired')),

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
@@ -52,12 +51,6 @@ export function AdminPaymentClient({ initial }: { initial: PaymentState }) {
     if (!b || !a) return previewQr;
     return `https://img.vietqr.io/image/${b}-${a}-compact.png?${params.toString()}`;
   }, [bank, account, holder, previewQr]);
-
-  async function logout() {
-    await fetch("/api/admin/session", { method: "DELETE" });
-    router.replace("/admin/login");
-    router.refresh();
-  }
 
   async function copyText(label: string, value: string) {
     try {
@@ -112,61 +105,19 @@ export function AdminPaymentClient({ initial }: { initial: PaymentState }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: "1.5rem" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "0.75rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <nav style={{ display: "flex", gap: "0.85rem", fontSize: "0.92rem" }}>
-          <Link href="/admin/codes">Mã kích hoạt</Link>
-          <Link href="/admin/keys">API keys</Link>
-          <span className="muted">Thanh toán</span>
-        </nav>
-        <button className="btn btn-ghost" type="button" onClick={logout}>
-          Đăng xuất
-        </button>
-      </div>
-
+    <div className="stack">
       {error ? <p className="err">{error}</p> : null}
-      {okMsg ? (
-        <p style={{ margin: 0, color: "var(--ok)" }}>{okMsg}</p>
-      ) : null}
+      {okMsg ? <p className="ok">{okMsg}</p> : null}
 
       <section className="card">
-        <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.1rem" }}>
-          Webhook endpoint
-        </h2>
+        <h2>Webhook endpoint</h2>
         <p className="muted" style={{ margin: "0 0 1rem", fontSize: "0.9rem" }}>
           Dán URL này vào SePay → Webhooks. Event: <strong>Tiền vào</strong>.
           Payload: <strong>JSON</strong>. Không gọi API SePay từ đây — bạn tạo
           webhook thủ công trên dashboard SePay.
         </p>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr auto",
-            gap: "0.75rem",
-            alignItems: "center",
-          }}
-        >
-          <code
-            className="mono"
-            style={{
-              display: "block",
-              padding: "0.75rem 0.9rem",
-              background: "var(--elevated, #111)",
-              borderRadius: 8,
-              wordBreak: "break-all",
-              fontSize: "0.88rem",
-            }}
-          >
-            {webhookUrl}
-          </code>
+        <div className="form-row">
+          <code className="mono code-box">{webhookUrl}</code>
           <button
             className="btn"
             type="button"
@@ -177,17 +128,10 @@ export function AdminPaymentClient({ initial }: { initial: PaymentState }) {
         </div>
 
         <div style={{ marginTop: "1.25rem" }}>
-          <label htmlFor="webhook_secret" style={{ display: "block", marginBottom: 6 }}>
+          <label htmlFor="webhook_secret">
             Webhook secret (tuỳ chọn — dán vào SePay làm API Key)
           </label>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto auto",
-              gap: "0.5rem",
-              alignItems: "center",
-            }}
-          >
+          <div className="form-row triple">
             <input
               id="webhook_secret"
               type="password"
@@ -225,15 +169,7 @@ export function AdminPaymentClient({ initial }: { initial: PaymentState }) {
             </button>
           </div>
           {secretPresent ? (
-            <label
-              style={{
-                display: "flex",
-                gap: "0.5rem",
-                alignItems: "center",
-                marginTop: "0.65rem",
-                fontSize: "0.88rem",
-              }}
-            >
+            <label className="check">
               <input
                 type="checkbox"
                 checked={clearSecret}
@@ -246,12 +182,12 @@ export function AdminPaymentClient({ initial }: { initial: PaymentState }) {
       </section>
 
       <section className="card">
-        <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.1rem" }}>VietQR</h2>
+        <h2>VietQR</h2>
         <p className="muted" style={{ margin: "0 0 1rem", fontSize: "0.9rem" }}>
           Đủ 3 trường để tạo mã QR chuyển khoản (img.vietqr.io). App sẽ nhận URL
           QR từ backend khi tạo checkout.
         </p>
-        <form onSubmit={save} style={{ display: "grid", gap: "0.85rem" }}>
+        <form onSubmit={save} className="form-stack">
           <div className="field">
             <label htmlFor="bank">Ngân hàng (BIN hoặc short name)</label>
             <input
@@ -288,7 +224,7 @@ export function AdminPaymentClient({ initial }: { initial: PaymentState }) {
         </form>
 
         {livePreview ? (
-          <div style={{ marginTop: "1.25rem", textAlign: "center" }}>
+          <div className="qr-preview">
             <p className="muted" style={{ fontSize: "0.85rem" }}>
               Preview · 19.000₫ · STUDEEPREVIEW
             </p>
@@ -298,11 +234,6 @@ export function AdminPaymentClient({ initial }: { initial: PaymentState }) {
               alt="VietQR preview"
               width={240}
               height={240}
-              style={{
-                margin: "0.5rem auto 0",
-                borderRadius: 12,
-                background: "#fff",
-              }}
             />
           </div>
         ) : null}

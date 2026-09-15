@@ -349,7 +349,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
       atmosphereIntensity: AppLayout.atmospherePage,
       topBar: StudeeGlassAppBar(
         title: 'Nhập kiến thức',
-        subtitle: choosingSource ? 'Dán văn bản hoặc chọn nguồn' : null,
+        subtitle: choosingSource ? 'Nhập hoặc chọn nguồn' : null,
         actions: [
           if (choosingSource) ...[
             Padding(

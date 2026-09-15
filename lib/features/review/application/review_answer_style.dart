@@ -3,9 +3,11 @@ String stripMcqChoiceLetters(String text) {
   var t = text.trim();
   if (t.isEmpty) return t;
 
+  // "Đáp án đúng là A." / "Đáp án đúng: B)" / "Answer C"
+  // Require a standalone letter so "class" / "and" are not eaten as A–D.
   t = t.replaceAllMapped(
     RegExp(
-      r'(Đáp án(?:\s*đúng)?(?:\s*là)?|Answer)\s*[:：]?\s*[A-Da-d]\s*[.)]?\s*',
+      r'(Đáp án(?:\s*đúng)?(?:\s*là)?|Answer)\s*[:：]?\s*[A-Da-d](?!\w)\s*[.)]?\s*',
       caseSensitive: false,
     ),
     (_) => '',

@@ -23,6 +23,7 @@ class PracticeChatPanel extends ConsumerStatefulWidget {
     required this.onNewQuestion,
     required this.onCancel,
     this.completedMessage,
+    this.completedComposerHint,
     this.nextQuestionLabel,
     this.showCancelAlways = false,
   });
@@ -30,6 +31,7 @@ class PracticeChatPanel extends ConsumerStatefulWidget {
   final VoidCallback onNewQuestion;
   final VoidCallback onCancel;
   final String? completedMessage;
+  final String? completedComposerHint;
   final String? nextQuestionLabel;
   final bool showCancelAlways;
 
@@ -212,7 +214,8 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
                   maxLines: 4,
                   decoration: InputDecoration(
                     hintText: state.stage == PracticeStage.completed
-                        ? 'Bài luyện đã kết thúc'
+                        ? (widget.completedComposerHint ??
+                            'Bài luyện đã kết thúc')
                         : (state.currentChoices.isNotEmpty
                             ? 'Gõ A hoặc B…'
                             : (state.currentCheckQuestion ??

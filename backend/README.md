@@ -16,13 +16,14 @@ Admin: https://studied.vinius.org/admin/login
 Password: value of `ADMIN_PASSWORD` in local `backend/.env.local` (gitignored).
 
 - Codes: `/admin/codes`
+- Packages: `/admin/packages` (price / token / TTL; at least one package required)
 - API key rotation: `/admin/keys` (DB overrides for DeepSeek / Mathpix; env remains fallback)
   - If OCR returns `mathpix_not_configured` / HTTP 503, paste Mathpix `app_id` + `app_key` there (or set `MATHPIX_*` env and redeploy).
 - Payment: `/admin/payment` (VietQR bank details + webhook URL to paste into SePay)
 
 ## Setup
 
-1. Neon Postgres — run [`sql/schema.sql`](sql/schema.sql), then [`sql/002_checkout.sql`](sql/002_checkout.sql), then [`sql/003_quota_tokens.sql`](sql/003_quota_tokens.sql) if upgrading an existing database.
+1. Neon Postgres — run [`sql/schema.sql`](sql/schema.sql), then [`sql/002_checkout.sql`](sql/002_checkout.sql), then [`sql/003_quota_tokens.sql`](sql/003_quota_tokens.sql) and [`sql/004_packages.sql`](sql/004_packages.sql) if upgrading an existing database.
 2. Copy [`.env.example`](.env.example) → `.env.local` and fill values (set real `MATHPIX_APP_ID` / `MATHPIX_APP_KEY`).
 3. `npm install && npm run dev`
 4. Open `/admin/payment`, save bank / STK / chủ TK, **copy the webhook URL**, paste it into SePay by hand.
@@ -55,4 +56,4 @@ App clients send `Authorization: Bearer <activation_code>`.
 Proxy routes (`/v1/chat/completions`, `/v3/text`, `/v3/pdf`) **authenticate only** — they do not increment usage.
 
 The app calls `POST /v1/solves/consume` **once per question** with `{ "kind": "text" | "picture" }`.
-Text costs **100 token**, picture costs **200 token**. Plan quotas are legacy solve counts × 100 (Basic 10.000, Pro 50.000, 3xPro 150.000).
+Plan quotas are Basic 10.000, Pro 50.000, 3xPro 150.000 token.

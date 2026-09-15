@@ -1,15 +1,11 @@
 import type { Metadata } from "next";
-import { DM_Sans, Fraunces } from "next/font/google";
+import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  subsets: ["latin", "latin-ext"],
+const beVietnam = Be_Vietnam_Pro({
+  subsets: ["latin", "latin-ext", "vietnamese"],
+  weight: ["400", "500", "600", "700"],
   variable: "--font-sans",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin", "latin-ext"],
-  variable: "--font-display",
 });
 
 export const metadata: Metadata = {
@@ -24,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi">
-      <body className={`${dmSans.variable} ${fraunces.variable} antialiased`}>
+      <body className={`${beVietnam.variable} ${beVietnam.className} antialiased`}>
         {children}
       </body>
     </html>

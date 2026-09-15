@@ -7,9 +7,7 @@ import 'package:studee_pc/features/settings/application/entitlement_provider.dar
 import 'package:studee_pc/features/settings/application/settings_service.dart';
 
 void main() {
-  testWidgets('token status bar fills by remaining quota without numbers', (
-    tester,
-  ) async {
+  testWidgets('token status bar shows remaining quota text', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -30,8 +28,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('token'), findsNothing);
-    expect(find.text('Pro'), findsNothing);
+    expect(find.text('40,000 / 50,000'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.byType(FractionallySizedBox), findsOneWidget);
 
@@ -48,7 +45,9 @@ void main() {
     );
   });
 
-  testWidgets('token status bar is empty without a code', (tester) async {
+  testWidgets('token status bar shows empty-state text without a code', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -61,7 +60,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Chưa có mã'), findsNothing);
+    expect(find.text('Chưa có mã'), findsOneWidget);
     final fill = tester.widget<FractionallySizedBox>(
       find.byType(FractionallySizedBox),
     );

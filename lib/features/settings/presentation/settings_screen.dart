@@ -16,6 +16,10 @@ final settingsCredentialsProvider =
   return ref.watch(settingsServiceProvider).loadCredentials();
 });
 
+final packagesCatalogProvider = FutureProvider.autoDispose((ref) {
+  return ref.watch(packagesClientProvider).fetchCatalog();
+});
+
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -119,6 +123,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final credsAsync = ref.watch(settingsCredentialsProvider);
+    final packagesAsync = ref.watch(packagesCatalogProvider);
 
     var hasCode = false;
     String? maskedCode;
@@ -131,6 +136,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             : '••••${code.substring(code.length - 4)}';
       }
     });
+
+    final showRequestCode = packagesAsync.maybeWhen(
+      data: (result) => result.when(
+        success: (catalog) => catalog.enabled,
+        failure: (_) => false,
+      ),
+      orElse: () => false,
+    );
 
     return StudeePageScaffold(
       atmosphereIntensity: AppLayout.atmospherePage,
@@ -207,33 +220,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          const _OrDivider(),
-          const SizedBox(height: 16),
-          StudeeGlass(
-            padding: const EdgeInsets.all(AppLayout.cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _SectionTitle('Yêu cầu mã'),
-                const SizedBox(height: 8),
-                Text(
-                  'Chưa có mã? Chọn gói và thanh toán để nhận mã kích hoạt ngay.',
-                  style: TextStyle(
-                    color: AppColors.secondaryText.withValues(alpha: 0.95),
-                    height: 1.4,
-                    fontSize: 13,
+          if (showRequestCode) ...[
+            const SizedBox(height: 16),
+            const _OrDivider(),
+            const SizedBox(height: 16),
+            StudeeGlass(
+              padding: const EdgeInsets.all(AppLayout.cardPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _SectionTitle('Yêu cầu mã'),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Chưa có mã? Chọn gói và thanh toán để nhận mã kích hoạt ngay.',
+                    style: TextStyle(
+                      color: AppColors.secondaryText.withValues(alpha: 0.95),
+                      height: 1.4,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => context.push('/settings/request-code'),
-                  icon: const Icon(AppIcons.qrCode),
-                  label: const Text('Yêu cầu mã'),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => context.push('/settings/request-code'),
+                    icon: const Icon(AppIcons.qrCode),
+                    label: const Text('Yêu cầu mã'),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
           if (_busy) ...[
             const SizedBox(height: 16),
             const LinearProgressIndicator(),

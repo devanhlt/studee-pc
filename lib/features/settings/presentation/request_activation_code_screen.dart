@@ -25,7 +25,11 @@ class RequestActivationCodeScreen extends ConsumerStatefulWidget {
 
 class _RequestActivationCodeScreenState
     extends ConsumerState<RequestActivationCodeScreen> {
-  ActivationRequestPlan _plan = ActivationRequestPlan.pro;
+  List<SellablePackage> _packages = const [];
+  SellablePackage? _plan;
+  bool _packagesLoading = true;
+  bool _packagesDisplayEnabled = true;
+  String? _packagesError;
   CheckoutSession? _session;
   StreamSubscription<CheckoutStatus>? _watchSub;
   String _statusLabel = '';
@@ -35,6 +39,62 @@ class _RequestActivationCodeScreenState
   bool _busy = false;
   Timer? _countdownTimer;
   Duration _remaining = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_loadPackages);
+  }
+
+  Future<void> _loadPackages() async {
+    setState(() {
+      _packagesLoading = true;
+      _packagesError = null;
+    });
+    final result = await ref.read(packagesClientProvider).fetchCatalog();
+    if (!mounted) return;
+    result.when(
+      success: (catalog) {
+        if (!catalog.enabled) {
+          setState(() {
+            _packages = const [];
+            _plan = null;
+            _packagesDisplayEnabled = false;
+            _packagesLoading = false;
+            _packagesError = null;
+          });
+          return;
+        }
+        final packages = catalog.packages;
+        SellablePackage? preferred;
+        for (final p in packages) {
+          if (p.id == 'pro') {
+            preferred = p;
+            break;
+          }
+        }
+        preferred ??= packages.isNotEmpty ? packages.first : null;
+        setState(() {
+          _packages = packages;
+          _plan = preferred;
+          _packagesDisplayEnabled = true;
+          _packagesLoading = false;
+          _packagesError = packages.isEmpty
+              ? 'Hiện chưa có gói nào để mua.'
+              : null;
+        });
+      },
+      failure: (f) {
+        setState(() {
+          _packages = const [];
+          _plan = null;
+          _packagesDisplayEnabled = true;
+          _packagesLoading = false;
+          _packagesError = f.userMessage;
+        });
+      },
+    );
+  }
 
   @override
   void dispose() {
@@ -69,6 +129,9 @@ class _RequestActivationCodeScreenState
   }
 
   Future<void> _createCheckout() async {
+    final plan = _plan;
+    if (plan == null) return;
+
     setState(() {
       _busy = true;
       _error = null;
@@ -78,7 +141,7 @@ class _RequestActivationCodeScreenState
     });
 
     final client = ref.read(checkoutClientProvider);
-    final result = await client.createCheckout(plan: _plan);
+    final result = await client.createCheckout(planId: plan.id);
 
     if (!mounted) return;
 
@@ -149,7 +212,9 @@ class _RequestActivationCodeScreenState
         _statusLabel = 'Đã kích hoạt';
         _activationCode = code;
         _codeExpiresAt = status.codeExpiresAt ??
-            DateTime.now().add(Duration(days: _plan.validityDays));
+            DateTime.now().add(
+              Duration(days: _plan?.validityDays ?? 30),
+            );
       });
 
       final save = await ref
@@ -231,7 +296,13 @@ class _RequestActivationCodeScreenState
             ],
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: _busy ? null : _createCheckout,
+              onPressed: (_busy ||
+                      _packagesLoading ||
+                      !_packagesDisplayEnabled ||
+                      _plan == null ||
+                      _packages.isEmpty)
+                  ? null
+                  : _createCheckout,
               child: Text(_busy ? 'Đang mở…' : 'Thanh toán ngay'),
             ),
           ],
@@ -242,26 +313,73 @@ class _RequestActivationCodeScreenState
   }
 
   Widget _buildPickStep() {
+    if (_packagesLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+        ),
+      );
+    }
+
+    if (!_packagesDisplayEnabled) {
+      return const Text(
+        'Tạm thời không mở bán mã trên app. Bạn vẫn có thể nhập mã đã có ở Cài đặt.',
+        style: TextStyle(color: AppColors.secondaryText, height: 1.45),
+      );
+    }
+
+    if (_packagesError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _packagesError!,
+            style: const TextStyle(color: AppColors.error),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _busy ? null : _loadPackages,
+            child: const Text('Thử lại'),
+          ),
+        ],
+      );
+    }
+
+    if (_packages.isEmpty) {
+      return const Text(
+        'Hiện chưa có gói nào để mua.',
+        style: TextStyle(color: AppColors.secondaryText),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < ActivationRequestConfig.plans.length; i++) ...[
+        for (var i = 0; i < _packages.length; i++) ...[
           if (i > 0) ...[
             const SizedBox(height: 8),
             const Divider(color: AppColors.border, height: 1),
             const SizedBox(height: 8),
           ],
-          _buildPlanOption(ActivationRequestConfig.plans[i]),
+          _buildPlanOption(_packages[i]),
         ],
       ],
     );
   }
 
-  Widget _buildPlanOption(ActivationRequestPlan plan) {
-    final selected = plan == _plan;
-    final isPopular = plan == ActivationRequestPlan.pro;
+  Widget _buildPlanOption(SellablePackage plan) {
+    final selected = plan.id == _plan?.id;
+    final isPopular = plan.id == 'pro' ||
+        (_packages.every((p) => p.id != 'pro') &&
+            _packages.isNotEmpty &&
+            plan.id == _packages[_packages.length ~/ 2].id);
     const detailStyle = TextStyle(
-      color: AppColors.secondaryText,
+      color: null,
       fontSize: 13,
       height: 1.4,
     );
@@ -328,7 +446,7 @@ class _RequestActivationCodeScreenState
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(plan.amountLabel, style: detailStyle),
+                  Text('Giá: ${plan.amountLabel}', style: detailStyle),
                   const SizedBox(height: 2),
                   Text(
                     'Thời hạn: ${plan.validityDays} ngày kể từ ngày mua',

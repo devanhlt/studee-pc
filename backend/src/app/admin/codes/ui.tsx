@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
-import type { PlanId } from "@/lib/plans";
 
 export type CodeRow = {
   id: string;
@@ -18,19 +17,28 @@ export type CodeRow = {
   last_used_at: string | null;
 };
 
-type Presets = Record<PlanId, { label: string; maxSolves: number }>;
+export type PackageOption = {
+  id: string;
+  label: string;
+  max_tokens: number;
+  active: boolean;
+};
 
 export function AdminCodesClient({
   initialCodes,
-  presets,
+  packages,
 }: {
   initialCodes: CodeRow[];
-  presets: Presets;
+  packages: PackageOption[];
 }) {
   const router = useRouter();
+  const selectable = packages.filter((p) => p.active);
+  const fallback = selectable[0] ?? packages[0];
   const [codes, setCodes] = useState(initialCodes);
-  const [plan, setPlan] = useState<PlanId>("pro");
-  const [maxSolves, setMaxSolves] = useState(String(presets.pro.maxSolves));
+  const [plan, setPlan] = useState(fallback?.id ?? "");
+  const [maxSolves, setMaxSolves] = useState(
+    String(fallback?.max_tokens ?? 10000),
+  );
   const [note, setNote] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -38,16 +46,15 @@ export function AdminCodesClient({
   const [created, setCreated] = useState<string | null>(null);
 
   const sorted = useMemo(() => codes, [codes]);
+  const packageMap = useMemo(
+    () => Object.fromEntries(packages.map((p) => [p.id, p])),
+    [packages],
+  );
 
-  function onPlanChange(next: PlanId) {
+  function onPlanChange(next: string) {
     setPlan(next);
-    setMaxSolves(String(presets[next].maxSolves));
-  }
-
-  async function logout() {
-    await fetch("/api/admin/session", { method: "DELETE" });
-    router.replace("/admin/login");
-    router.refresh();
+    const pkg = packageMap[next];
+    if (pkg) setMaxSolves(String(pkg.max_tokens));
   }
 
   async function onCreate(e: FormEvent) {
@@ -98,53 +105,38 @@ export function AdminCodesClient({
     );
   }
 
-  return (
-    <div style={{ display: "grid", gap: "1.5rem" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "0.75rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <nav style={{ display: "flex", gap: "0.85rem", fontSize: "0.92rem" }}>
-          <span className="muted">Mã kích hoạt</span>
-          <Link href="/admin/keys">API keys</Link>
-          <Link href="/admin/payment">Thanh toán</Link>
-        </nav>
-        <button className="btn btn-ghost" type="button" onClick={logout}>
-          Đăng xuất
-        </button>
-      </div>
-
+  if (!fallback) {
+    return (
       <section className="card">
-        <h2 style={{ margin: "0 0 1rem", fontSize: "1.15rem" }}>Tạo mã mới</h2>
-        <form
-          onSubmit={onCreate}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: "0.85rem 1rem",
-            alignItems: "end",
-          }}
-        >
-          <div className="field" style={{ marginBottom: 0 }}>
+        <p className="err">
+          Chưa có gói nào.{" "}
+          <Link href="/admin/packages">Tạo gói trước</Link>.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="stack">
+      <section className="card">
+        <h2>Tạo mã mới</h2>
+        <form onSubmit={onCreate} className="form-grid">
+          <div className="field">
             <label htmlFor="plan">Gói</label>
             <select
               id="plan"
               value={plan}
-              onChange={(e) => onPlanChange(e.target.value as PlanId)}
+              onChange={(e) => onPlanChange(e.target.value)}
             >
-              {(Object.keys(presets) as PlanId[]).map((id) => (
-                <option key={id} value={id}>
-                  {presets[id].label} ({presets[id].maxSolves} token)
+              {(selectable.length > 0 ? selectable : packages).map((pkg) => (
+                <option key={pkg.id} value={pkg.id}>
+                  {pkg.label} ({pkg.max_tokens.toLocaleString("en-US")} token)
+                  {!pkg.active ? " · ẩn" : ""}
                 </option>
               ))}
             </select>
           </div>
-          <div className="field" style={{ marginBottom: 0 }}>
+          <div className="field">
             <label htmlFor="max">Max token</label>
             <input
               id="max"
@@ -155,8 +147,17 @@ export function AdminCodesClient({
               required
             />
           </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="expires">Hết hạn (tuỳ chọn)</label>
+          <div className="field">
+            <label htmlFor="note">Ghi chú</label>
+            <input
+              id="note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Tuỳ chọn"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="expires">Hết hạn</label>
             <input
               id="expires"
               type="datetime-local"
@@ -164,87 +165,87 @@ export function AdminCodesClient({
               onChange={(e) => setExpiresAt(e.target.value)}
             />
           </div>
-          <div className="field" style={{ marginBottom: 0, gridColumn: "1 / -1" }}>
-            <label htmlFor="note">Ghi chú</label>
-            <input
-              id="note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Email khách / đơn hàng…"
-            />
-          </div>
-          <div>
-            <button className="btn" type="submit" disabled={busy}>
-              {busy ? "Đang tạo…" : "Tạo mã"}
-            </button>
-          </div>
+          {error ? <p className="err">{error}</p> : null}
+          {created ? (
+            <p className="ok">
+              Đã tạo: <code>{created}</code>
+            </p>
+          ) : null}
+          <button className="btn" type="submit" disabled={busy || !plan}>
+            {busy ? "Đang tạo…" : "Tạo mã"}
+          </button>
         </form>
-        {error ? <p className="err" style={{ marginTop: "0.85rem" }}>{error}</p> : null}
-        {created ? (
-          <p style={{ marginTop: "0.85rem" }}>
-            Mã mới: <span className="mono">{created}</span>
-          </p>
-        ) : null}
       </section>
 
-      <section className="card" style={{ overflowX: "auto" }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Mã</th>
-              <th>Gói</th>
-              <th>Quota</th>
-              <th>Trạng thái</th>
-              <th>Tạo lúc</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.length === 0 ? (
+      <section className="card">
+        <h2>Danh sách mã</h2>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
               <tr>
-                <td colSpan={6} className="muted">
-                  Chưa có mã nào.
-                </td>
+                <th>Mã</th>
+                <th>Gói</th>
+                <th>Quota</th>
+                <th>Trạng thái</th>
+                <th>Tạo lúc</th>
+                <th />
               </tr>
-            ) : (
-              sorted.map((c) => (
-                <tr key={c.id}>
-                  <td>
-                    <Link className="mono" href={`/admin/codes/${c.id}`}>
-                      {c.code}
-                    </Link>
-                    {c.note ? (
-                      <div className="muted" style={{ fontSize: "0.8rem", marginTop: 2 }}>
-                        {c.note}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td>{c.plan}</td>
-                  <td className="mono">
-                    {c.solves_used}/{c.max_solves} token
-                  </td>
-                  <td>
-                    <span className={`badge badge-${c.status}`}>{c.status}</span>
-                  </td>
-                  <td className="muted" style={{ whiteSpace: "nowrap" }}>
-                    {new Date(c.created_at).toLocaleString()}
-                  </td>
-                  <td>
-                    {c.status === "active" ? (
-                      <button
-                        className="btn btn-danger"
-                        type="button"
-                        onClick={() => revoke(c.id)}
-                      >
-                        Thu hồi
-                      </button>
-                    ) : null}
+            </thead>
+            <tbody>
+              {sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="muted">
+                    Chưa có mã nào.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                sorted.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <Link className="mono" href={`/admin/codes/${c.id}`}>
+                        {c.code}
+                      </Link>
+                      {c.note ? (
+                        <div
+                          className="muted"
+                          style={{ fontSize: "0.8rem", marginTop: 2 }}
+                        >
+                          {c.note}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>{packageMap[c.plan]?.label ?? c.plan}</td>
+                    <td className="mono">
+                      {c.solves_used.toLocaleString("en-US")}/
+                      {c.max_solves.toLocaleString("en-US")} token
+                    </td>
+                    <td>
+                      <span className={`badge badge-${c.status}`}>
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="muted nowrap">
+                      {new Date(c.created_at).toLocaleString()}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {c.status === "active" ? (
+                          <button
+                            className="btn btn-danger"
+                            type="button"
+                            onClick={() => revoke(c.id)}
+                          >
+                            Thu hồi
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

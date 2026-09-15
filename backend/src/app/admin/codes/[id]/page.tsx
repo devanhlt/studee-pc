@@ -16,56 +16,41 @@ export default async function AdminCodeDetailPage({ params }: Props) {
   if (!code) notFound();
 
   return (
-    <main style={{ maxWidth: 720, margin: "0 auto", padding: "2rem 1.25rem 3rem" }}>
-      <p style={{ marginBottom: "1rem" }}>
-        <Link href="/admin/codes">← Danh sách mã</Link>
+    <main className="admin-page">
+      <p>
+        <Link className="back-link" href="/admin/codes">
+          ← Danh sách mã
+        </Link>
       </p>
       <section className="card">
-        <p
-          className="muted"
-          style={{
-            margin: "0 0 0.35rem",
-            fontSize: "0.78rem",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "var(--accent)",
-          }}
-        >
-          Chi tiết
-        </p>
-        <h1 className="mono" style={{ margin: "0 0 1.25rem", fontSize: "1.5rem" }}>
+        <p className="kicker">Chi tiết</p>
+        <h1 className="mono" style={{ fontSize: "1.45rem", marginBottom: "1.15rem" }}>
           {code.code}
         </h1>
-        <dl
-          style={{
-            display: "grid",
-            gridTemplateColumns: "140px 1fr",
-            gap: "0.65rem 1rem",
-            margin: 0,
-          }}
-        >
-          <dt className="muted">Gói</dt>
-          <dd style={{ margin: 0 }}>{code.plan}</dd>
-          <dt className="muted">Quota</dt>
-          <dd style={{ margin: 0 }} className="mono">
-            {code.solves_used} / {code.max_solves} token (còn {remainingSolves(code)})
+        <dl className="dl-grid">
+          <dt>Gói</dt>
+          <dd>{code.plan}</dd>
+          <dt>Quota</dt>
+          <dd className="mono">
+            {code.solves_used} / {code.max_solves} token (còn{" "}
+            {remainingSolves(code)})
           </dd>
-          <dt className="muted">Trạng thái</dt>
-          <dd style={{ margin: 0 }}>
+          <dt>Trạng thái</dt>
+          <dd>
             <span className={`badge badge-${code.status}`}>{code.status}</span>
           </dd>
-          <dt className="muted">Nguồn</dt>
-          <dd style={{ margin: 0 }}>{code.source}</dd>
-          <dt className="muted">Ghi chú</dt>
-          <dd style={{ margin: 0 }}>{code.note || "—"}</dd>
-          <dt className="muted">Tạo lúc</dt>
-          <dd style={{ margin: 0 }}>{new Date(code.created_at).toLocaleString()}</dd>
-          <dt className="muted">Hết hạn</dt>
-          <dd style={{ margin: 0 }}>
+          <dt>Nguồn</dt>
+          <dd>{code.source}</dd>
+          <dt>Ghi chú</dt>
+          <dd>{code.note || "—"}</dd>
+          <dt>Tạo lúc</dt>
+          <dd>{new Date(code.created_at).toLocaleString()}</dd>
+          <dt>Hết hạn</dt>
+          <dd>
             {code.expires_at ? new Date(code.expires_at).toLocaleString() : "—"}
           </dd>
-          <dt className="muted">Dùng gần nhất</dt>
-          <dd style={{ margin: 0 }}>
+          <dt>Dùng gần nhất</dt>
+          <dd>
             {code.last_used_at
               ? new Date(code.last_used_at).toLocaleString()
               : "—"}

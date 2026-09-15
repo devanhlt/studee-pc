@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import type {
@@ -35,12 +34,6 @@ export function AdminKeysClient({
   const [busyKey, setBusyKey] = useState<ProviderSecretKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
-
-  async function logout() {
-    await fetch("/api/admin/session", { method: "DELETE" });
-    router.replace("/admin/login");
-    router.refresh();
-  }
 
   async function save(key: ProviderSecretKey, e: FormEvent) {
     e.preventDefault();
@@ -98,44 +91,15 @@ export function AdminKeysClient({
   }
 
   return (
-    <div style={{ display: "grid", gap: "1.5rem" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "0.75rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <nav style={{ display: "flex", gap: "0.85rem", fontSize: "0.92rem" }}>
-          <Link href="/admin/codes">Mã kích hoạt</Link>
-          <span className="muted">API keys</span>
-          <Link href="/admin/payment">Thanh toán</Link>
-        </nav>
-        <button className="btn btn-ghost" type="button" onClick={logout}>
-          Đăng xuất
-        </button>
-      </div>
-
+    <div className="stack">
       {error ? <p className="err">{error}</p> : null}
-      {okMsg ? (
-        <p style={{ margin: 0, color: "var(--ok)" }}>{okMsg}</p>
-      ) : null}
+      {okMsg ? <p className="ok">{okMsg}</p> : null}
 
       {secrets.map((s) => (
         <section key={s.key} className="card">
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: "1rem",
-              flexWrap: "wrap",
-              marginBottom: "0.85rem",
-            }}
-          >
+          <div className="card-head">
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.1rem" }}>{LABELS[s.key]}</h2>
+              <h2>{LABELS[s.key]}</h2>
               <p className="muted" style={{ margin: "0.35rem 0 0", fontSize: "0.85rem" }}>
                 Nguồn: {SOURCE_LABEL[s.source]}
                 {s.masked ? (
@@ -161,16 +125,8 @@ export function AdminKeysClient({
             ) : null}
           </div>
 
-          <form
-            onSubmit={(e) => save(s.key, e)}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: "0.75rem",
-              alignItems: "end",
-            }}
-          >
-            <div className="field" style={{ marginBottom: 0 }}>
+          <form onSubmit={(e) => save(s.key, e)} className="form-row">
+            <div className="field">
               <label htmlFor={s.key}>Giá trị mới</label>
               <input
                 id={s.key}

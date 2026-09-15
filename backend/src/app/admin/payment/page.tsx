@@ -1,10 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import {
-  getPaymentSettings,
-  qrImageUrl,
-} from "@/lib/vietqr";
+import { getPaymentSettings, qrImageUrl } from "@/lib/vietqr";
 import { AdminPaymentClient } from "./ui";
 
 export const dynamic = "force-dynamic";
@@ -38,32 +35,13 @@ export default async function AdminPaymentPage() {
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: "0 auto", padding: "2rem 1.25rem 3rem" }}>
-      <header style={{ marginBottom: "1.25rem" }}>
-        <p
-          className="muted"
-          style={{
-            margin: "0 0 0.35rem",
-            fontSize: "0.78rem",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "var(--accent)",
-          }}
-        >
-          Studee Admin
-        </p>
-        <h1
-          style={{
-            margin: 0,
-            fontFamily: "var(--font-display), serif",
-            fontSize: "clamp(1.6rem, 3vw, 2rem)",
-          }}
-        >
-          Thanh toán
-        </h1>
-        <p className="muted" style={{ margin: "0.4rem 0 0" }}>
-          VietQR + URL webhook để dán vào SePay. Sau khi chuyển khoản khớp,
-          app nhận mã kích hoạt qua SSE.
+    <main className="admin-page">
+      <header className="page-head">
+        <p className="kicker">Studee Admin</p>
+        <h1>Thanh toán</h1>
+        <p>
+          VietQR + URL webhook để dán vào SePay. Sau khi chuyển khoản khớp, app
+          nhận mã kích hoạt qua SSE.
         </p>
       </header>
 

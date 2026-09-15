@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { createCode, listCodes } from "@/lib/codes";
-import { isPlanId } from "@/lib/plans";
+import { getPackageById } from "@/lib/packages";
 
 export const runtime = "nodejs";
 
@@ -30,8 +30,9 @@ export async function POST(req: NextRequest) {
     expires_at?: string | null;
   } | null;
 
-  const plan = body?.plan ?? "";
-  if (!isPlanId(plan)) {
+  const plan = body?.plan?.trim() ?? "";
+  const pkg = plan ? await getPackageById(plan) : null;
+  if (!pkg) {
     return NextResponse.json(
       { error: { message: "Invalid plan", code: "invalid_plan" } },
       { status: 400 },
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
       : undefined;
 
   const code = await createCode({
-    plan,
+    plan: pkg.id,
     maxSolves,
     note: body?.note,
     expiresAt: body?.expires_at ?? null,

@@ -19,4 +19,23 @@ void main() {
       'Chưa đúng, không khớp.',
     );
   });
+
+  test('does not eat the c in class after Đáp án đúng là', () {
+    const raw =
+        'Đáp án đúng là class. Trong C++, từ khóa class được dùng '
+        'để định nghĩa một lớp.';
+    expect(stripMcqChoiceLetters(raw), raw);
+    expect(stripMcqChoiceLetters(raw), startsWith('Đáp án đúng là class'));
+  });
+
+  test('still strips a bare A/B letter before the meaning', () {
+    expect(
+      stripMcqChoiceLetters('Đáp án đúng là A. class'),
+      'class',
+    );
+    expect(
+      stripMcqChoiceLetters('Đáp án đúng: B) public'),
+      'public',
+    );
+  });
 }

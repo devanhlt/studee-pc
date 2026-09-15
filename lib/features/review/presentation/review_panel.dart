@@ -193,6 +193,9 @@ class _RunningReview extends ConsumerWidget {
             completedMessage: lastDone
                 ? 'Đã ôn xong tất cả câu hỏi.'
                 : 'Đã xong câu này. Bấm “Câu tiếp” để ôn câu sau.',
+            completedComposerHint: lastDone
+                ? 'Đã ôn xong tất cả câu hỏi'
+                : 'Đã xong câu này',
             nextQuestionLabel: failed
                 ? 'Thử lại'
                 : (lastDone ? 'Xong' : 'Câu tiếp'),

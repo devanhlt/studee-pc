@@ -1,12 +1,8 @@
 import { randomBytes, timingSafeEqual } from "crypto";
 import { getSql, type CheckoutSessionRow } from "./db";
 import { createCode } from "./codes";
-import {
-  codeExpiresAtFromNow,
-  isPlanId,
-  PLAN_PRESETS,
-  type PlanId,
-} from "./plans";
+import { codeExpiresAtFromDays } from "./plans";
+import { getPackageById } from "./packages";
 
 export const PAY_CODE_PREFIX = "STUDEE";
 const PAY_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -33,13 +29,14 @@ export function secretsEqual(a: string, b: string): boolean {
 }
 
 export async function createSession(input: {
-  plan: PlanId;
+  plan: string;
   contact?: string | null;
 }): Promise<CheckoutSessionRow> {
-  if (!isPlanId(input.plan)) {
+  const pkg = await getPackageById(input.plan);
+  if (!pkg || !pkg.active) {
     throw new Error("Invalid plan");
   }
-  const amountVnd = PLAN_PRESETS[input.plan].amountVnd;
+  const amountVnd = pkg.amount_vnd;
   const expiresAt = new Date(Date.now() + CHECKOUT_TTL_MS).toISOString();
   const sql = getSql();
 
@@ -52,7 +49,7 @@ export async function createSession(input: {
           pay_code, plan, amount_vnd, client_secret, contact, expires_at
         ) VALUES (
           ${payCode},
-          ${input.plan},
+          ${pkg.id},
           ${amountVnd},
           ${clientSecret},
           ${input.contact?.trim() || null},
@@ -178,7 +175,8 @@ export async function fulfillCheckout(input: {
     return null;
   }
 
-  if (!isPlanId(claimed.plan)) {
+  const pkg = await getPackageById(claimed.plan);
+  if (!pkg) {
     await releaseClaim(claimed.id);
     return null;
   }
@@ -188,7 +186,7 @@ export async function fulfillCheckout(input: {
       plan: claimed.plan,
       source: "checkout",
       externalRef: claimed.id,
-      expiresAt: codeExpiresAtFromNow(claimed.plan),
+      expiresAt: codeExpiresAtFromDays(pkg.ttl_days),
       note: claimed.contact
         ? `Checkout ${claimed.pay_code} · ${claimed.contact}`
         : `Checkout ${claimed.pay_code}`,

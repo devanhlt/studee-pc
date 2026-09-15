@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:studee_pc/data/backend/checkout_client.dart';
 import 'package:studee_pc/data/backend/backend_quota_client.dart';
+import 'package:studee_pc/data/backend/packages_client.dart';
 import 'package:studee_pc/data/catalog_database/catalog_database.dart';
 import 'package:studee_pc/data/deepseek/deepseek_client_impl.dart';
 import 'package:studee_pc/data/file_storage/app_paths.dart';
@@ -68,6 +69,10 @@ final credentialsRepositoryProvider = Provider<CredentialsRepository>((ref) {
 
 final checkoutClientProvider = Provider<CheckoutClient>((ref) {
   return CheckoutClient();
+});
+
+final packagesClientProvider = Provider<PackagesClient>((ref) {
+  return PackagesClient();
 });
 
 final backendQuotaClientProvider = Provider<BackendQuotaClient>((ref) {

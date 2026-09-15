@@ -14,4 +14,5 @@ abstract final class BackendConfig {
   static const String chatCompletionsPath = '/v1/chat/completions';
   static const String consumeSolvePath = '/v1/solves/consume';
   static const String checkoutPath = '/v1/checkout';
+  static const String packagesPath = '/v1/packages';
 }

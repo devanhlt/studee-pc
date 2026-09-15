@@ -6,7 +6,7 @@ import { jsonError, requireActivationCode } from "@/lib/proxy-auth";
 export const runtime = "nodejs";
 
 /**
- * Charge tokens for one question solve (text = 100, picture = 200).
+ * Charge tokens for one question solve (`kind`: text | picture).
  * Call once per completed question (not per OCR/LLM hop).
  */
 export async function POST(req: NextRequest) {

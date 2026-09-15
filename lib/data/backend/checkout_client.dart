@@ -6,7 +6,6 @@ import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/data/backend/backend_config.dart';
-import 'package:studee_pc/features/settings/application/activation_request_config.dart';
 
 class CheckoutSession {
   const CheckoutSession({
@@ -107,14 +106,14 @@ class CheckoutClient {
   final AppLogger _log = AppLogger('CheckoutClient');
 
   Future<Result<CheckoutSession>> createCheckout({
-    required ActivationRequestPlan plan,
+    required String planId,
     String? contact,
   }) async {
     try {
       final uri = Uri.parse(
         '${BackendConfig.baseUrl}${BackendConfig.checkoutPath}',
       );
-      final body = <String, dynamic>{'plan': plan.id};
+      final body = <String, dynamic>{'plan': planId};
       final trimmed = contact?.trim();
       if (trimmed != null && trimmed.isNotEmpty) {
         body['contact'] = trimmed;

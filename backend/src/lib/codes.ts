@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { getSql, type ActivationCodeRow } from "./db";
-import { isPlanId, PLAN_PRESETS, type PlanId } from "./plans";
+import { getPackageById } from "./packages";
 
 export function generateActivationCode(): string {
   const raw = randomBytes(6).toString("hex").toUpperCase();
@@ -49,17 +49,18 @@ export async function getCodeById(
 }
 
 export async function createCode(input: {
-  plan: PlanId;
+  plan: string;
   maxSolves?: number;
   note?: string;
   expiresAt?: string | null;
   source?: "admin" | "checkout";
   externalRef?: string | null;
 }): Promise<ActivationCodeRow> {
-  if (!isPlanId(input.plan)) {
+  const pkg = await getPackageById(input.plan);
+  if (!pkg) {
     throw new Error("Invalid plan");
   }
-  const maxSolves = input.maxSolves ?? PLAN_PRESETS[input.plan].maxSolves;
+  const maxSolves = input.maxSolves ?? pkg.max_tokens;
   const source = input.source ?? "admin";
   const sql = getSql();
 
@@ -71,7 +72,7 @@ export async function createCode(input: {
           code, plan, max_solves, note, source, external_ref, expires_at
         ) VALUES (
           ${code},
-          ${input.plan},
+          ${pkg.id},
           ${maxSolves},
           ${input.note?.trim() || null},
           ${source},

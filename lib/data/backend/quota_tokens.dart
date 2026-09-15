@@ -1,4 +1,4 @@
-/// Token costs charged against an activation code.
+/// Token amounts charged against an activation code per solve kind.
 ///
 /// Legacy "lượt giải" counts map to tokens at [perLegacySolve].
 abstract final class QuotaTokens {

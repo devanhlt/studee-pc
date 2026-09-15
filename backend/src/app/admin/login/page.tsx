@@ -33,25 +33,19 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        padding: "1.5rem",
-      }}
-    >
-      <form className="card" style={{ width: "min(100%, 380px)" }} onSubmit={onSubmit}>
-        <p className="muted" style={{ margin: "0 0 0.35rem", fontSize: "0.78rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--accent)" }}>
-          Studee
-        </p>
-        <h1 style={{ margin: "0 0 0.35rem", fontFamily: "var(--font-display), serif", fontSize: "1.75rem" }}>
-          Admin
-        </h1>
-        <p className="muted" style={{ margin: "0 0 1.25rem" }}>
-          Đăng nhập để quản lý mã kích hoạt.
-        </p>
-        <div className="field">
+    <main className="login-wrap">
+      <form className="card login-card" onSubmit={onSubmit}>
+        <img
+          className="login-logo"
+          src="/app-icon.png"
+          alt="Studee"
+          width={56}
+          height={56}
+        />
+        <p className="kicker">Studee</p>
+        <h1>Admin</h1>
+        <p className="lede">Đăng nhập để quản lý mã kích hoạt.</p>
+        <div className="field" style={{ marginTop: "1.25rem" }}>
           <label htmlFor="password">Mật khẩu</label>
           <input
             id="password"
@@ -63,7 +57,12 @@ export default function AdminLoginPage() {
           />
         </div>
         {error ? <p className="err">{error}</p> : null}
-        <button className="btn" type="submit" disabled={busy} style={{ width: "100%", marginTop: "0.5rem" }}>
+        <button
+          className="btn"
+          type="submit"
+          disabled={busy}
+          style={{ width: "100%", marginTop: "0.35rem" }}
+        >
           {busy ? "Đang đăng nhập…" : "Đăng nhập"}
         </button>
       </form>

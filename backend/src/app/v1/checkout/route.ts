@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPackagesAppDisplayEnabled } from "@/lib/app-settings";
 import {
   countRecentSessions,
   createSession,
 } from "@/lib/checkout";
-import { isPlanId } from "@/lib/plans";
+import { getPackageById } from "@/lib/packages";
 import { jsonError } from "@/lib/proxy-auth";
 import {
   getVietqrConfigOrNull,
@@ -15,13 +16,22 @@ export const runtime = "nodejs";
 const MAX_CHECKOUTS_PER_HOUR = 40;
 
 export async function POST(req: NextRequest) {
+  if (!(await getPackagesAppDisplayEnabled())) {
+    return jsonError(
+      403,
+      "In-app package sales are temporarily disabled",
+      "packages_disabled",
+    );
+  }
+
   const body = (await req.json().catch(() => null)) as {
     plan?: string;
     contact?: string;
   } | null;
 
   const plan = body?.plan?.trim() ?? "";
-  if (!isPlanId(plan)) {
+  const pkg = plan ? await getPackageById(plan) : null;
+  if (!pkg || !pkg.active) {
     return jsonError(400, "Invalid plan", "invalid_plan");
   }
 
@@ -44,7 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   const session = await createSession({
-    plan,
+    plan: pkg.id,
     contact: body?.contact ?? null,
   });
 

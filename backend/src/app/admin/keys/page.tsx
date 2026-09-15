@@ -11,30 +11,11 @@ export default async function AdminKeysPage() {
   }
   const secrets = await getProviderSecretStatuses();
   return (
-    <main style={{ maxWidth: 720, margin: "0 auto", padding: "2rem 1.25rem 3rem" }}>
-      <header style={{ marginBottom: "1.25rem" }}>
-        <p
-          className="muted"
-          style={{
-            margin: "0 0 0.35rem",
-            fontSize: "0.78rem",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "var(--accent)",
-          }}
-        >
-          Studee Admin
-        </p>
-        <h1
-          style={{
-            margin: 0,
-            fontFamily: "var(--font-display), serif",
-            fontSize: "clamp(1.6rem, 3vw, 2rem)",
-          }}
-        >
-          API keys
-        </h1>
-        <p className="muted" style={{ margin: "0.4rem 0 0" }}>
+    <main className="admin-page">
+      <header className="page-head">
+        <p className="kicker">Studee Admin</p>
+        <h1>API keys</h1>
+        <p>
           Rotate DeepSeek / Mathpix dùng cho proxy. DB override ưu tiên hơn env;
           xóa override để quay về Vercel env.
         </p>

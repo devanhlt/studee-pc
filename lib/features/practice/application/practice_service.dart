@@ -519,9 +519,13 @@ class PracticeService {
       final eval = turn.evaluation;
       var feedbackText = eval?.feedback.trim() ?? '';
       var coachText = turn.coachMessage.trim();
+      var summaryText = turn.finalSummary?.trim() ?? '';
       if (_reviewMode) {
         feedbackText = stripMcqChoiceLetters(feedbackText);
         coachText = stripMcqChoiceLetters(coachText);
+        if (summaryText.isNotEmpty) {
+          summaryText = stripMcqChoiceLetters(summaryText);
+        }
       }
       final localCorrect = PracticeMcqGrade.grade(
         answer: trimmed,
@@ -567,6 +571,7 @@ class PracticeService {
         turn: turn,
         feedbackText: feedbackText,
         coachText: coachText,
+        summaryText: summaryText,
       );
       if (reply != null) {
         nextMessages = [
@@ -706,14 +711,25 @@ class PracticeService {
           summary.isNotEmpty &&
           (skipFinalSummaryIfSimilarTo == null ||
               !_similarText(skipFinalSummaryIfSimilarTo, summary))) {
-        msgs = [
-          ...msgs,
-          PracticeUiMessage(
-            id: _uuid.v4(),
-            role: PracticeMessageRole.system,
-            text: summary,
-          ),
-        ];
+        PracticeUiMessage? lastShown;
+        for (var i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i].role == PracticeMessageRole.feedback ||
+              msgs[i].role == PracticeMessageRole.coach ||
+              msgs[i].role == PracticeMessageRole.system) {
+            lastShown = msgs[i];
+            break;
+          }
+        }
+        if (lastShown == null || !_similarText(lastShown.text, summary)) {
+          msgs = [
+            ...msgs,
+            PracticeUiMessage(
+              id: _uuid.v4(),
+              role: PracticeMessageRole.system,
+              text: summary,
+            ),
+          ];
+        }
       }
       // One MCQ strategy tip at the end (LLM first, heuristic fallback).
       var tip = (mcqTip != null && mcqTip.isNotEmpty)
@@ -796,9 +812,10 @@ class PracticeService {
     required PracticeTurnResponse turn,
     required String feedbackText,
     required String coachText,
+    String? summaryText,
   }) {
     if (turn.isComplete) {
-      final summary = turn.finalSummary?.trim() ?? '';
+      final summary = (summaryText ?? turn.finalSummary)?.trim() ?? '';
       if (summary.isNotEmpty) return summary;
       if (coachText.isNotEmpty) return coachText;
       if (feedbackText.isNotEmpty) return feedbackText;
