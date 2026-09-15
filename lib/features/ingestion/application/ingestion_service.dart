@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
+import 'package:studee_pc/app/widgets/question_display_format.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
@@ -674,8 +675,7 @@ class IngestionService {
             progressMessage: chunks.length == 1
                 ? IngestionJobStatus.structuring.labelVi
                 : 'Đang cấu trúc hóa phần ${i + 1}/${chunks.length}'
-                    '${chunk.questionCount > 0 ? ' (~${chunk.questionCount} câu)' : ''}'
-                    ' (Trợ lý Stud)…',
+                    '${chunk.questionCount > 0 ? ' (~${chunk.questionCount} câu)' : ''}',
             clearError: true,
           ),
         );
@@ -738,6 +738,56 @@ class IngestionService {
         );
         final explanation = (m['explanation'] as String?)?.trim();
 
+        var polishedContent = QuestionDisplayFormat.enrich(content);
+        var polishedChoices = [
+          for (final c in choices)
+            {
+              'label': c['label'] ?? '',
+              'content': QuestionDisplayFormat.enrich(c['content'] ?? ''),
+            },
+        ];
+        var polishedAnswer = answerContent == null
+            ? null
+            : QuestionDisplayFormat.enrich(answerContent);
+        if (QuestionDisplayFormat.bundleNeedsLatexPolish(
+          content: polishedContent,
+          choiceContents: [
+            for (final c in polishedChoices) c['content'] ?? '',
+          ],
+          answerContent: polishedAnswer,
+        )) {
+          try {
+            final formatted = await _deepSeek.formatMathLatex(
+              content: polishedContent,
+              choices: [
+                for (final c in polishedChoices)
+                  (
+                    label: c['label'] ?? '',
+                    content: c['content'] ?? '',
+                  ),
+              ],
+              answerContent: polishedAnswer,
+            );
+            polishedContent = QuestionDisplayFormat.enrich(formatted.content);
+            if (formatted.choices.isNotEmpty) {
+              polishedChoices = [
+                for (final c in formatted.choices)
+                  {
+                    'label': c.label,
+                    'content': QuestionDisplayFormat.enrich(c.content),
+                  },
+              ];
+            }
+            if (formatted.answerContent != null &&
+                formatted.answerContent!.trim().isNotEmpty) {
+              polishedAnswer =
+                  QuestionDisplayFormat.enrich(formatted.answerContent!);
+            }
+          } on Object catch (e) {
+            _log.warning('Ingest LaTeX polish failed: ${e.runtimeType}');
+          }
+        }
+
         final relatedIds = <String>[];
         final relatedIdx =
             m['related_knowledge_indices'] as List<dynamic>? ?? const [];
@@ -748,13 +798,13 @@ class IngestionService {
         }
 
         // Ensure detailed answer / solution exist as knowledge units for retrieval.
-        if (answerContent != null && answerContent.isNotEmpty) {
+        if (polishedAnswer != null && polishedAnswer.isNotEmpty) {
           final answerUnit = StructureDraftUnit(
             id: _uuid.v4(),
             type: KnowledgeUnitType.answerKey,
             content: answerLabel != null && answerLabel.isNotEmpty
-                ? 'Đáp án $answerLabel: $answerContent'
-                : answerContent,
+                ? 'Đáp án $answerLabel: $polishedAnswer'
+                : polishedAnswer,
             page: (m['page'] as num?)?.toInt(),
           );
           units.add(answerUnit);
@@ -777,10 +827,10 @@ class IngestionService {
             questionType: QuestionType.fromWire(
               m['question_type'] as String? ?? 'text_response',
             ),
-            content: content,
-            choices: choices,
+            content: polishedContent,
+            choices: polishedChoices,
             answerLabel: answerLabel,
-            answerContent: answerContent,
+            answerContent: polishedAnswer,
             explanation: explanation,
             page: (m['page'] as num?)?.toInt(),
             relatedUnitIds: relatedIds,

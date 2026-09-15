@@ -9,8 +9,55 @@ abstract final class QuestionDisplayFormat {
     var text = input.replaceAll('\r\n', '\n');
     text = _pythonMatricesToLatex(text);
     text = _matlabMatricesToLatex(text);
+    text = _equationSystemsToLatex(text);
+    text = _assignmentListsToLatex(text);
     text = _transposeProductsToLatex(text);
+    text = _bareSubscriptsToLatex(text);
     return text;
+  }
+
+  /// True when text still looks like raw exam math that needs LaTeX polish.
+  static bool needsLatexPolish(String? text) {
+    if (text == null) return false;
+    final t = text.trim();
+    if (t.isEmpty) return false;
+
+    // Raw python / MATLAB matrices still present.
+    if (t.contains('[[') && !t.contains(r'\begin{bmatrix}')) return true;
+    if (RegExp(r'\(\s*-?\d[^)]*;[^)]*\)').hasMatch(t) &&
+        !t.contains(r'\begin{bmatrix}')) {
+      return true;
+    }
+    // Equation system still in `{ eq ; eq }` form.
+    if (RegExp(r'\{[^{};]*;[^}]*[})]').hasMatch(t)) return true;
+    // Bare variable subscripts like x1 / 3x2 (not already x_{1}).
+    if (RegExp(
+      r'(?<![A-Za-z\\])([xyzuvwabcdmnkijXYZUVWABCDMNKIJ])\d+(?!\d)',
+    ).hasMatch(t)) {
+      return true;
+    }
+    // Transpose products still dotted.
+    if (RegExp(r'\b[A-Za-z]\.[A-Za-z]?T\b').hasMatch(t)) return true;
+    // Assignment lists without math delimiters.
+    if (RegExp(
+          r'(?<!\$)\b[xyzuvwabcdmnkij]\d+\s*=\s*-?\d+',
+          caseSensitive: false,
+        ).hasMatch(t) &&
+        !t.contains(r'$')) {
+      return true;
+    }
+    return false;
+  }
+
+  /// True if stem or any choice still needs LaTeX.
+  static bool bundleNeedsLatexPolish({
+    required String content,
+    List<String> choiceContents = const [],
+    String? answerContent,
+  }) {
+    if (needsLatexPolish(content)) return true;
+    if (choiceContents.any(needsLatexPolish)) return true;
+    return needsLatexPolish(answerContent);
   }
 
   /// Build a markdown preview from a structured parse (stem + choices).
@@ -108,6 +155,85 @@ abstract final class QuestionDisplayFormat {
       );
       return s;
     });
+  }
+
+  /// `{ eq1 ; eq2 ; eq3 )` / `{…}` → display cases block.
+  static String _equationSystemsToLatex(String text) {
+    if (!text.contains(';')) return text;
+    final systemRe = RegExp(
+      r'\{([^{};]+(?:;[^{};]+)+)[})]',
+    );
+    return _mapOutsideProtected(text, (segment) {
+      return segment.replaceAllMapped(systemRe, (m) {
+        final inner = m.group(1)!;
+        final eqs = inner
+            .split(';')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .map(_equationLineToTex)
+            .toList();
+        if (eqs.length < 2) return m.group(0)!;
+        final body = eqs.join(r' \\ ');
+        return '\n\n\$\$\\begin{cases}$body\\end{cases}\$\$\n\n';
+      });
+    });
+  }
+
+  /// `x1=1,x2=1,x3=-1` → `$x_1=1,\ x_2=1,\ x_3=-1$`
+  static String _assignmentListsToLatex(String text) {
+    final assignRe = RegExp(
+      r'(?<!\$)\b((?:[xyzuvwabcdmnkijXYZUVWABCDMNKIJ]\d+\s*=\s*-?\d+(?:\.\d+)?)'
+      r'(?:\s*,\s*[xyzuvwabcdmnkijXYZUVWABCDMNKIJ]\d+\s*=\s*-?\d+(?:\.\d+)?){1,})',
+    );
+    return _mapOutsideProtected(text, (segment) {
+      return segment.replaceAllMapped(assignRe, (m) {
+        final raw = m.group(1)!;
+        final parts = raw.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty);
+        final tex = parts.map((p) {
+          final eq = RegExp(
+            r'^([A-Za-z])(\d+)\s*=\s*(-?\d+(?:\.\d+)?)$',
+          ).firstMatch(p);
+          if (eq == null) return _subscriptsInMath(p);
+          return '${eq.group(1)}_{${eq.group(2)}}=${eq.group(3)}';
+        }).join(r',\ ');
+        return '\$$tex\$';
+      });
+    });
+  }
+
+  /// Remaining bare `x1` tokens → `$x_1$` (outside existing math).
+  static String _bareSubscriptsToLatex(String text) {
+    // No leading \b: coefficients glue as `3x2` (digit+letter is still \w).
+    final varRe = RegExp(
+      r'(?<![A-Za-z\\])([xyzuvwabcdmnkijXYZUVWABCDMNKIJ])(\d+)(?!\d)',
+    );
+    return _mapOutsideProtected(text, (segment) {
+      return segment.replaceAllMapped(
+        varRe,
+        (m) => '\$${m[1]}_{${m[2]}}\$',
+      );
+    });
+  }
+
+  static String _equationLineToTex(String line) {
+    var t = line.trim();
+    t = _subscriptsInMath(t);
+    // Light spacing around = + -
+    t = t.replaceAllMapped(
+      RegExp(r'\s*([=+\-])\s*'),
+      (m) => ' ${m[1]} ',
+    );
+    return t.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  static String _subscriptsInMath(String s) {
+    // Match x1 even when glued to a coefficient (`3x2`).
+    return s.replaceAllMapped(
+      RegExp(
+        r'(?<![A-Za-z\\])([xyzuvwabcdmnkijXYZUVWABCDMNKIJ])(\d+)(?!\d)',
+      ),
+      (m) => '${m[1]}_{${m[2]}}',
+    );
   }
 
   static String? _listLiteralToBmatrix(String literal) {

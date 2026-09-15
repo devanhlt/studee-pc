@@ -43,7 +43,16 @@ export async function requireActivationCode(
     return jsonError(403, "Activation code revoked", "code_revoked");
   }
   if (row.expires_at && new Date(row.expires_at) <= new Date()) {
-    return jsonError(403, "Activation code expired", "code_expired");
+    return NextResponse.json(
+      {
+        error: {
+          message: "Activation code expired",
+          code: "code_expired",
+          expires_at: row.expires_at,
+        },
+      },
+      { status: 403 },
+    );
   }
   if (row.status === "exhausted" || row.solves_used >= row.max_solves) {
     return jsonError(402, "Token quota exhausted", "quota_exhausted");

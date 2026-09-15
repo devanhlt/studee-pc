@@ -13,6 +13,9 @@ import 'package:studee_pc/domain/enums/knowledge_unit_type.dart';
 import 'package:studee_pc/domain/enums/question_type.dart';
 import 'package:studee_pc/domain/enums/source_type.dart';
 import 'package:studee_pc/domain/enums/verification_status.dart';
+import 'package:studee_pc/core/utils/fingerprints.dart';
+import 'package:studee_pc/core/utils/text_normalizer.dart';
+import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_builder.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_pdf.dart';
@@ -142,6 +145,48 @@ class SubjectContentQueries {
       );
     }
     return out;
+  }
+
+  /// Persist LaTeX-normalized stem / choices / answer for display.
+  Future<void> updateQuestionMath({
+    required String subjectId,
+    required String questionId,
+    required String content,
+    List<({String id, String content})> choices = const [],
+    String? answerContent,
+  }) async {
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final choiceBodies = choices.map((c) => c.content);
+    await (db.update(db.questions)..where((q) => q.id.equals(questionId)))
+        .write(
+      QuestionsCompanion(
+        content: Value(content),
+        normalizedContent: Value(TextNormalizer.normalizeQuestionText(content)),
+        questionFingerprint: Value(
+          Fingerprints.questionFingerprint(
+            questionText: content,
+            choiceContents: choiceBodies,
+          ),
+        ),
+        answerContent: answerContent == null
+            ? const Value.absent()
+            : Value(answerContent),
+        updatedAt: Value(now),
+      ),
+    );
+    for (final c in choices) {
+      if (c.id.isEmpty) continue;
+      await (db.update(db.questionChoices)..where((t) => t.id.equals(c.id)))
+          .write(
+        QuestionChoicesCompanion(
+          content: Value(c.content),
+          normalizedContent: Value(
+            TextNormalizer.normalizeChoiceContent(c.content),
+          ),
+        ),
+      );
+    }
   }
 
   Future<List<Source>> listSources(String subjectId) async {

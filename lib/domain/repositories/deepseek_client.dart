@@ -149,6 +149,13 @@ abstract interface class DeepSeekClient {
     required List<({String label, String content})> choices,
   });
 
+  /// Normalize stem/choices/answer math into LaTeX for display + storage.
+  Future<MathLatexFormatResult> formatMathLatex({
+    required String content,
+    List<({String label, String content})> choices = const [],
+    String? answerContent,
+  });
+
   /// Clustered study insights for export (stats + examples; no full Q&A dump).
   /// Returns Markdown body (no document title / disclaimer).
   Future<String> generateKnowledgeSummary({
@@ -216,6 +223,22 @@ class QuizAnswerResolution extends Equatable {
 
   @override
   List<Object?> get props => [label, content, briefReason];
+}
+
+/// Stem/choices/answer after LaTeX normalization.
+class MathLatexFormatResult extends Equatable {
+  const MathLatexFormatResult({
+    required this.content,
+    this.choices = const [],
+    this.answerContent,
+  });
+
+  final String content;
+  final List<({String label, String content})> choices;
+  final String? answerContent;
+
+  @override
+  List<Object?> get props => [content, choices, answerContent];
 }
 
 /// One question used when asking DeepSeek for a memorization tip.

@@ -20,6 +20,13 @@ abstract final class ActivationRequestConfig {
     final m = local.month.toString().padLeft(2, '0');
     return '$d/$m/${local.year}';
   }
+
+  static String formatDateTime(DateTime date) {
+    final local = date.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '${formatDate(local)} $h:$min';
+  }
 }
 
 /// A sellable package from the Studee backend catalog.

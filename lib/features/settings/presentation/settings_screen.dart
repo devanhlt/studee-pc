@@ -207,9 +207,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (_entitlement != null) ...[
                   const SizedBox(height: 12),
                   Text(
-                    'Gói ${_entitlement!.plan} · '
-                    '${ActivationRequestConfig.formatTokens(_entitlement!.solvesUsed)}/${ActivationRequestConfig.formatTokens(_entitlement!.maxSolves)} token đã dùng · '
-                    'trạng thái ${_entitlement!.status}',
+                    _entitlementSummary(_entitlement!),
                     style: const TextStyle(
                       color: AppColors.secondaryText,
                       fontSize: 13,
@@ -269,6 +267,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
+}
+
+String _entitlementSummary(EntitlementInfo info) {
+  final buf = StringBuffer()
+    ..write('Gói ${info.plan}')
+    ..write(' · ')
+    ..write(ActivationRequestConfig.formatTokens(info.solvesUsed))
+    ..write('/')
+    ..write(ActivationRequestConfig.formatTokens(info.maxSolves))
+    ..write(' token đã dùng')
+    ..write(' · trạng thái ${info.status}');
+  final expiresAt = info.expiresAt;
+  if (expiresAt != null) {
+    final when = ActivationRequestConfig.formatDateTime(expiresAt);
+    if (info.isExpired) {
+      buf.write(' · hết hạn $when');
+    } else {
+      buf.write(' · hết hạn lúc $when');
+    }
+  } else {
+    buf.write(' · không giới hạn thời gian');
+  }
+  return buf.toString();
 }
 
 class _OrDivider extends StatelessWidget {

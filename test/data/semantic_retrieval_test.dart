@@ -131,6 +131,18 @@ class _FakeDeepSeek implements DeepSeekClient {
   }
 
   @override
+  Future<MathLatexFormatResult> formatMathLatex({
+    required String content,
+    List<({String label, String content})> choices = const [],
+    String? answerContent,
+  }) async =>
+      MathLatexFormatResult(
+        content: content,
+        choices: choices,
+        answerContent: answerContent,
+      );
+
+  @override
   Future<String> generateKnowledgeSummary({
     required String subjectName,
     required List<KnowledgeSummaryUnit> units,

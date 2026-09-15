@@ -9,6 +9,7 @@ import 'package:studee_pc/data/mathpix/mathpix_client.dart';
 import 'package:studee_pc/domain/repositories/credentials_repository.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
+import 'package:studee_pc/features/settings/application/activation_request_config.dart';
 
 /// Activation entitlement returned by the middleware.
 class EntitlementInfo {
@@ -18,6 +19,7 @@ class EntitlementInfo {
     required this.solvesUsed,
     required this.remaining,
     required this.status,
+    this.expiresAt,
   });
 
   final String plan;
@@ -25,6 +27,14 @@ class EntitlementInfo {
   final int solvesUsed;
   final int remaining;
   final String status;
+  final DateTime? expiresAt;
+
+  bool get isExpired {
+    if (status == 'expired') return true;
+    final at = expiresAt;
+    if (at == null) return false;
+    return !at.isAfter(DateTime.now());
+  }
 
   factory EntitlementInfo.fromJson(Map<String, dynamic> json) {
     int asInt(Object? v) {
@@ -33,12 +43,26 @@ class EntitlementInfo {
       return int.tryParse('$v') ?? 0;
     }
 
+    DateTime? expires;
+    final rawExpires = json['expires_at'];
+    if (rawExpires is String && rawExpires.trim().isNotEmpty) {
+      expires = DateTime.tryParse(rawExpires)?.toLocal();
+    }
+
+    var status = '${json['status'] ?? ''}';
+    if (status != 'revoked' &&
+        expires != null &&
+        !expires.isAfter(DateTime.now())) {
+      status = 'expired';
+    }
+
     return EntitlementInfo(
       plan: '${json['plan'] ?? ''}',
       maxSolves: asInt(json['max_solves']),
       solvesUsed: asInt(json['solves_used']),
       remaining: asInt(json['remaining']),
-      status: '${json['status'] ?? ''}',
+      status: status,
+      expiresAt: expires,
     );
   }
 }
@@ -150,6 +174,30 @@ class SettingsService {
           )
           .timeout(const Duration(seconds: 20));
       if (response.statusCode == 401 || response.statusCode == 403) {
+        final parsed = _errorFromBody(response.body);
+        final code = parsed?.code;
+        if (code == 'code_expired') {
+          final expires = parsed?.expiresAt;
+          final when = expires == null
+              ? null
+              : ActivationRequestConfig.formatDateTime(expires);
+          return Failure(
+            AuthFailure(
+              userMessage: when == null
+                  ? 'Mã kích hoạt đã hết hạn.'
+                  : 'Mã kích hoạt đã hết hạn lúc $when.',
+              code: 'code_expired',
+            ),
+          );
+        }
+        if (code == 'code_revoked') {
+          return const Failure(
+            AuthFailure(
+              userMessage: 'Mã kích hoạt đã bị thu hồi.',
+              code: 'code_revoked',
+            ),
+          );
+        }
         return const Failure(
           AuthFailure(
             userMessage: 'Mã kích hoạt không hợp lệ hoặc đã bị thu hồi.',
@@ -212,4 +260,25 @@ class SettingsService {
   }
 
   Future<Result<void>> testMathpixConnection() => testConnection();
+}
+
+({String? code, DateTime? expiresAt})? _errorFromBody(String body) {
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) return null;
+    final error = decoded['error'];
+    if (error is! Map) return null;
+    final codeRaw = error['code'];
+    final code = codeRaw == null || '$codeRaw'.trim().isEmpty
+        ? null
+        : '$codeRaw'.trim();
+    DateTime? expires;
+    final rawExpires = error['expires_at'];
+    if (rawExpires is String && rawExpires.trim().isNotEmpty) {
+      expires = DateTime.tryParse(rawExpires)?.toLocal();
+    }
+    return (code: code, expiresAt: expires);
+  } on Object {
+    return null;
+  }
 }

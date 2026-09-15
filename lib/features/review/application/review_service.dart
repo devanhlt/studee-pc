@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
+import 'package:studee_pc/app/widgets/question_display_format.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
@@ -46,6 +47,7 @@ class ReviewSessionState {
     this.quizCorrectContent,
     this.quizAnswerFromLlm = false,
     this.quizResolvingAnswer = false,
+    this.quizLatexLoading = false,
   });
 
   final ReviewStage stage;
@@ -65,6 +67,7 @@ class ReviewSessionState {
   final String? quizCorrectContent;
   final bool quizAnswerFromLlm;
   final bool quizResolvingAnswer;
+  final bool quizLatexLoading;
 
   bool get isIncomplete => stage == ReviewStage.running;
 
@@ -95,6 +98,7 @@ class ReviewSessionState {
     String? quizCorrectContent,
     bool? quizAnswerFromLlm,
     bool? quizResolvingAnswer,
+    bool? quizLatexLoading,
     bool clearQuiz = false,
   }) {
     return ReviewSessionState(
@@ -120,6 +124,8 @@ class ReviewSessionState {
       quizResolvingAnswer: clearQuiz
           ? false
           : (quizResolvingAnswer ?? this.quizResolvingAnswer),
+      quizLatexLoading:
+          clearQuiz ? false : (quizLatexLoading ?? this.quizLatexLoading),
     );
   }
 }
@@ -130,13 +136,28 @@ class ReviewService {
     required PracticeService practice,
     required DeepSeekClient deepSeek,
     required Future<List<Question>> Function(String subjectId) loadQuestions,
+    required Future<void> Function({
+      required String subjectId,
+      required String questionId,
+      required String content,
+      List<({String id, String content})> choices,
+      String? answerContent,
+    }) persistQuestionMath,
   })  : _practice = practice,
         _deepSeek = deepSeek,
-        _loadQuestions = loadQuestions;
+        _loadQuestions = loadQuestions,
+        _persistQuestionMath = persistQuestionMath;
 
   final PracticeService _practice;
   final DeepSeekClient _deepSeek;
   final Future<List<Question>> Function(String subjectId) _loadQuestions;
+  final Future<void> Function({
+    required String subjectId,
+    required String questionId,
+    required String content,
+    List<({String id, String content})> choices,
+    String? answerContent,
+  }) _persistQuestionMath;
   final AppLogger _log = AppLogger('ReviewService');
 
   final StreamController<ReviewSessionState> _states =
@@ -587,8 +608,10 @@ class ReviewService {
       );
     }
 
+    await _polishCurrentQuestionLatex();
+
     if (_state.mode == ReviewPlayMode.quiz) {
-      // Local MCQ — no API call. Auto-mark answered if no choices.
+      // Local MCQ — auto-mark answered if no choices.
       if (currentQuizChoices.isEmpty) {
         skipQuizWithoutChoices();
       }
@@ -611,6 +634,139 @@ class ReviewService {
       knownAnswerContent:
           StudyNotesBuilder.answerMeaning(question, compact: false),
     );
+  }
+
+  /// Heuristic enrich + optional LLM LaTeX polish; persists when improved.
+  Future<void> _polishCurrentQuestionLatex() async {
+    final subjectId = _state.subjectId;
+    if (subjectId == null || _queue.isEmpty) return;
+    final index = _state.currentIndex;
+    if (index < 0 || index >= _queue.length) return;
+
+    var question = _queue[index];
+    final local = _applyLocalLatexEnrich(question);
+    final localChanged = local.content != question.content ||
+        !_sameChoiceBodies(local.choices, question.choices) ||
+        local.answerContent != question.answerContent;
+    if (localChanged) {
+      _replaceQueueQuestion(index, local);
+      question = local;
+      _emit(_state.copyWith(clearError: true));
+      try {
+        await _persistQuestionMath(
+          subjectId: subjectId,
+          questionId: local.id,
+          content: local.content,
+          choices: [
+            for (final c in local.choices) (id: c.id, content: c.content),
+          ],
+          answerContent: local.answerContent,
+        );
+      } on Object catch (e) {
+        _log.warning('Persist local LaTeX enrich failed: ${e.runtimeType}');
+      }
+    }
+
+    final needsLlm = QuestionDisplayFormat.bundleNeedsLatexPolish(
+      content: question.content,
+      choiceContents: [for (final c in question.choices) c.content],
+      answerContent: question.answerContent,
+    );
+    if (!needsLlm) return;
+
+    _emit(_state.copyWith(quizLatexLoading: true, clearError: true));
+    try {
+      try {
+        await _practice.prepareCredentials();
+      } on Object catch (_) {}
+      if (!await _practice.hasApiKey()) {
+        _emit(_state.copyWith(quizLatexLoading: false));
+        return;
+      }
+
+      final formatted = await _deepSeek.formatMathLatex(
+        content: question.content,
+        choices: [
+          for (final c in question.choices)
+            (label: c.label, content: c.content),
+        ],
+        answerContent: question.answerContent,
+      );
+
+      if (_state.stage != ReviewStage.running ||
+          _state.currentIndex != index) {
+        return;
+      }
+
+      final polishedChoices = <QuestionChoice>[];
+      for (var i = 0; i < question.choices.length; i++) {
+        final original = question.choices[i];
+        String body = original.content;
+        if (i < formatted.choices.length) {
+          body = QuestionDisplayFormat.enrich(formatted.choices[i].content);
+        } else {
+          body = QuestionDisplayFormat.enrich(body);
+        }
+        polishedChoices.add(original.copyWith(content: body));
+      }
+
+      final polished = question.copyWith(
+        content: QuestionDisplayFormat.enrich(formatted.content),
+        choices: polishedChoices,
+        answerContent: formatted.answerContent == null
+            ? question.answerContent
+            : QuestionDisplayFormat.enrich(formatted.answerContent!),
+      );
+      _replaceQueueQuestion(index, polished);
+      try {
+        await _persistQuestionMath(
+          subjectId: subjectId,
+          questionId: polished.id,
+          content: polished.content,
+          choices: [
+            for (final c in polished.choices)
+              (id: c.id, content: c.content),
+          ],
+          answerContent: polished.answerContent,
+        );
+      } on Object catch (e) {
+        _log.warning('Persist LaTeX polish failed: ${e.runtimeType}');
+      }
+      _emit(_state.copyWith(quizLatexLoading: false, clearError: true));
+    } on Object catch (e) {
+      _log.warning('LLM LaTeX polish failed: ${e.runtimeType}');
+      if (_state.stage == ReviewStage.running) {
+        _emit(_state.copyWith(quizLatexLoading: false));
+      }
+    }
+  }
+
+  Question _applyLocalLatexEnrich(Question question) {
+    return question.copyWith(
+      content: QuestionDisplayFormat.enrich(question.content),
+      answerContent: question.answerContent == null
+          ? null
+          : QuestionDisplayFormat.enrich(question.answerContent!),
+      choices: [
+        for (final c in question.choices)
+          c.copyWith(content: QuestionDisplayFormat.enrich(c.content)),
+      ],
+    );
+  }
+
+  bool _sameChoiceBodies(List<QuestionChoice> a, List<QuestionChoice> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].content != b[i].content) return false;
+    }
+    return true;
+  }
+
+  void _replaceQueueQuestion(int index, Question question) {
+    if (index < 0 || index >= _queue.length) return;
+    final next = [..._queue];
+    next[index] = question;
+    _queue = next;
   }
 
   void _watchPractice() {
@@ -667,6 +823,21 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
     deepSeek: ref.watch(deepSeekClientProvider),
     loadQuestions: (id) =>
         ref.read(subjectContentProvider).listQuestionsWithChoices(id),
+    persistQuestionMath: ({
+      required subjectId,
+      required questionId,
+      required content,
+      choices = const [],
+      answerContent,
+    }) {
+      return ref.read(subjectContentProvider).updateQuestionMath(
+            subjectId: subjectId,
+            questionId: questionId,
+            content: content,
+            choices: choices,
+            answerContent: answerContent,
+          );
+    },
   );
   ref.onDispose(service.dispose);
   return service;

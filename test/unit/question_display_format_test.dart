@@ -56,12 +56,23 @@ void main() {
       expect(out, isNot(contains('A.AT')));
     });
 
-    test('converts MATLAB choice matrices', () {
-      const raw = '( 6 -5 ; -5 10 )';
+    test('converts equation systems and x1 subscripts', () {
+      const raw =
+          'Giải hệ phương trình { x1 -3x2 +2x3 -x4 =2 ; 4x1 +x2 +3x3 -2x4 =1 ; 2x1 +7x2 -x3 =1 )';
       final out = QuestionDisplayFormat.enrich(raw);
-      expect(out, startsWith(r'$\begin{bmatrix}'));
-      expect(out, contains(r'6 & -5'));
-      expect(out, contains(r'-5 & 10'));
+      expect(out, contains(r'\begin{cases}'));
+      expect(out, contains(r'x_{1}'));
+      expect(out, contains(r'x_{2}'));
+      expect(out, contains(r'3x_{2}'));
+      expect(out, isNot(contains('{ x1')));
+      expect(out, isNot(contains('3x2')));
+    });
+
+    test('converts assignment list choices', () {
+      const raw = 'x1=1,x2=1,x3=-1,x4=-6';
+      final out = QuestionDisplayFormat.enrich(raw);
+      expect(out, contains(r'$x_{1}=1'));
+      expect(out, contains(r'x_{4}=-6$'));
     });
   });
 }

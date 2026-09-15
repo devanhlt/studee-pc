@@ -32,11 +32,21 @@ class StudeeTokenStatusBar extends ConsumerWidget {
       barColor = AppColors.borderStrong;
       label = 'Chưa có mã';
       semanticsLabel = 'Chưa có mã kích hoạt';
-    } else if (info.status == 'expired' || info.status == 'revoked') {
+    } else if (info.isExpired || info.status == 'revoked') {
       progress = 0;
       barColor = AppColors.error;
-      label = 'Hết hạn';
-      semanticsLabel = 'Mã hết hạn';
+      if (info.status == 'revoked') {
+        label = 'Đã thu hồi';
+        semanticsLabel = 'Mã đã bị thu hồi';
+      } else if (info.expiresAt != null) {
+        label =
+            'Hết hạn ${ActivationRequestConfig.formatDate(info.expiresAt!)}';
+        semanticsLabel =
+            'Mã hết hạn ${ActivationRequestConfig.formatDateTime(info.expiresAt!)}';
+      } else {
+        label = 'Hết hạn';
+        semanticsLabel = 'Mã hết hạn';
+      }
     } else {
       final remaining = info.remaining.clamp(0, info.maxSolves).toInt();
       progress = (remaining / info.maxSolves).clamp(0.0, 1.0);

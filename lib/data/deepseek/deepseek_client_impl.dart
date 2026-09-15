@@ -319,6 +319,63 @@ class DeepSeekClientImpl implements DeepSeekClient {
   }
 
   @override
+  Future<MathLatexFormatResult> formatMathLatex({
+    required String content,
+    List<({String label, String content})> choices = const [],
+    String? answerContent,
+  }) async {
+    final userPayload = {
+      'content': content,
+      'choices': [
+        for (final c in choices)
+          {
+            'label': c.label,
+            'content': c.content,
+          },
+      ],
+      if (answerContent != null && answerContent.trim().isNotEmpty)
+        'answer_content': answerContent.trim(),
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.mathLatexFormatSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: DeepSeekPrompts.mathLatexFormatVersion,
+      maxTokensOverride: 2048,
+    );
+    final map = _requireJsonObject(raw);
+    final outContent = '${map['content'] ?? content}'.trim();
+    if (outContent.isEmpty) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi chuẩn hóa LaTeX trống.',
+        code: 'math_latex_format_empty',
+      );
+    }
+    final outChoices = <({String label, String content})>[];
+    final rawChoices = map['choices'];
+    if (rawChoices is List) {
+      for (final entry in rawChoices) {
+        if (entry is! Map) continue;
+        final label = '${entry['label'] ?? ''}'.trim();
+        final body = '${entry['content'] ?? ''}'.trim();
+        if (label.isEmpty && body.isEmpty) continue;
+        outChoices.add((label: label, content: body));
+      }
+    }
+    if (outChoices.isEmpty && choices.isNotEmpty) {
+      outChoices.addAll(choices);
+    }
+    final outAnswer = map.containsKey('answer_content')
+        ? '${map['answer_content'] ?? ''}'.trim()
+        : answerContent?.trim();
+    return MathLatexFormatResult(
+      content: outContent,
+      choices: outChoices,
+      answerContent:
+          (outAnswer == null || outAnswer.isEmpty) ? null : outAnswer,
+    );
+  }
+
+  @override
   Future<String> generateKnowledgeSummary({
     required String subjectName,
     required List<KnowledgeSummaryUnit> units,

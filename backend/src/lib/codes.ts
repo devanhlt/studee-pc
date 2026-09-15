@@ -131,7 +131,11 @@ export async function consumeSolve(
   return (rows[0] as ActivationCodeRow | undefined) ?? null;
 }
 
-export function entitlementPayload(row: ActivationCodeRow) {
+export function entitlementPayload(row: ActivationCodeRow, now = new Date()) {
+  const expired =
+    row.expires_at != null && new Date(row.expires_at) <= now;
+  const status =
+    expired && row.status !== "revoked" ? "expired" : row.status;
   return {
     code: row.code,
     plan: row.plan,
@@ -141,7 +145,7 @@ export function entitlementPayload(row: ActivationCodeRow) {
     max_tokens: row.max_solves,
     tokens_used: row.solves_used,
     remaining_tokens: remainingSolves(row),
-    status: row.status,
+    status,
     expires_at: row.expires_at,
   };
 }

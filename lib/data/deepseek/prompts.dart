@@ -5,8 +5,8 @@ import 'package:studee_pc/data/deepseek/deepseek_config.dart';
 /// Each prompt includes the word `JSON` and an example schema. All instruct
 /// Vietnamese output by default.
 abstract final class DeepSeekPrompts {
-  static const String sourceStructuringVersion = 'sourceStructuring.v4';
-  static const String questionParsingVersion = 'questionParsing.v1';
+  static const String sourceStructuringVersion = 'sourceStructuring.v5';
+  static const String questionParsingVersion = 'questionParsing.v2';
   static const String groundedAnswerVersion = 'groundedAnswer.v2';
   static const String repairVersion = 'repair.v1';
   static const String memorizationTipsVersion = 'memorizationTips.v1';
@@ -19,6 +19,7 @@ abstract final class DeepSeekPrompts {
   static const String practiceReviewVersion = 'practice.review.v1';
   static const String mcqStrategyTipVersion = 'mcqStrategyTip.v1';
   static const String quizAnswerResolveVersion = 'quizAnswerResolve.v1';
+  static const String mathLatexFormatVersion = 'mathLatexFormat.v1';
 
   /// Structures reviewed OCR / page text into knowledge units and questions.
   static String sourceStructuringSystem() => '''
@@ -43,7 +44,12 @@ Quy tắc bắt buộc:
 6) Liên kết câu hỏi với kiến thức liên quan qua related_knowledge_indices (chỉ số 0-based trong mảng knowledge_units).
 7) Không bịa đáp án / kiến thức nếu nguồn không có.
 8) Giữ nguyên tiếng Việt và dấu thanh; không dịch sang tiếng Anh.
-9) Công thức toán phải bọc LaTeX bằng \$...\$ (inline) hoặc \$\$...\$\$ (khối).
+9) Công thức toán BẮT BUỘC bọc LaTeX \$...\$ (inline) hoặc \$\$...\$\$ (khối). Áp dụng cho content, choices[].content, answer_content, explanation, knowledge_units.content.
+   - Biến có chỉ số: x1 → \$x_1\$, x2 → \$x_2\$ (không để "x1" thuần).
+   - Hệ phương trình dạng "{ eq1 ; eq2 ; … }" hoặc nhiều dòng → dùng \$\$\\begin{cases}…\\end{cases}\$\$.
+   - Ma trận kiểu [[…],[…]] hoặc ( a b ; c d ) → \$\\begin{bmatrix}…\\end{bmatrix}\$.
+   - Tích chuyển vị A.AT / A.A^T → \$A A^{T}\$.
+   - Giữ nguyên tiếng Việt ngoài công thức; không bỏ nội dung đề.
 10) Mọi đơn vị mới: verification_status = "unreviewed". Bảo toàn số trang nguồn khi có.
 11) type knowledge_units thuộc: theory, definition, formula, theorem, example, question, answer_key, solution, table, note.
 
@@ -102,7 +108,8 @@ Quy tắc:
 - Không giải câu hỏi; chỉ phân tích cấu trúc.
 - Giữ nguyên dấu tiếng Việt.
 - Công thức toán trong content/choices phải dùng LaTeX với \$...\$ hoặc \$\$...\$\$.
-- Nếu nguồn viết ma trận kiểu Python/list (ví dụ [[1,2],[3,4]]), hãy đổi thành LaTeX \\begin{bmatrix}...\\end{bmatrix} (bọc \$...\$).
+- Nếu nguồn viết ma trận kiểu Python/list (ví dụ [[1,2],[3,4]]) hoặc MATLAB ( 1 2 ; 3 4 ), hãy đổi thành LaTeX \\begin{bmatrix}...\\end{bmatrix} (bọc \$...\$).
+- Hệ phương trình "{ eq ; eq }" → \$\$\\begin{cases}…\\end{cases}\$\$; biến x1 → \$x_1\$.
 - Đoạn mã nguồn (C/Python/…) giữ trong content; có thể để nguyên để UI bọc code fence.
 
 Trả về đúng một đối tượng JSON theo schema ví dụ:
@@ -381,6 +388,30 @@ Schema:
   "correct_label": "C",
   "correct_content": "nội dung lựa chọn đúng",
   "brief_reason": "…"
+}
+''';
+
+  /// Convert raw exam math text into display-ready LaTeX (for import + UI polish).
+  static String mathLatexFormatSystem() => '''
+Bạn chuẩn hóa công thức toán trong câu hỏi thi tiếng Việt sang LaTeX để hiển thị.
+${DeepSeekConfig.vietnameseOutputInstruction}
+
+Nhiệm vụ: nhận stem + choices (+ answer_content nếu có). Trả lại CÙNG nội dung nhưng công thức đã là LaTeX.
+
+Quy tắc BẮT BUỘC:
+1) Trả đúng một object JSON.
+2) Giữ nguyên ý nghĩa và tiếng Việt; không giải bài; không đổi đáp án.
+3) Bọc công thức bằng \$...\$ hoặc \$\$...\$\$.
+4) x1,x2… → \$x_1\$, \$x_2\$; hệ "{ eq ; eq }" → \$\$\\begin{cases}…\\end{cases}\$\$.
+5) Ma trận [[…]] hoặc ( a b ; c d ) → \$\\begin{bmatrix}…\\end{bmatrix}\$.
+6) A.AT → \$A A^{T}\$. Lựa chọn kiểu "x1=1,x2=…" → một biểu thức LaTeX gọn.
+7) Nếu đã có LaTeX đúng thì giữ nguyên.
+
+Schema:
+{
+  "content": "stem đã chuẩn hóa…",
+  "choices": [{"label":"A","content":"…"}],
+  "answer_content": "… hoặc null"
 }
 ''';
 }

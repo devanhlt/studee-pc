@@ -274,6 +274,31 @@ class _RunningQuizReview extends ConsumerWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
+                                if (review.quizLatexLoading) ...[
+                                  const SizedBox(height: AppLayout.gapSm),
+                                  const Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Đang chuẩn hóa công thức…',
+                                          style: TextStyle(
+                                            color: AppColors.secondaryText,
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: AppLayout.gapSm),
+                                ],
                                 StudyMarkdown(
                                   StudyNotesMarkdownCode.formatBody(
                                     question.content.trim(),
