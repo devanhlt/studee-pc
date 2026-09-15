@@ -43,5 +43,25 @@ void main() {
       expect(out, contains('A. \$'));
       expect(out, contains('B. \$'));
     });
+
+    test('converts MATLAB-style paren matrices and A.AT', () {
+      const raw =
+          'Cho ma trận: A = ( 1 1 -2 ; 0 1 3 ). Tính A.AT = ?';
+      final out = QuestionDisplayFormat.enrich(raw);
+      expect(out, contains(r'$A = \begin{bmatrix}'));
+      expect(out, contains(r'1 & 1 & -2'));
+      expect(out, contains(r'0 & 1 & 3'));
+      expect(out, contains(r'$A A^{T}$'));
+      expect(out, isNot(contains('( 1 1 -2')));
+      expect(out, isNot(contains('A.AT')));
+    });
+
+    test('converts MATLAB choice matrices', () {
+      const raw = '( 6 -5 ; -5 10 )';
+      final out = QuestionDisplayFormat.enrich(raw);
+      expect(out, startsWith(r'$\begin{bmatrix}'));
+      expect(out, contains(r'6 & -5'));
+      expect(out, contains(r'-5 & 10'));
+    });
   });
 }

@@ -36,6 +36,7 @@ class StudyMarkdown extends StatelessWidget {
         t.contains(r'\(') ||
         t.contains(r'\[') ||
         t.contains('[[') ||
+        RegExp(r'\([^)]*;[^)]*\)').hasMatch(t) ||
         t.contains('```') ||
         t.contains('**') ||
         t.contains('##') ||

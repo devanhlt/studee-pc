@@ -1,13 +1,15 @@
 /// Client-side enrichers so question text renders as math / code in [StudyMarkdown].
 ///
 /// Handles common stored/OCR forms like Python nested lists `[[1,2],[3,4]]`
-/// without requiring an extra LLM round-trip (LLM LaTeX still preferred when present).
+/// and MATLAB-style `( 1 2 ; 3 4 )` without an extra LLM round-trip.
 abstract final class QuestionDisplayFormat {
   /// Convert display-hostile math/code shapes into Markdown + LaTeX.
   static String enrich(String input) {
     if (input.trim().isEmpty) return input;
     var text = input.replaceAll('\r\n', '\n');
     text = _pythonMatricesToLatex(text);
+    text = _matlabMatricesToLatex(text);
+    text = _transposeProductsToLatex(text);
     return text;
   }
 
@@ -59,6 +61,55 @@ abstract final class QuestionDisplayFormat {
     });
   }
 
+  /// MATLAB / Octave: `( 1 1 -2 ; 0 1 3 )` → bmatrix LaTeX.
+  static String _matlabMatricesToLatex(String text) {
+    if (!text.contains(';') || !text.contains('(')) return text;
+
+    // Optional "A = " then ( row ; row … ). Rows use spaces and/or commas.
+    final matrixRe = RegExp(
+      r'(?:([A-Za-z][A-Za-z0-9]*)\s*=\s*)?'
+      r'\(\s*'
+      r'('
+      r'-?[0-9]+(?:\.[0-9]+)?(?:\s*,?\s+-?[0-9]+(?:\.[0-9]+)?)*'
+      r'(?:\s*;\s*-?[0-9]+(?:\.[0-9]+)?(?:\s*,?\s+-?[0-9]+(?:\.[0-9]+)?)*)+'
+      r')'
+      r'\s*\)',
+    );
+
+    return _mapOutsideProtected(text, (segment) {
+      return segment.replaceAllMapped(matrixRe, (m) {
+        final name = m.group(1);
+        final inner = m.group(2)!;
+        final latex = _matlabInnerToBmatrix(inner);
+        if (latex == null) return m.group(0)!;
+        if (name != null && name.isNotEmpty) {
+          return '\$$name = $latex\$';
+        }
+        return '\$$latex\$';
+      });
+    });
+  }
+
+  /// `A.AT` / `A.A^T` → `$A A^{T}$`
+  static String _transposeProductsToLatex(String text) {
+    return _mapOutsideProtected(text, (segment) {
+      var s = segment;
+      // A.AT or A.A^T or A*AT (same letter)
+      s = s.replaceAllMapped(
+        RegExp(
+          r'\b([A-Za-z])\s*(?:[·⋅*]|\.)\s*\1\s*(?:\^\s*)?[Tt]\b',
+        ),
+        (m) => '\$${m[1]} ${m[1]}^{T}\$',
+      );
+      // Bare A^T not already in math
+      s = s.replaceAllMapped(
+        RegExp(r'(?<!\$)\b([A-Za-z])\s*\^\s*[Tt]\b'),
+        (m) => '\$${m[1]}^{T}\$',
+      );
+      return s;
+    });
+  }
+
   static String? _listLiteralToBmatrix(String literal) {
     final trimmed = literal.trim();
     if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) return null;
@@ -77,6 +128,23 @@ abstract final class QuestionDisplayFormat {
       rows.add(cells.join(' & '));
     }
     if (rows.length < 2) return null;
+    return '\\begin{bmatrix}${rows.join(r' \\ ')}\\end{bmatrix}';
+  }
+
+  static String? _matlabInnerToBmatrix(String inner) {
+    final rows = <String>[];
+    for (final row in inner.split(';')) {
+      final cells = row
+          .trim()
+          .split(RegExp(r'[\s,]+'))
+          .where((c) => c.isNotEmpty)
+          .map(_cellToTex)
+          .toList();
+      if (cells.isEmpty) return null;
+      rows.add(cells.join(' & '));
+    }
+    if (rows.length < 2) return null;
+    // Consistent column count preferred but not required for display.
     return '\\begin{bmatrix}${rows.join(r' \\ ')}\\end{bmatrix}';
   }
 
