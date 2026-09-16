@@ -298,6 +298,60 @@ class _SubjectCard extends ConsumerWidget {
 
   final Subject subject;
 
+  Future<void> _openMenu(
+    BuildContext context,
+    WidgetRef ref,
+    Offset globalPosition,
+  ) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'pin',
+          child: Text(subject.pinned ? 'Bỏ ghim' : 'Ghim lên đầu'),
+        ),
+        const PopupMenuItem(
+          value: 'rename',
+          child: Text('Đổi tên'),
+        ),
+        const PopupMenuItem(
+          value: 'export',
+          child: Text('Xuất ZIP'),
+        ),
+        const PopupMenuItem(
+          value: 'export_notes',
+          child: Text('Xuất tài liệu'),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: Text('Xóa'),
+        ),
+      ],
+    );
+    if (!context.mounted || selected == null) return;
+    switch (selected) {
+      case 'pin':
+        await ref.read(subjectsActionsProvider).setPinned(
+              subject.id,
+              pinned: !subject.pinned,
+            );
+        ref.read(subjectsActionsProvider).refresh();
+      case 'rename':
+        await _showRenameDialog(context, ref, subject);
+      case 'export':
+        await _exportSubject(context, ref, subject);
+      case 'export_notes':
+        await _exportStudyNotes(context, ref, subject);
+      case 'delete':
+        await _showDeleteDialog(context, ref, subject);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final color = subject.color != null
@@ -309,8 +363,9 @@ class _SubjectCard extends ConsumerWidget {
 
     return StudeeCard(
       accentColor: color,
-      padding: const EdgeInsets.fromLTRB(12, 14, 4, 14),
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
       onTap: () => context.push('/subjects/${subject.id}'),
+      onContextMenu: (pos) => _openMenu(context, ref, pos),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -375,49 +430,6 @@ class _SubjectCard extends ConsumerWidget {
                 ),
               ],
             ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Thao tác',
-            onSelected: (value) async {
-              switch (value) {
-                case 'pin':
-                  await ref.read(subjectsActionsProvider).setPinned(
-                        subject.id,
-                        pinned: !subject.pinned,
-                      );
-                  ref.read(subjectsActionsProvider).refresh();
-                case 'rename':
-                  await _showRenameDialog(context, ref, subject);
-                case 'export':
-                  await _exportSubject(context, ref, subject);
-                case 'export_notes':
-                  await _exportStudyNotes(context, ref, subject);
-                case 'delete':
-                  await _showDeleteDialog(context, ref, subject);
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'pin',
-                child: Text(subject.pinned ? 'Bỏ ghim' : 'Ghim lên đầu'),
-              ),
-              const PopupMenuItem(
-                value: 'rename',
-                child: Text('Đổi tên'),
-              ),
-              const PopupMenuItem(
-                value: 'export',
-                child: Text('Xuất ZIP'),
-              ),
-              const PopupMenuItem(
-                value: 'export_notes',
-                child: Text('Xuất tài liệu'),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Text('Xóa'),
-              ),
-            ],
           ),
         ],
       ),

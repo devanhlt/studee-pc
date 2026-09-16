@@ -345,6 +345,7 @@ class StudeeCard extends StatefulWidget {
     super.key,
     required this.child,
     this.onTap,
+    this.onContextMenu,
     this.padding = const EdgeInsets.all(12),
     this.accentColor,
     this.gradientBorder = false,
@@ -352,6 +353,10 @@ class StudeeCard extends StatefulWidget {
 
   final Widget child;
   final VoidCallback? onTap;
+
+  /// Desktop: right-click. Mobile: long-press. [globalPosition] is for [showMenu].
+  final ValueChanged<Offset>? onContextMenu;
+
   final EdgeInsetsGeometry padding;
   final Color? accentColor;
   final bool gradientBorder;
@@ -362,6 +367,7 @@ class StudeeCard extends StatefulWidget {
 
 class _StudeeCardState extends State<StudeeCard> {
   bool _hovered = false;
+  Offset? _lastPointerGlobal;
 
   @override
   Widget build(BuildContext context) {
@@ -405,6 +411,20 @@ class _StudeeCardState extends State<StudeeCard> {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: widget.onTap,
+          onTapDown: (details) {
+            _lastPointerGlobal = details.globalPosition;
+          },
+          onSecondaryTapDown: widget.onContextMenu == null
+              ? null
+              : (details) {
+                  widget.onContextMenu!(details.globalPosition);
+                },
+          onLongPress: widget.onContextMenu == null
+              ? null
+              : () {
+                  final pos = _lastPointerGlobal;
+                  if (pos != null) widget.onContextMenu!(pos);
+                },
           borderRadius: AppLayout.cardBorder,
           child: DecoratedBox(
             decoration: BoxDecoration(
