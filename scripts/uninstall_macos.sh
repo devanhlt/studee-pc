@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Completely uninstall Studee for macOS (app + data + keychain + caches).
+# Completely uninstall Studee for macOS (app + data + legacy keychain leftovers + caches).
 #
 # Usage:
 #   ./uninstall_macos.sh                 # from DMG volume (interactive)
@@ -9,8 +9,9 @@
 # Removes:
 #   - /Applications/Studee.app
 #   - Application Support / Containers / Caches / Preferences / Saved State
+#     (includes ApplicationData/credentials.v1.dat)
 #   - OCR resolve log
-#   - DeepSeek API key in Keychain (flutter_secure_storage)
+#   - Legacy Keychain items from older builds (flutter_secure_storage)
 #   - ~/.paddlex (shared PaddleOCR cache from older setups)
 #   - Repo build/ocr_bundle + dist (only when run from the studee-pc git repo)
 set -uo pipefail
@@ -62,7 +63,8 @@ echo "  Caches:           ${CACHES}"
 echo "  Preferences:      ${PREFS}"
 echo "  Saved state:      ${SAVED}"
 echo "  OCR log:          ${OCR_LOG}"
-echo "  Keychain:         deepseek_api_key (flutter_secure_storage)"
+echo "  Credentials file: ${SUPPORT}/ApplicationData/credentials.v1.dat"
+echo "  Legacy Keychain:  flutter_secure_storage leftovers (if any)"
 echo "  PaddleX cache:    ${PADDLEX}"
 if [[ -f "${REPO_ROOT}/pubspec.yaml" ]] && grep -q 'name: studee_pc' "${REPO_ROOT}/pubspec.yaml" 2>/dev/null; then
   echo "  Repo artifacts:   ${REPO_ROOT}/build/ocr_bundle , ${REPO_ROOT}/dist"
@@ -146,7 +148,7 @@ remove_path "$PREFS"
 remove_path "$SAVED"
 remove_path "$OCR_LOG"
 
-echo "==> Removing DeepSeek API key from Keychain…"
+echo "==> Removing legacy Keychain leftovers (older builds)…"
 # flutter_secure_storage stores key name as the Keychain account.
 deleted_key=0
 for service in \
@@ -154,14 +156,21 @@ for service in \
   "${BUNDLE_ID}" \
   "FlutterSecureStorage"
 do
-  if security delete-generic-password -s "$service" -a "deepseek_api_key" >/dev/null 2>&1; then
-    echo "  deleted keychain item service=$service account=deepseek_api_key"
-    deleted_key=1
-  fi
+  for account in \
+    "deepseek_api_key" \
+    "studee_api_credentials_v1" \
+    "mathpix_app_id" \
+    "mathpix_app_key" \
+    "mathpix_base_url"
+  do
+    if security delete-generic-password -s "$service" -a "$account" >/dev/null 2>&1; then
+      echo "  deleted keychain item service=$service account=$account"
+      deleted_key=1
+    fi
+  done
 done
 if [[ "$deleted_key" -eq 0 ]]; then
-  echo "  (no matching Keychain item found — OK if key was never saved)"
-  echo "  Tip: Keychain Access → search deepseek / flutter_secure_storage"
+  echo "  (no matching Keychain item found — OK if never used or already migrated)"
 fi
 
 echo "==> Removing shared PaddleX cache…"

@@ -68,6 +68,19 @@ class $SubjectsTable extends Subjects
     requiredDuringInsert: false,
     defaultValue: const Constant(1),
   );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -98,6 +111,7 @@ class $SubjectsTable extends Subjects
     icon,
     color,
     schemaVersion,
+    pinned,
     createdAt,
     updatedAt,
   ];
@@ -155,6 +169,12 @@ class $SubjectsTable extends Subjects
         ),
       );
     }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -204,6 +224,10 @@ class $SubjectsTable extends Subjects
         DriftSqlType.int,
         data['${effectivePrefix}schema_version'],
       )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
@@ -229,6 +253,7 @@ class CatalogSubjectRow extends DataClass
   final String? icon;
   final int? color;
   final int schemaVersion;
+  final bool pinned;
   final int createdAt;
   final int updatedAt;
   const CatalogSubjectRow({
@@ -238,6 +263,7 @@ class CatalogSubjectRow extends DataClass
     this.icon,
     this.color,
     required this.schemaVersion,
+    required this.pinned,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -254,6 +280,7 @@ class CatalogSubjectRow extends DataClass
       map['color'] = Variable<int>(color);
     }
     map['schema_version'] = Variable<int>(schemaVersion);
+    map['pinned'] = Variable<bool>(pinned);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
@@ -269,6 +296,7 @@ class CatalogSubjectRow extends DataClass
           ? const Value.absent()
           : Value(color),
       schemaVersion: Value(schemaVersion),
+      pinned: Value(pinned),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -286,6 +314,7 @@ class CatalogSubjectRow extends DataClass
       icon: serializer.fromJson<String?>(json['icon']),
       color: serializer.fromJson<int?>(json['color']),
       schemaVersion: serializer.fromJson<int>(json['schemaVersion']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
@@ -300,6 +329,7 @@ class CatalogSubjectRow extends DataClass
       'icon': serializer.toJson<String?>(icon),
       'color': serializer.toJson<int?>(color),
       'schemaVersion': serializer.toJson<int>(schemaVersion),
+      'pinned': serializer.toJson<bool>(pinned),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
@@ -312,6 +342,7 @@ class CatalogSubjectRow extends DataClass
     Value<String?> icon = const Value.absent(),
     Value<int?> color = const Value.absent(),
     int? schemaVersion,
+    bool? pinned,
     int? createdAt,
     int? updatedAt,
   }) => CatalogSubjectRow(
@@ -321,6 +352,7 @@ class CatalogSubjectRow extends DataClass
     icon: icon.present ? icon.value : this.icon,
     color: color.present ? color.value : this.color,
     schemaVersion: schemaVersion ?? this.schemaVersion,
+    pinned: pinned ?? this.pinned,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -336,6 +368,7 @@ class CatalogSubjectRow extends DataClass
       schemaVersion: data.schemaVersion.present
           ? data.schemaVersion.value
           : this.schemaVersion,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -350,6 +383,7 @@ class CatalogSubjectRow extends DataClass
           ..write('icon: $icon, ')
           ..write('color: $color, ')
           ..write('schemaVersion: $schemaVersion, ')
+          ..write('pinned: $pinned, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -364,6 +398,7 @@ class CatalogSubjectRow extends DataClass
     icon,
     color,
     schemaVersion,
+    pinned,
     createdAt,
     updatedAt,
   );
@@ -377,6 +412,7 @@ class CatalogSubjectRow extends DataClass
           other.icon == this.icon &&
           other.color == this.color &&
           other.schemaVersion == this.schemaVersion &&
+          other.pinned == this.pinned &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -388,6 +424,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
   final Value<String?> icon;
   final Value<int?> color;
   final Value<int> schemaVersion;
+  final Value<bool> pinned;
   final Value<int> createdAt;
   final Value<int> updatedAt;
   final Value<int> rowid;
@@ -398,6 +435,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     this.icon = const Value.absent(),
     this.color = const Value.absent(),
     this.schemaVersion = const Value.absent(),
+    this.pinned = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -409,6 +447,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     this.icon = const Value.absent(),
     this.color = const Value.absent(),
     this.schemaVersion = const Value.absent(),
+    this.pinned = const Value.absent(),
     required int createdAt,
     required int updatedAt,
     this.rowid = const Value.absent(),
@@ -424,6 +463,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     Expression<String>? icon,
     Expression<int>? color,
     Expression<int>? schemaVersion,
+    Expression<bool>? pinned,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
@@ -435,6 +475,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
       if (icon != null) 'icon': icon,
       if (color != null) 'color': color,
       if (schemaVersion != null) 'schema_version': schemaVersion,
+      if (pinned != null) 'pinned': pinned,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -448,6 +489,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     Value<String?>? icon,
     Value<int?>? color,
     Value<int>? schemaVersion,
+    Value<bool>? pinned,
     Value<int>? createdAt,
     Value<int>? updatedAt,
     Value<int>? rowid,
@@ -459,6 +501,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
       icon: icon ?? this.icon,
       color: color ?? this.color,
       schemaVersion: schemaVersion ?? this.schemaVersion,
+      pinned: pinned ?? this.pinned,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -486,6 +529,9 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     if (schemaVersion.present) {
       map['schema_version'] = Variable<int>(schemaVersion.value);
     }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -507,6 +553,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
           ..write('icon: $icon, ')
           ..write('color: $color, ')
           ..write('schemaVersion: $schemaVersion, ')
+          ..write('pinned: $pinned, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -534,6 +581,7 @@ typedef $$SubjectsTableCreateCompanionBuilder =
       Value<String?> icon,
       Value<int?> color,
       Value<int> schemaVersion,
+      Value<bool> pinned,
       required int createdAt,
       required int updatedAt,
       Value<int> rowid,
@@ -546,6 +594,7 @@ typedef $$SubjectsTableUpdateCompanionBuilder =
       Value<String?> icon,
       Value<int?> color,
       Value<int> schemaVersion,
+      Value<bool> pinned,
       Value<int> createdAt,
       Value<int> updatedAt,
       Value<int> rowid,
@@ -587,6 +636,11 @@ class $$SubjectsTableFilterComposer
 
   ColumnFilters<int> get schemaVersion => $composableBuilder(
     column: $table.schemaVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -640,6 +694,11 @@ class $$SubjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -681,6 +740,9 @@ class $$SubjectsTableAnnotationComposer
     column: $table.schemaVersion,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -730,6 +792,7 @@ class $$SubjectsTableTableManager
                 Value<String?> icon = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<int> schemaVersion = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -740,6 +803,7 @@ class $$SubjectsTableTableManager
                 icon: icon,
                 color: color,
                 schemaVersion: schemaVersion,
+                pinned: pinned,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -752,6 +816,7 @@ class $$SubjectsTableTableManager
                 Value<String?> icon = const Value.absent(),
                 Value<int?> color = const Value.absent(),
                 Value<int> schemaVersion = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
                 required int createdAt,
                 required int updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -762,6 +827,7 @@ class $$SubjectsTableTableManager
                 icon: icon,
                 color: color,
                 schemaVersion: schemaVersion,
+                pinned: pinned,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

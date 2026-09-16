@@ -44,6 +44,7 @@ abstract final class AppIcons {
   static const empty = Icons.inbox_rounded;
   static const history = Icons.history_rounded;
   static const knowledge = Icons.menu_book_rounded;
+  static const timer = Icons.timer_outlined;
 
   // Subject glyphs
   static const subjectScience = Icons.science_rounded;

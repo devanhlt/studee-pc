@@ -34,7 +34,7 @@ class CatalogDatabase extends _$CatalogDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -42,9 +42,8 @@ class CatalogDatabase extends _$CatalogDatabase {
           await m.createAll();
         },
         onUpgrade: (Migrator m, int from, int to) async {
-          // Future catalog migrations go here (versioned + transactional).
-          if (from < 1) {
-            await m.createAll();
+          if (from < 2) {
+            await m.addColumn(subjects, subjects.pinned);
           }
         },
         beforeOpen: (details) async {

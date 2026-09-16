@@ -12,6 +12,8 @@ class Subjects extends Table {
   IntColumn get color => integer().nullable()();
   IntColumn get schemaVersion =>
       integer().named('schema_version').withDefault(const Constant(1))();
+  BoolColumn get pinned =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get createdAt => integer().named('created_at')();
   IntColumn get updatedAt => integer().named('updated_at')();
 

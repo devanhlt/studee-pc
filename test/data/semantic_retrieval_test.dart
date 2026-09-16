@@ -135,6 +135,8 @@ class _FakeDeepSeek implements DeepSeekClient {
     required String content,
     List<({String label, String content})> choices = const [],
     String? answerContent,
+    String? subjectName,
+    String? formatKind,
   }) async =>
       MathLatexFormatResult(
         content: content,

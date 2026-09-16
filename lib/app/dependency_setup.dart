@@ -26,6 +26,7 @@ import 'package:studee_pc/features/settings/application/privacy_consent_store.da
 import 'package:studee_pc/features/settings/application/quota_revision.dart';
 import 'package:studee_pc/features/settings/application/settings_service.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/platform/desktop_bootstrap.dart';
 import 'package:studee_pc/platform/desktop_integration_impl.dart';
 import 'package:studee_pc/platform/mobile_integration_impl.dart';
@@ -64,7 +65,7 @@ final subjectRepositoryProvider = Provider<SubjectRepository>((ref) {
 });
 
 final credentialsRepositoryProvider = Provider<CredentialsRepository>((ref) {
-  return CredentialsRepositoryImpl();
+  return CredentialsRepositoryImpl(paths: ref.watch(appPathsProvider));
 });
 
 final checkoutClientProvider = Provider<CheckoutClient>((ref) {
@@ -147,6 +148,16 @@ final desktopBootstrapProvider = Provider<DesktopBootstrap>((ref) {
 });
 
 final ingestionServiceProvider = Provider<IngestionService>((ref) {
+  Future<SubjectFormatContext> resolveFormatContext(String id) async {
+    try {
+      final list = await ref.read(subjectRepositoryProvider).listSubjects();
+      final subject = list.firstWhere((s) => s.id == id);
+      return formatContextForSubject(subject);
+    } on Object catch (_) {
+      return SubjectFormatContext.empty;
+    }
+  }
+
   final service = IngestionService(
     credentials: ref.watch(credentialsRepositoryProvider),
     deepSeek: ref.watch(deepSeekClientProvider),
@@ -154,6 +165,8 @@ final ingestionServiceProvider = Provider<IngestionService>((ref) {
     databaseManager: ref.watch(subjectDatabaseManagerProvider),
     fileStore: ref.watch(subjectFileStoreProvider),
     paths: ref.watch(appPathsProvider),
+    quota: ref.watch(backendQuotaClientProvider),
+    resolveFormatContext: resolveFormatContext,
   );
   ref.onDispose(service.dispose);
   return service;
@@ -173,12 +186,23 @@ final solveServiceProvider = Provider<SolveService>((ref) {
 });
 
 final practiceServiceProvider = Provider<PracticeService>((ref) {
+  Future<SubjectFormatKind> resolveFormatKind(String id) async {
+    try {
+      final list = await ref.read(subjectRepositoryProvider).listSubjects();
+      final subject = list.firstWhere((s) => s.id == id);
+      return formatKindForSubject(subject);
+    } on Object catch (_) {
+      return SubjectFormatKind.plain;
+    }
+  }
+
   final service = PracticeService(
     credentials: ref.watch(credentialsRepositoryProvider),
     deepSeek: ref.watch(deepSeekClientProvider),
     ocr: ref.watch(ocrServiceProvider),
     databaseManager: ref.watch(subjectDatabaseManagerProvider),
     quota: ref.watch(backendQuotaClientProvider),
+    resolveFormatKind: resolveFormatKind,
   );
   ref.onDispose(service.dispose);
   return service;

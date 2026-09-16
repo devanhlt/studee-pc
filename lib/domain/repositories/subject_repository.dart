@@ -13,6 +13,8 @@ abstract interface class SubjectRepository {
 
   Future<void> renameSubject(String subjectId, String newName);
 
+  Future<void> setSubjectPinned(String subjectId, {required bool pinned});
+
   Future<void> deleteSubject(String subjectId);
 
   /// Exports the subject folder as a ZIP; returns the created archive path.

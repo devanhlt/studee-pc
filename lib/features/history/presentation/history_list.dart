@@ -11,6 +11,7 @@ import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/utils/answer_display.dart';
 import 'package:studee_pc/core/utils/user_facing_copy.dart';
 import 'package:studee_pc/domain/enums/confidence_level.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 /// Lists solve sessions for a subject (tab or `/history` route).
@@ -23,6 +24,9 @@ class HistoryList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(subjectHistoryProvider(subjectId));
     final theme = Theme.of(context).textTheme;
+    final formatKind = formatKindForSubject(
+      ref.watch(subjectByIdProvider(subjectId)).asData?.value,
+    );
     return async.when(
       loading: () => const StudeeSkeletonList(),
       error: (_, _) => const StudeeStatusState(
@@ -74,6 +78,7 @@ class HistoryList extends ConsumerWidget {
                               : preview,
                           compact: true,
                           maxLines: 3,
+                          formatKind: formatKind,
                         ),
                       ),
                       IconButton(
@@ -115,6 +120,7 @@ class HistoryList extends ConsumerWidget {
                       'Đáp án: $answer',
                       compact: true,
                       maxLines: 2,
+                      formatKind: formatKind,
                       style: theme.bodyMedium,
                     ),
                   ],
@@ -272,6 +278,9 @@ class HistoryDetailScreen extends ConsumerWidget {
               ? null
               : ConfidenceLevel.fromWire(detail.confidence!);
           final notes = UserFacingCopy.friendlyWarnings(detail.warnings);
+          final formatKind = formatKindForSubject(
+            ref.watch(subjectByIdProvider(subjectId)).asData?.value,
+          );
 
           return ListView(
             padding: AppLayout.pageInsets(context),
@@ -302,6 +311,7 @@ class HistoryDetailScreen extends ConsumerWidget {
                       questionText.isEmpty
                           ? '(Không có nội dung câu hỏi)'
                           : questionText,
+                      formatKind: formatKind,
                     ),
                   ],
                 ),
@@ -332,6 +342,7 @@ class HistoryDetailScreen extends ConsumerWidget {
                     else
                       StudyMarkdown(
                         answer,
+                        formatKind: formatKind,
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -376,6 +387,7 @@ class HistoryDetailScreen extends ConsumerWidget {
                       (detail.explanationMarkdown ?? '').trim().isEmpty
                           ? '(Không có giải thích)'
                           : detail.explanationMarkdown!,
+                      formatKind: formatKind,
                     ),
                     if (detail.references.isNotEmpty) ...[
                       const SizedBox(height: 16),

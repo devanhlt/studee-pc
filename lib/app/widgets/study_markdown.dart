@@ -7,6 +7,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_typography.dart';
 import 'package:studee_pc/app/widgets/question_display_format.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 
 /// Renders study markdown with LaTeX (`$…$`, `$$…$$`, `\(...\)`, `\[…\]`).
 ///
@@ -20,6 +21,7 @@ class StudyMarkdown extends StatelessWidget {
     this.maxLines,
     this.compact = false,
     this.textAlign,
+    this.formatKind = SubjectFormatKind.plain,
   });
 
   final String data;
@@ -27,6 +29,7 @@ class StudyMarkdown extends StatelessWidget {
   final int? maxLines;
   final bool compact;
   final TextAlign? textAlign;
+  final SubjectFormatKind formatKind;
 
   /// True when [text] likely contains LaTeX or markdown worth rendering.
   static bool looksStructured(String? text) {
@@ -47,7 +50,7 @@ class StudyMarkdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final prepared = _prepareLatex(data);
+    final prepared = _prepareLatex(data, kind: formatKind);
     if (prepared.trim().isEmpty) return const SizedBox.shrink();
 
     final theme = Theme.of(context).textTheme;
@@ -69,6 +72,18 @@ class StudyMarkdown extends StatelessWidget {
           fontSize: compact ? 15 : 16,
         );
 
+    // Plain subjects: avoid markdown/math pipeline — show text as-is.
+    if (formatKind == SubjectFormatKind.plain &&
+        !looksStructured(prepared)) {
+      return Text(
+        prepared,
+        style: baseStyle,
+        maxLines: maxLines,
+        overflow: maxLines != null ? TextOverflow.ellipsis : TextOverflow.visible,
+        textAlign: textAlign,
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final screenW = MediaQuery.sizeOf(context).width;
@@ -80,7 +95,7 @@ class StudyMarkdown extends StatelessWidget {
           prepared,
           style: baseStyle,
           textAlign: textAlign,
-          useDollarSignsForLatex: true,
+          useDollarSignsForLatex: formatKind == SubjectFormatKind.math,
           maxLines: maxLines,
           overflow:
               maxLines != null ? TextOverflow.ellipsis : TextOverflow.visible,
@@ -103,15 +118,27 @@ class StudyMarkdown extends StatelessWidget {
   }
 
   /// Normalize common model / OCR LaTeX quirks before rendering.
-  static String prepareForRender(String input) => _prepareLatex(input);
+  static String prepareForRender(
+    String input, {
+    SubjectFormatKind kind = SubjectFormatKind.plain,
+  }) =>
+      _prepareLatex(input, kind: kind);
 
   /// Strip delimiters and fix common Unicode/math mixups for the TeX engine.
   static String normalizeTex(String tex) => _latexWorkaround(tex);
 
   /// Normalize common model / OCR LaTeX quirks before rendering.
-  static String _prepareLatex(String input) {
-    // Python-style matrices etc. → LaTeX before delimiter normalization.
-    var text = QuestionDisplayFormat.enrich(input.replaceAll('\r\n', '\n'));
+  static String _prepareLatex(
+    String input, {
+    SubjectFormatKind kind = SubjectFormatKind.plain,
+  }) {
+    var text = QuestionDisplayFormat.enrich(
+      input.replaceAll('\r\n', '\n'),
+      kind: kind,
+    );
+    if (kind != SubjectFormatKind.math) {
+      return text.trim();
+    }
 
     // Some models emit \\( \\) with double backslashes still escaped.
     text = text.replaceAll(r'\\(', r'\(').replaceAll(r'\\)', r'\)');

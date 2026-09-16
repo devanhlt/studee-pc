@@ -190,6 +190,9 @@ class SolveService {
   Stream<SolveSessionState> get states => _states.stream;
   SolveSessionState get current => _state;
 
+  /// Token kind that will be charged on the next [solveFromText] / Giải.
+  QuotaSolveKind get pendingQuotaKind => _pendingQuotaKind;
+
   Future<bool> hasApiKey() => _credentials.hasDeepSeekApiKey();
 
   Future<Result<SolveResult>> solveFromText({
@@ -472,7 +475,7 @@ class SolveService {
     return const Success(null);
   }
 
-  /// Warm Keychain once before OCR / DeepSeek (avoids multiple unlock prompts).
+  /// Warm credentials once before OCR / DeepSeek.
   Future<void> prepareCredentials() async {
     try {
       await _credentials.loadAll();
@@ -657,7 +660,7 @@ class SolveService {
     required String rawText,
     required QuotaSolveKind kind,
   }) async {
-    // Keychain / API key only when DeepSeek is about to be called.
+    // Activation code / API only when DeepSeek is about to be called.
     final gate = await _requireApiKey();
     if (gate != null) {
       _emitFailure(gate);
@@ -1024,7 +1027,7 @@ class SolveService {
       createdAt: DateTime.now().toUtc(),
     );
 
-    await _persistResult(result, parsed);
+    await _persistResult(result, parsed, subjectId: subjectId);
 
     _emit(
       _state.copyWith(
@@ -1281,9 +1284,10 @@ class SolveService {
 
   Future<void> _persistResult(
     SolveResult result,
-    ParsedQuestion parsed,
-  ) async {
-    final db = _dbManager.requireActive();
+    ParsedQuestion parsed, {
+    required String subjectId,
+  }) async {
+    final db = await _dbManager.open(subjectId);
     final now = result.createdAt.millisecondsSinceEpoch;
     final sessionId = result.sessionId;
     if (sessionId != null) {
@@ -1336,6 +1340,24 @@ class SolveService {
               sortOrder: order++,
             ),
           );
+    }
+
+    try {
+      final fingerprint = Fingerprints.questionFingerprint(
+        questionText: parsed.content,
+        choiceContents: parsed.choiceContents,
+      );
+      await db.customUpdate(
+        'UPDATE questions SET practice_count = practice_count + 1, updated_at = ? '
+        'WHERE question_fingerprint = ?',
+        variables: [
+          Variable.withInt(DateTime.now().toUtc().millisecondsSinceEpoch),
+          Variable.withString(fingerprint),
+        ],
+        updates: {db.questions},
+      );
+    } on Object catch (e) {
+      _log.warning('Practice count bump (solve) failed: ${e.runtimeType}');
     }
   }
 

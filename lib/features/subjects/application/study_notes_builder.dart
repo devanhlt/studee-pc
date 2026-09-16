@@ -24,19 +24,6 @@ abstract final class StudyNotesBuilder {
     return file;
   }
 
-  static Future<File> writePdfToFile({
-    required String destinationPath,
-    required List<int> bytes,
-  }) async {
-    final path = destinationPath.toLowerCase().endsWith('.pdf')
-        ? destinationPath
-        : '$destinationPath.pdf';
-    final file = File(path);
-    await file.parent.create(recursive: true);
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
-  }
-
   /// Resolves the answer as meaning/text — never a bare A/B/C letter.
   ///
   /// [compact] flattens/shortens for LLM payloads.

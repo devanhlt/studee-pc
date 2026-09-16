@@ -25,6 +25,7 @@ import 'package:studee_pc/features/solver/presentation/mobile_image_crop.dart';
 import 'package:studee_pc/features/solver/presentation/question_input_screen.dart';
 import 'package:studee_pc/features/solver/presentation/scan_question_screen.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 final solveStateProvider = StreamProvider.autoDispose<SolveSessionState>((ref) {
@@ -96,15 +97,6 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _syncTabDraft();
-      if (widget.showModeToggle) {
-        final restored =
-            await _practice.restoreIncompleteIfNeeded(widget.subjectId);
-        if (!mounted) return;
-        if (restored || _practice.hasIncompleteSession) {
-          setState(() => _surfaceMode = SolveSurfaceMode.practice);
-          return;
-        }
-      }
     });
   }
 
@@ -125,7 +117,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
   }
 
   Future<bool> _ensureApiKey() async {
-    // Warm Keychain once; later Mathpix/DeepSeek reads hit the in-memory cache.
+    // Warm credentials once; later Mathpix/DeepSeek reads hit the in-memory cache.
     try {
       await _service.prepareCredentials();
     } on Object catch (_) {
@@ -557,6 +549,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     final typed = _textController.text.trim();
     final question =
         typed.isNotEmpty ? typed : (recognizedText?.trim() ?? '');
+    final formatKind = formatKindForSubject(
+      ref.watch(subjectByIdProvider(widget.subjectId)).asData?.value,
+    );
     final hasQuestion = question.isNotEmpty;
 
     return Column(
@@ -626,7 +621,11 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                             )
                           else
                             StudyMarkdown(
-                              StudyNotesMarkdownCode.formatBody(question),
+                              StudyNotesMarkdownCode.formatBody(
+                                question,
+                                kind: formatKind,
+                              ),
+                              formatKind: formatKind,
                             ),
                         ],
                       ),
@@ -799,7 +798,15 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
                 ],
                 if (state.rawText != null &&
                     state.rawText!.trim().isNotEmpty) ...[
-                  CollapsedQuestionTile(text: state.rawText!),
+                  CollapsedQuestionTile(
+                    text: state.rawText!,
+                    formatKind: formatKindForSubject(
+                      ref
+                          .watch(subjectByIdProvider(widget.subjectId))
+                          .asData
+                          ?.value,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                 ],
                 SolveResultView(
@@ -999,9 +1006,14 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
 
 /// Collapsed question preview — tap to expand full text / markdown.
 class CollapsedQuestionTile extends StatelessWidget {
-  const CollapsedQuestionTile({super.key, required this.text});
+  const CollapsedQuestionTile({
+    super.key,
+    required this.text,
+    this.formatKind = SubjectFormatKind.plain,
+  });
 
   final String text;
+  final SubjectFormatKind formatKind;
 
   /// Plain preview without raw LaTeX delimiters for the collapsed subtitle.
   static String plainPreview(String input) {
@@ -1053,7 +1065,8 @@ class CollapsedQuestionTile extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: StudyMarkdown(
-                StudyNotesMarkdownCode.formatBody(text),
+                StudyNotesMarkdownCode.formatBody(text, kind: formatKind),
+                formatKind: formatKind,
               ),
             ),
           ],
@@ -1095,6 +1108,9 @@ class SolveResultView extends ConsumerWidget {
         ? 'Từ tài liệu bạn đã nhập'
         : 'Gợi ý từ Trợ lý Stud';
     final notes = UserFacingCopy.friendlyWarnings(result.warnings);
+    final formatKind = formatKindForSubject(
+      ref.watch(subjectByIdProvider(subjectId)).asData?.value,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1159,6 +1175,7 @@ class SolveResultView extends ConsumerWidget {
                       StudyMarkdown(
                         answer,
                         compact: compact,
+                        formatKind: formatKind,
                         style: TextStyle(
                           fontSize: compact ? 20 : 22,
                           fontWeight: FontWeight.w700,
@@ -1202,6 +1219,7 @@ class SolveResultView extends ConsumerWidget {
         StudyMarkdown(
           result.explanationMarkdown,
           compact: compact,
+          formatKind: formatKind,
         ),
         if (result.references.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -1211,6 +1229,7 @@ class SolveResultView extends ConsumerWidget {
               onPressed: () => _showReferencesPopup(
                 context,
                 result.references,
+                formatKind: formatKind,
               ),
               icon: const Icon(AppIcons.book, size: AppIcons.sizeInline),
               label: Text('Nguồn tham khảo (${result.references.length})'),
@@ -1335,8 +1354,9 @@ class SolveResultActions extends ConsumerWidget {
 enum _ResultMoreAction { copy, solveAgain, markWrong }
 void _showReferencesPopup(
   BuildContext context,
-  List<ResultReference> references,
-) {
+  List<ResultReference> references, {
+  SubjectFormatKind formatKind = SubjectFormatKind.plain,
+}) {
   showDialog<void>(
     context: context,
     builder: (ctx) {
@@ -1375,6 +1395,7 @@ void _showReferencesPopup(
                       StudyMarkdown(
                         r.snippet!,
                         compact: true,
+                        formatKind: formatKind,
                         style: const TextStyle(
                           color: AppColors.secondaryText,
                           fontSize: 13,

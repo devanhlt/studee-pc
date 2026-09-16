@@ -1,4 +1,4 @@
-/// Snapshot of secrets loaded in one Keychain read.
+/// Snapshot of secrets loaded in one credentials-store read.
 ///
 /// Product auth is an [activationCode]. Legacy DeepSeek/Mathpix fields may still
 /// exist from older installs but are unused by the middleware path.

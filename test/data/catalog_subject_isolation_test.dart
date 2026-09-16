@@ -68,5 +68,28 @@ void main() {
       expect(p.basename(renamed.folderPath), AppPaths.subjectFolderName(a.id));
       expect(Directory(renamed.folderPath).existsSync(), isTrue);
     });
+
+    test('pinned subjects sort above unpinned', () async {
+      final a = await repo.createSubject(
+        const CreateSubjectInput(name: 'A'),
+      );
+      final b = await repo.createSubject(
+        const CreateSubjectInput(name: 'B'),
+      );
+
+      await repo.setSubjectPinned(a.id, pinned: true);
+
+      final listed = await repo.listSubjects();
+      expect(listed.map((s) => s.id).toList(), [a.id, b.id]);
+      expect(listed.first.pinned, isTrue);
+      expect(listed.last.pinned, isFalse);
+
+      await repo.setSubjectPinned(a.id, pinned: false);
+      await repo.setSubjectPinned(b.id, pinned: true);
+
+      final relisted = await repo.listSubjects();
+      expect(relisted.first.id, b.id);
+      expect(relisted.first.pinned, isTrue);
+    });
   });
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
+import 'package:studee_pc/data/backend/quota_tokens.dart';
 import 'package:studee_pc/domain/entities/create_subject_input.dart';
 import 'package:studee_pc/domain/entities/knowledge_unit.dart';
 import 'package:studee_pc/domain/entities/question.dart';
@@ -18,7 +19,6 @@ import 'package:studee_pc/core/utils/text_normalizer.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_builder.dart';
-import 'package:studee_pc/features/subjects/application/study_notes_pdf.dart';
 
 final subjectsListProvider =
     FutureProvider.autoDispose<List<Subject>>((ref) async {
@@ -93,6 +93,7 @@ class SubjectContentQueries {
                 DateTime.fromMillisecondsSinceEpoch(r.createdAt, isUtc: true),
             updatedAt:
                 DateTime.fromMillisecondsSinceEpoch(r.updatedAt, isUtc: true),
+            practiceCount: r.practiceCount,
           ),
         )
         .toList();
@@ -141,10 +142,43 @@ class SubjectContentQueries {
           updatedAt:
               DateTime.fromMillisecondsSinceEpoch(r.updatedAt, isUtc: true),
           choices: choices,
+          practiceCount: r.practiceCount,
         ),
       );
     }
     return out;
+  }
+
+  /// Bump practice count for a stored question (Giải / Luyện / Ôn tập).
+  Future<void> incrementPracticeCount({
+    required String subjectId,
+    required String questionId,
+  }) async {
+    if (questionId.trim().isEmpty) return;
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await db.customUpdate(
+      'UPDATE questions SET practice_count = practice_count + 1, updated_at = ? WHERE id = ?',
+      variables: [Variable.withInt(now), Variable.withString(questionId)],
+      updates: {db.questions},
+    );
+  }
+
+  /// Bump practice count for questions matching [questionFingerprint].
+  Future<int> incrementPracticeCountByFingerprint({
+    required String subjectId,
+    required String questionFingerprint,
+  }) async {
+    final fp = questionFingerprint.trim();
+    if (fp.isEmpty) return 0;
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    return db.customUpdate(
+      'UPDATE questions SET practice_count = practice_count + 1, updated_at = ? '
+      'WHERE question_fingerprint = ?',
+      variables: [Variable.withInt(now), Variable.withString(fp)],
+      updates: {db.questions},
+    );
   }
 
   /// Persist LaTeX-normalized stem / choices / answer for display.
@@ -461,6 +495,12 @@ class SubjectsActions {
     return _ref.read(subjectRepositoryProvider).renameSubject(id, name);
   }
 
+  Future<void> setPinned(String id, {required bool pinned}) {
+    return _ref
+        .read(subjectRepositoryProvider)
+        .setSubjectPinned(id, pinned: pinned);
+  }
+
   Future<void> delete(String id) {
     return _ref.read(subjectRepositoryProvider).deleteSubject(id);
   }
@@ -469,13 +509,12 @@ class SubjectsActions {
     return _ref.read(subjectRepositoryProvider).exportSubject(id, destination);
   }
 
-  /// Writes study-notes as Markdown or PDF (clustered insights + examples).
+  /// Writes study-notes as Markdown (clustered insights + examples).
   /// Requires a DeepSeek API key.
   Future<String> exportStudyNotes({
     required String subjectId,
     required String subjectName,
     required String destinationPath,
-    StudyNotesExportFormat format = StudyNotesExportFormat.markdown,
   }) async {
     final content = _ref.read(subjectContentProvider);
     final questions = await content.listQuestionsWithChoices(subjectId);
@@ -502,6 +541,14 @@ class SubjectsActions {
     }
 
     final deepSeek = _ref.read(deepSeekClientProvider);
+    final quotaFail =
+        await _ref.read(backendQuotaClientProvider).consumeSolve(
+              QuotaSolveKind.text,
+            );
+    if (quotaFail != null) {
+      throw StateError(quotaFail.userMessage);
+    }
+
     deepSeek.beginCancellableSession();
     String? insights;
     try {
@@ -518,15 +565,6 @@ class SubjectsActions {
       subjectName: subjectName,
       insightsMarkdown: insights,
     );
-
-    if (format == StudyNotesExportFormat.pdf) {
-      final bytes = await StudyNotesPdf.buildBytes(markdown);
-      final file = await StudyNotesBuilder.writePdfToFile(
-        destinationPath: destinationPath,
-        bytes: bytes,
-      );
-      return file.path;
-    }
 
     final file = await StudyNotesBuilder.writeToFile(
       destinationPath: destinationPath,

@@ -11,6 +11,8 @@ import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/core/utils/fingerprints.dart';
 import 'package:studee_pc/core/utils/text_normalizer.dart';
+import 'package:studee_pc/data/backend/backend_quota_client.dart';
+import 'package:studee_pc/data/backend/quota_tokens.dart';
 import 'package:studee_pc/data/file_storage/app_paths.dart';
 import 'package:studee_pc/data/file_storage/subject_file_store.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
@@ -24,6 +26,7 @@ import 'package:studee_pc/domain/repositories/credentials_repository.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/domain/repositories/ocr_service.dart';
 import 'package:studee_pc/domain/services/source_text_chunker.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:uuid/uuid.dart';
 
 /// Page text awaiting user review before structuring.
@@ -163,13 +166,17 @@ class IngestionService {
     SubjectFileStore? fileStore,
     AppPaths? paths,
     Uuid? uuid,
+    BackendQuotaClient? quota,
+    Future<SubjectFormatContext> Function(String subjectId)? resolveFormatContext,
   })  : _credentials = credentials,
         _deepSeek = deepSeek,
         _ocr = ocr,
         _dbManager = databaseManager,
         _files = fileStore ?? SubjectFileStore(paths: paths),
         _paths = paths ?? AppPaths(),
-        _uuid = uuid ?? const Uuid();
+        _uuid = uuid ?? const Uuid(),
+        _quota = quota ?? BackendQuotaClient(credentials: credentials),
+        _resolveFormatContext = resolveFormatContext;
 
   final CredentialsRepository _credentials;
   final DeepSeekClient _deepSeek;
@@ -178,6 +185,9 @@ class IngestionService {
   final SubjectFileStore _files;
   final AppPaths _paths;
   final Uuid _uuid;
+  final BackendQuotaClient _quota;
+  final Future<SubjectFormatContext> Function(String subjectId)?
+      _resolveFormatContext;
   final AppLogger _log = AppLogger('IngestionService');
 
   final StreamController<IngestionState?> _states =
@@ -613,6 +623,17 @@ class IngestionService {
     final gate = await _requireApiKey();
     if (gate != null) return Failure(gate);
 
+    final quotaFail = await _quota.consumeSolve(QuotaSolveKind.ingest);
+    if (quotaFail != null) {
+      _emit(
+        current.copyWith(
+          errorMessage: quotaFail.userMessage,
+          status: IngestionJobStatus.awaitingTextReview,
+        ),
+      );
+      return Failure(quotaFail);
+    }
+
     try {
       final db = _dbManager.requireActive();
       _emit(
@@ -653,9 +674,11 @@ class IngestionService {
       // Large exams (40+ Q&A) are split so each DeepSeek call stays bounded.
       const chunker = SourceTextChunker();
       final chunks = chunker.chunkPages(pageTexts);
+      final subjectCtx = await _formatContextForCurrent();
       _log.info(
         'Structuring source=${current.sourceId} pages=${pageTexts.length} '
         'chunks=${chunks.length} '
+        'subject="${subjectCtx.name}" format=${subjectCtx.kind.wire} '
         'detectedQ=${chunks.fold<int>(0, (s, c) => s + c.questionCount)} '
         'chars=${pageTexts.fold<int>(0, (s, p) => s + p.text.length)}',
       );
@@ -684,6 +707,9 @@ class IngestionService {
           StructureSourceRequest(
             sourceId: current.sourceId!,
             pageTexts: chunk.pageTexts,
+            subjectName:
+                subjectCtx.name.isEmpty ? null : subjectCtx.name,
+            formatKind: subjectCtx.kind.wire,
           ),
         );
         batchResponses.add(part);
@@ -716,6 +742,7 @@ class IngestionService {
       }
 
       final questions = <StructureDraftQuestion>[];
+      final formatKind = subjectCtx.kind;
       for (final m in response.questions) {
         final content = (m['content'] as String? ?? '').trim();
         if (content.isEmpty) continue;
@@ -738,23 +765,28 @@ class IngestionService {
         );
         final explanation = (m['explanation'] as String?)?.trim();
 
-        var polishedContent = QuestionDisplayFormat.enrich(content);
+        var polishedContent =
+            QuestionDisplayFormat.enrich(content, kind: formatKind);
         var polishedChoices = [
           for (final c in choices)
             {
               'label': c['label'] ?? '',
-              'content': QuestionDisplayFormat.enrich(c['content'] ?? ''),
+              'content': QuestionDisplayFormat.enrich(
+                c['content'] ?? '',
+                kind: formatKind,
+              ),
             },
         ];
         var polishedAnswer = answerContent == null
             ? null
-            : QuestionDisplayFormat.enrich(answerContent);
-        if (QuestionDisplayFormat.bundleNeedsLatexPolish(
+            : QuestionDisplayFormat.enrich(answerContent, kind: formatKind);
+        if (QuestionDisplayFormat.bundleNeedsDisplayPolish(
           content: polishedContent,
           choiceContents: [
             for (final c in polishedChoices) c['content'] ?? '',
           ],
           answerContent: polishedAnswer,
+          kind: formatKind,
         )) {
           try {
             final formatted = await _deepSeek.formatMathLatex(
@@ -767,21 +799,32 @@ class IngestionService {
                   ),
               ],
               answerContent: polishedAnswer,
+              subjectName:
+                  subjectCtx.name.isEmpty ? null : subjectCtx.name,
+              formatKind: formatKind.wire,
             );
-            polishedContent = QuestionDisplayFormat.enrich(formatted.content);
+            polishedContent = QuestionDisplayFormat.enrich(
+              formatted.content,
+              kind: formatKind,
+            );
             if (formatted.choices.isNotEmpty) {
               polishedChoices = [
                 for (final c in formatted.choices)
                   {
                     'label': c.label,
-                    'content': QuestionDisplayFormat.enrich(c.content),
+                    'content': QuestionDisplayFormat.enrich(
+                      c.content,
+                      kind: formatKind,
+                    ),
                   },
               ];
             }
             if (formatted.answerContent != null &&
                 formatted.answerContent!.trim().isNotEmpty) {
-              polishedAnswer =
-                  QuestionDisplayFormat.enrich(formatted.answerContent!);
+              polishedAnswer = QuestionDisplayFormat.enrich(
+                formatted.answerContent!,
+                kind: formatKind,
+              );
             }
           } on Object catch (e) {
             _log.warning('Ingest LaTeX polish failed: ${e.runtimeType}');
@@ -1201,6 +1244,19 @@ class IngestionService {
     }
 
     return content?.isNotEmpty == true ? content : null;
+  }
+
+  Future<SubjectFormatContext> _formatContextForCurrent() async {
+    final subjectId = _current?.subjectId;
+    final resolve = _resolveFormatContext;
+    if (subjectId == null || resolve == null) {
+      return SubjectFormatContext.empty;
+    }
+    try {
+      return await resolve(subjectId);
+    } on Object catch (_) {
+      return SubjectFormatContext.empty;
+    }
   }
 
   void reset() {

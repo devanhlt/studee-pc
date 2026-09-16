@@ -13,11 +13,13 @@ import 'package:studee_pc/domain/entities/question_choice.dart';
 import 'package:studee_pc/features/practice/application/practice_service.dart';
 import 'package:studee_pc/features/practice/presentation/practice_chat_panel.dart';
 import 'package:studee_pc/features/review/application/review_service.dart';
+import 'package:studee_pc/features/review/application/review_quiz_config.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
-/// Ôn tập: quiz (Giải đề) or Socratic coach (Giải & luyện đề).
+/// Ôn tập: quiz (Giải đề) or Socratic coach (Giải & luyện).
 class ReviewPanel extends ConsumerWidget {
   const ReviewPanel({super.key, required this.subjectId});
 
@@ -39,6 +41,8 @@ class ReviewPanel extends ConsumerWidget {
           subjectId: subjectId,
           total: review.total,
           mode: review.mode,
+          completedCount: review.completedCount,
+          timedOut: review.quizTimedOut,
         ),
       ReviewStage.running => _RunningReview(mode: review.mode),
     };
@@ -87,7 +91,7 @@ class _IdleReview extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     StudeeSectionLabel(
-                      'Ôn $count câu đã lưu với Stud.',
+                      'Ôn tập giải đề với Stud',
                     ),
                     if (errorMessage != null) ...[
                       const SizedBox(height: AppLayout.gapSm),
@@ -108,7 +112,7 @@ class _IdleReview extends ConsumerWidget {
                             mode: ReviewPlayMode.coach,
                           ),
                           icon: const Icon(AppIcons.review),
-                          label: const Text('Giải & luyện đề'),
+                          label: const Text('Giải & luyện'),
                         );
                         final quiz = OutlinedButton.icon(
                           onPressed: () => startReviewSession(
@@ -155,20 +159,33 @@ class _CompletedReview extends ConsumerWidget {
     required this.subjectId,
     required this.total,
     required this.mode,
+    required this.completedCount,
+    required this.timedOut,
   });
 
   final String subjectId;
   final int total;
   final ReviewPlayMode mode;
+  final int completedCount;
+  final bool timedOut;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final againLabel =
         mode == ReviewPlayMode.quiz ? 'Giải đề lại' : 'Luyện lại từ đầu';
+    final title = timedOut
+        ? 'Hết giờ'
+        : (mode == ReviewPlayMode.quiz
+            ? 'Đã làm xong $total câu'
+            : 'Đã ôn xong $total câu');
+    final message = timedOut
+        ? 'Hết ${ReviewQuizConfig.duration.inMinutes} phút. '
+            'Bạn đã làm $completedCount/$total câu. Có thể giải đề lại bất cứ lúc nào.'
+        : 'Bạn có thể ôn lại từ đầu, hoặc chuyển sang Luyện / Giải.';
     return StudeeStatusState(
-      icon: AppIcons.checkCircle,
-      title: 'Đã ôn xong $total câu',
-      message: 'Bạn có thể ôn lại từ đầu, hoặc chuyển sang Luyện / Giải.',
+      icon: timedOut ? AppIcons.timer : AppIcons.checkCircle,
+      title: title,
+      message: message,
       actionLabel: againLabel,
       onAction: () => startReviewSession(
         context,
@@ -249,6 +266,11 @@ class _RunningQuizReview extends ConsumerWidget {
     final question = service.currentQuestion;
     final choices = service.currentQuizChoices;
     final lastDone = review.isLastQuestion && review.quizAnswered;
+    final subjectId = review.subjectId;
+    final subject = subjectId == null
+        ? null
+        : ref.watch(subjectByIdProvider(subjectId)).asData?.value;
+    final formatKind = formatKindForSubject(subject);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -302,7 +324,9 @@ class _RunningQuizReview extends ConsumerWidget {
                                 StudyMarkdown(
                                   StudyNotesMarkdownCode.formatBody(
                                     question.content.trim(),
+                                    kind: formatKind,
                                   ),
+                                  formatKind: formatKind,
                                   style: Theme.of(context)
                                       .textTheme
                                       .titleMedium
@@ -327,6 +351,7 @@ class _RunningQuizReview extends ConsumerWidget {
                                       ),
                                       child: _QuizChoiceButton(
                                         choice: c,
+                                        formatKind: formatKind,
                                         selectedLabel: review.quizSelectedLabel,
                                         answered: review.quizAnswered,
                                         isCorrectPick: review.quizIsCorrect,
@@ -340,6 +365,45 @@ class _RunningQuizReview extends ConsumerWidget {
                                       ),
                                     ),
                                   ),
+                                if (!review.quizAnswered &&
+                                    !review.quizResolvingAnswer &&
+                                    choices.isNotEmpty &&
+                                    !review.quizTipLoading &&
+                                    (review.quizTip == null ||
+                                        review.quizTip!.trim().isEmpty)) ...[
+                                  const SizedBox(height: AppLayout.gapMd),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () =>
+                                          service.requestQuizTip(),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppColors.accent,
+                                        side: const BorderSide(
+                                          color: AppColors.accent,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      icon: const Icon(
+                                        AppIcons.sparkle,
+                                        size: 18,
+                                      ),
+                                      label: const Text('Gợi ý'),
+                                    ),
+                                  ),
+                                ],
+                                if (review.quizTipLoading ||
+                                    (review.quizTip != null &&
+                                        review.quizTip!
+                                            .trim()
+                                            .isNotEmpty)) ...[
+                                  const SizedBox(height: AppLayout.gapMd),
+                                  _QuizTipCard(
+                                    tip: review.quizTip,
+                                    loading: review.quizTipLoading,
+                                    formatKind: formatKind,
+                                  ),
+                                ],
                                 if (review.quizResolvingAnswer) ...[
                                   const SizedBox(height: AppLayout.gapMd),
                                   const Row(
@@ -372,15 +436,8 @@ class _RunningQuizReview extends ConsumerWidget {
                                     correctContent: review.quizCorrectContent,
                                     fromLlm: review.quizAnswerFromLlm,
                                     choices: choices,
+                                    formatKind: formatKind,
                                   ),
-                                  if (review.quizTip != null &&
-                                      review.quizTip!.trim().isNotEmpty) ...[
-                                    const SizedBox(height: AppLayout.gapMd),
-                                    _QuizTipCard(
-                                      tip: review.quizTip!,
-                                      loading: review.quizTipLoading,
-                                    ),
-                                  ],
                                 ],
                               ],
                             ),
@@ -424,6 +481,9 @@ class _ReviewProgressHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final showTimer = review.stage == ReviewStage.running;
+    final remaining = review.quizRemaining;
+    final urgent = remaining.inMinutes < 5;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppLayout.pagePadding,
@@ -447,6 +507,24 @@ class _ReviewProgressHeader extends ConsumerWidget {
                     ),
                   ),
                 ),
+                if (showTimer) ...[
+                  Icon(
+                    AppIcons.timer,
+                    size: 16,
+                    color: urgent ? AppColors.error : AppColors.secondaryText,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    formatQuizCountdown(remaining),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: urgent ? AppColors.error : AppColors.primaryText,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 TextButton(
                   onPressed: () => ref.read(reviewServiceProvider).cancel(),
                   style: TextButton.styleFrom(
@@ -468,6 +546,7 @@ class _ReviewProgressHeader extends ConsumerWidget {
 class _QuizChoiceButton extends StatelessWidget {
   const _QuizChoiceButton({
     required this.choice,
+    required this.formatKind,
     required this.selectedLabel,
     required this.answered,
     required this.isCorrectPick,
@@ -476,6 +555,7 @@ class _QuizChoiceButton extends StatelessWidget {
   });
 
   final QuestionChoice choice;
+  final SubjectFormatKind formatKind;
   final String? selectedLabel;
   final bool answered;
   final bool? isCorrectPick;
@@ -505,8 +585,12 @@ class _QuizChoiceButton extends StatelessWidget {
       fill = AppColors.accent.withValues(alpha: 0.10);
     }
 
-    final body = StudyNotesMarkdownCode.formatBody(choice.content.trim());
-    final display = label.isEmpty ? body : '$label. $body';
+    final bodyRaw = choice.content.trim();
+    final isCode =
+        StudyNotesMarkdownCode.isCodeSnippet(bodyRaw, kind: formatKind);
+    final body = isCode
+        ? StudyNotesMarkdownCode.codeSnippetBody(bodyRaw)
+        : StudyNotesMarkdownCode.formatBody(bodyRaw, kind: formatKind);
 
     return Material(
       color: fill ?? Colors.transparent,
@@ -523,14 +607,35 @@ class _QuizChoiceButton extends StatelessWidget {
               color: border ?? AppColors.border,
             ),
           ),
-          child: StudyMarkdown(
-            display,
-            compact: true,
-            style: const TextStyle(
-              height: 1.35,
-              fontWeight: FontWeight.w500,
-              color: AppColors.primaryText,
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (label.isNotEmpty) ...[
+                Text(
+                  '$label.',
+                  style: const TextStyle(
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryText,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: isCode
+                    ? _QuizCodeSnippet(code: body)
+                    : StudyMarkdown(
+                        body,
+                        compact: true,
+                        formatKind: formatKind,
+                        style: const TextStyle(
+                          height: 1.35,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.primaryText,
+                        ),
+                      ),
+              ),
+            ],
           ),
         ),
       ),
@@ -538,14 +643,55 @@ class _QuizChoiceButton extends StatelessWidget {
   }
 }
 
-class _QuizTipCard extends StatelessWidget {
-  const _QuizTipCard({required this.tip, this.loading = false});
+class _QuizCodeSnippet extends StatelessWidget {
+  const _QuizCodeSnippet({required this.code});
 
-  final String tip;
-  final bool loading;
+  final String code;
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.elevated.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+      ),
+      child: SelectableText(
+        code,
+        style: const TextStyle(
+          fontFamily: 'Menlo',
+          fontFamilyFallback: ['monospace', 'Courier'],
+          fontSize: 13,
+          height: 1.4,
+          fontWeight: FontWeight.w400,
+          color: AppColors.primaryText,
+        ),
+      ),
+    );
+  }
+}
+
+class _QuizTipCard extends StatelessWidget {
+  const _QuizTipCard({
+    this.tip,
+    this.loading = false,
+    this.formatKind = SubjectFormatKind.plain,
+  });
+
+  final String? tip;
+  final bool loading;
+  final SubjectFormatKind formatKind;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = tip?.trim() ?? '';
+    final baseStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: AppColors.primaryText,
+          height: 1.45,
+          fontWeight: FontWeight.w400,
+        );
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -559,30 +705,31 @@ class _QuizTipCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          StudyMarkdown(
-            tip,
-            compact: true,
-            style: const TextStyle(
-              color: AppColors.primaryText,
-              height: 1.45,
-              fontWeight: FontWeight.w500,
+          if (body.isNotEmpty)
+            StudyMarkdown(
+              body,
+              compact: true,
+              formatKind: formatKind,
+              style: baseStyle,
             ),
-          ),
           if (loading) ...[
-            const SizedBox(height: 8),
-            Row(
+            if (body.isNotEmpty) const SizedBox(height: 8),
+            const Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 14,
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Đang soạn mẹo chi tiết…',
-                  style: TextStyle(
-                    color: AppColors.secondaryText,
-                    fontSize: 12.5,
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Đang phân tích…',
+                    style: TextStyle(
+                      color: AppColors.secondaryText,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
               ],
@@ -601,6 +748,7 @@ class _QuizFeedback extends StatelessWidget {
     required this.choices,
     this.correctContent,
     this.fromLlm = false,
+    this.formatKind = SubjectFormatKind.plain,
   });
 
   final bool? isCorrect;
@@ -608,6 +756,7 @@ class _QuizFeedback extends StatelessWidget {
   final String? correctContent;
   final bool fromLlm;
   final List<QuestionChoice> choices;
+  final SubjectFormatKind formatKind;
 
   @override
   Widget build(BuildContext context) {
@@ -637,30 +786,50 @@ class _QuizFeedback extends StatelessWidget {
       );
     }
 
-    String correctText = '';
+    Widget? answerBody;
+    String? answerLabel;
     if (correctLabel != null && correctLabel!.isNotEmpty) {
       for (final c in choices) {
         if (c.label.trim().toUpperCase() == correctLabel!.toUpperCase()) {
-          final body =
-              StudyNotesMarkdownCode.formatBody(c.content.trim());
-          correctText =
-              c.label.isEmpty ? body : '${c.label}. $body';
+          answerLabel = c.label.trim().toUpperCase();
+          final raw = c.content.trim();
+          if (StudyNotesMarkdownCode.isCodeSnippet(raw, kind: formatKind)) {
+            answerBody = _QuizCodeSnippet(
+              code: StudyNotesMarkdownCode.codeSnippetBody(raw),
+            );
+          } else {
+            answerBody = StudyMarkdown(
+              StudyNotesMarkdownCode.formatBody(raw, kind: formatKind),
+              compact: true,
+              formatKind: formatKind,
+            );
+          }
           break;
         }
       }
     }
-    if (correctText.isEmpty &&
+    if (answerBody == null &&
         correctContent != null &&
         correctContent!.trim().isNotEmpty) {
-      final label = correctLabel?.trim();
-      final body = StudyNotesMarkdownCode.formatBody(correctContent!.trim());
-      correctText = (label != null && label.isNotEmpty) ? '$label. $body' : body;
+      answerLabel = correctLabel?.trim();
+      final raw = correctContent!.trim();
+      if (StudyNotesMarkdownCode.isCodeSnippet(raw, kind: formatKind)) {
+        answerBody = _QuizCodeSnippet(
+          code: StudyNotesMarkdownCode.codeSnippetBody(raw),
+        );
+      } else {
+        answerBody = StudyMarkdown(
+          StudyNotesMarkdownCode.formatBody(raw, kind: formatKind),
+          compact: true,
+          formatKind: formatKind,
+        );
+      }
     }
-    if (correctText.isEmpty && correctLabel != null) {
-      correctText = correctLabel!;
+    if (answerBody == null && correctLabel != null) {
+      answerBody = Text(correctLabel!);
     }
 
-    if (correctText.isEmpty) {
+    if (answerBody == null) {
       return Text(
         fromLlm
             ? 'Chưa đúng. Stud chưa suy ra được đáp án.'
@@ -683,13 +852,21 @@ class _QuizFeedback extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        StudyMarkdown(
-          correctText,
-          compact: true,
-          style: const TextStyle(
-            color: AppColors.primaryText,
-            fontWeight: FontWeight.w500,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (answerLabel != null && answerLabel.isNotEmpty) ...[
+              Text(
+                '$answerLabel.',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primaryText,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(child: answerBody),
+          ],
         ),
         if (fromLlm)
           const Padding(

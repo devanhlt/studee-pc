@@ -51,7 +51,7 @@ class SubjectDatabase extends _$SubjectDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -69,6 +69,9 @@ class SubjectDatabase extends _$SubjectDatabase {
           if (from < 2) {
             await m.addColumn(questions, questions.semanticKey);
             await m.addColumn(questions, questions.semanticFingerprint);
+          }
+          if (from < 3) {
+            await m.addColumn(questions, questions.practiceCount);
           }
         },
         beforeOpen: (details) async {

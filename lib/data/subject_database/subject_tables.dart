@@ -99,6 +99,9 @@ class Questions extends Table {
   TextColumn get answerContent => text().named('answer_content').nullable()();
   TextColumn get explanation => text().nullable()();
   TextColumn get verificationStatus => text().named('verification_status')();
+  /// How many times this question was practiced (Giải / Luyện / Ôn tập).
+  IntColumn get practiceCount =>
+      integer().named('practice_count').withDefault(const Constant(0))();
   IntColumn get createdAt => integer().named('created_at')();
   IntColumn get updatedAt => integer().named('updated_at')();
 

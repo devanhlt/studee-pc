@@ -20,6 +20,8 @@ import 'package:studee_pc/features/ingestion/application/ingestion_service.dart'
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/presentation/mobile_image_crop.dart';
 import 'package:studee_pc/features/solver/presentation/scan_question_screen.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
+import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 final ingestionStateProvider =
     StreamProvider.autoDispose<IngestionState?>((ref) {
@@ -266,7 +268,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   }
 
   Future<void> _submitTextReview(IngestionState state) async {
-    // Keychain / API key only when DeepSeek structuring is triggered.
+    // Activation code / API only when DeepSeek structuring is triggered.
     if (!await _ensureApiKey()) return;
     final reviewed = state.pages
         .map(
@@ -344,6 +346,9 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
     final state = asyncState.asData?.value ?? _service.current;
     final choosingSource =
         state == null || state.status == IngestionJobStatus.queued;
+    final formatKind = formatKindForSubject(
+      ref.watch(subjectByIdProvider(widget.subjectId)).asData?.value,
+    );
 
     return StudeePageScaffold(
       atmosphereIntensity: AppLayout.atmospherePage,
@@ -419,6 +424,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
               onSubmitStructure: () => _submitStructure(state),
               onRestart: _startAnotherImport,
               onImportAnother: _startAnotherImport,
+              formatKind: formatKind,
             ),
     );
   }
@@ -485,6 +491,7 @@ class _IngestionBody extends StatelessWidget {
     required this.onSubmitStructure,
     required this.onRestart,
     required this.onImportAnother,
+    this.formatKind = SubjectFormatKind.plain,
   });
 
   final IngestionState state;
@@ -493,6 +500,7 @@ class _IngestionBody extends StatelessWidget {
   final VoidCallback onSubmitStructure;
   final VoidCallback onRestart;
   final VoidCallback onImportAnother;
+  final SubjectFormatKind formatKind;
 
   @override
   Widget build(BuildContext context) {
@@ -509,6 +517,7 @@ class _IngestionBody extends StatelessWidget {
             IngestionJobStatus.awaitingStructureReview => _StructureReview(
                 state: state,
                 onSubmit: onSubmitStructure,
+                formatKind: formatKind,
               ),
             IngestionJobStatus.completed ||
             IngestionJobStatus.partiallyCompleted =>
@@ -729,10 +738,12 @@ class _StructureReview extends StatefulWidget {
   const _StructureReview({
     required this.state,
     required this.onSubmit,
+    this.formatKind = SubjectFormatKind.plain,
   });
 
   final IngestionState state;
   final VoidCallback onSubmit;
+  final SubjectFormatKind formatKind;
 
   @override
   State<_StructureReview> createState() => _StructureReviewState();
@@ -743,6 +754,7 @@ class _StructureReviewState extends State<_StructureReview> {
   Widget build(BuildContext context) {
     final units = widget.state.draftUnits;
     final questions = widget.state.draftQuestions;
+    final formatKind = widget.formatKind;
     return Column(
       children: [
         Expanded(
@@ -767,6 +779,7 @@ class _StructureReviewState extends State<_StructureReview> {
                     u.content,
                     compact: true,
                     maxLines: 5,
+                    formatKind: formatKind,
                   ),
                   subtitle: Text(u.type.labelVi),
                 ),
@@ -796,6 +809,7 @@ class _StructureReviewState extends State<_StructureReview> {
                         q.content,
                         compact: true,
                         maxLines: 5,
+                        formatKind: formatKind,
                       ),
                       if (q.choices.isNotEmpty) ...[
                         const SizedBox(height: 6),
@@ -806,6 +820,7 @@ class _StructureReviewState extends State<_StructureReview> {
                               '${c['label'] ?? ''}. ${c['content'] ?? ''}',
                               compact: true,
                               maxLines: 2,
+                              formatKind: formatKind,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.secondaryText,
@@ -821,6 +836,7 @@ class _StructureReviewState extends State<_StructureReview> {
                           'Đáp án${q.answerLabel != null ? ' ${q.answerLabel}' : ''}: ${q.answerContent}',
                           compact: true,
                           maxLines: 3,
+                          formatKind: formatKind,
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -835,6 +851,7 @@ class _StructureReviewState extends State<_StructureReview> {
                           'Lời giải: ${q.explanation}',
                           compact: true,
                           maxLines: 3,
+                          formatKind: formatKind,
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.secondaryText,

@@ -179,8 +179,8 @@ cat > "$STAGE/HOW_TO_UNINSTALL.txt" <<EOF
 Studee ${VERSION} — complete uninstall (macOS)
 =============================================
 
-This removes the app, local study data, preferences, OCR caches,
-and the DeepSeek API key stored in Keychain.
+This removes the app, local study data (including the activation code
+file), preferences, OCR caches, and any legacy Keychain leftovers.
 
 1) Quit Studee completely (Dock icon too).
 
@@ -201,12 +201,13 @@ What is deleted
 ---------------
 - /Applications/Studee.app
 - ~/Library/Application Support/com.studee.studeePc
+  (includes ApplicationData/credentials.v1.dat)
 - ~/Library/Containers/com.studee.studeePc  (user Data; Apple metadata may remain)
 - ~/Library/Caches/com.studee.studeePc
 - ~/Library/Preferences/com.studee.studeePc.plist
 - ~/Library/Saved Application State/com.studee.studeePc.savedState
 - ~/Library/Logs/studee_ocr_resolve.log
-- Keychain item for deepseek_api_key
+- Legacy Keychain leftovers from older builds (if any)
 - ~/.paddlex (shared PaddleOCR cache from older setups)
 
 Developers running the script from the studee-pc repo also clear

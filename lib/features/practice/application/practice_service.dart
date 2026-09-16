@@ -9,6 +9,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
+import 'package:studee_pc/core/utils/fingerprints.dart';
+import 'package:studee_pc/core/utils/text_normalizer.dart';
 import 'package:studee_pc/data/backend/backend_quota_client.dart';
 import 'package:studee_pc/data/backend/quota_tokens.dart';
 import 'package:studee_pc/data/mathpix/mathpix_text_normalizer.dart';
@@ -24,6 +26,7 @@ import 'package:studee_pc/features/practice/application/practice_mcq_grade.dart'
 import 'package:studee_pc/features/practice/application/practice_mcq_tips.dart';
 import 'package:studee_pc/features/review/application/review_answer_style.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:uuid/uuid.dart';
 
 enum PracticeStage {
@@ -142,12 +145,14 @@ class PracticeService {
     required SubjectDatabaseManager databaseManager,
     BackendQuotaClient? quota,
     Uuid? uuid,
+    Future<SubjectFormatKind> Function(String subjectId)? resolveFormatKind,
   })  : _credentials = credentials,
         _deepSeek = deepSeek,
         _ocr = ocr,
         _dbManager = databaseManager,
         _quota = quota ?? BackendQuotaClient(credentials: credentials),
-        _uuid = uuid ?? const Uuid();
+        _uuid = uuid ?? const Uuid(),
+        _resolveFormatKind = resolveFormatKind;
 
   static const int maxAttemptsPerStep = 2;
   static const int maxCheckSteps = 6;
@@ -158,7 +163,10 @@ class PracticeService {
   final SubjectDatabaseManager _dbManager;
   final BackendQuotaClient _quota;
   final Uuid _uuid;
+  final Future<SubjectFormatKind> Function(String subjectId)?
+      _resolveFormatKind;
   final AppLogger _log = AppLogger('PracticeService');
+  SubjectFormatKind _formatKind = SubjectFormatKind.plain;
 
   final StreamController<PracticeSessionState> _states =
       StreamController<PracticeSessionState>.broadcast();
@@ -342,6 +350,7 @@ class PracticeService {
     _reviewMode = reviewMode;
     _knownAnswerContent = knownAnswerContent?.trim();
     final id = sessionId ?? _uuid.v4();
+    _formatKind = await _resolveFormatKindCached(subjectId);
 
     try {
       await _dbManager.open(subjectId);
@@ -360,7 +369,7 @@ class PracticeService {
               id: _uuid.v4(),
               role: PracticeMessageRole.system,
               text:
-                  'Câu hỏi:\n${StudyNotesMarkdownCode.formatBody(questionText)}',
+                  'Câu hỏi:\n${StudyNotesMarkdownCode.formatBody(questionText, kind: _formatKind)}',
             ),
         ],
       ),
@@ -753,6 +762,7 @@ class PracticeService {
       if (!tip.startsWith('Mẹo:') && !tip.startsWith('Mẹo :')) {
         tip = 'Mẹo: $tip';
       }
+      tip = tip.replaceAll(RegExp(r'\*\*|__'), '');
       msgs = [
         ...msgs,
         PracticeUiMessage(
@@ -863,16 +873,23 @@ class PracticeService {
   /// Replace the opening system preview with LLM-parsed LaTeX when available.
   void _refreshQuestionPreview(String fallbackText, ParsedQuestion? parsed) {
     final pretty = parsed == null
-        ? StudyNotesMarkdownCode.formatBody(fallbackText)
+        ? StudyNotesMarkdownCode.formatBody(fallbackText, kind: _formatKind)
         : QuestionDisplayFormat.fromParsed(
-            content: StudyNotesMarkdownCode.formatBody(parsed.content),
+            content: StudyNotesMarkdownCode.formatBody(
+              parsed.content,
+              kind: _formatKind,
+            ),
             choices: [
               for (final c in parsed.choices)
                 (
                   label: c.label,
-                  content: StudyNotesMarkdownCode.formatBody(c.content),
+                  content: StudyNotesMarkdownCode.formatBody(
+                    c.content,
+                    kind: _formatKind,
+                  ),
                 ),
             ],
+            kind: _formatKind,
           );
     final msgs = [..._state.messages];
     final idx = msgs.indexWhere((m) => m.role == PracticeMessageRole.system);
@@ -883,6 +900,16 @@ class PracticeService {
       text: 'Câu hỏi:\n$pretty',
     );
     _emit(_state.copyWith(messages: msgs));
+  }
+
+  Future<SubjectFormatKind> _resolveFormatKindCached(String subjectId) async {
+    final resolve = _resolveFormatKind;
+    if (resolve == null) return SubjectFormatKind.plain;
+    try {
+      return await resolve(subjectId);
+    } on Object catch (_) {
+      return SubjectFormatKind.plain;
+    }
   }
 
   Future<void> cancel() async {
@@ -1130,9 +1157,54 @@ class PracticeService {
               createdAt: now,
             ),
           );
+      if (!_reviewMode) {
+        await _bumpPracticeCountForText(
+          db,
+          questionText: _state.questionText,
+        );
+      }
       _log.info('Persisted practice session id=$sessionId');
     } on Object catch (e) {
       _log.warning('Practice persist failed: ${e.runtimeType}');
+    }
+  }
+
+  Future<void> _bumpPracticeCountForText(
+    SubjectDatabase db, {
+    required String? questionText,
+  }) async {
+    final text = questionText?.trim() ?? '';
+    if (text.isEmpty) return;
+    try {
+      final fingerprint = Fingerprints.questionFingerprint(
+        questionText: text,
+        choiceContents: const [],
+      );
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+      final updated = await db.customUpdate(
+        'UPDATE questions SET practice_count = practice_count + 1, updated_at = ? '
+        'WHERE question_fingerprint = ?',
+        variables: [
+          Variable.withInt(now),
+          Variable.withString(fingerprint),
+        ],
+        updates: {db.questions},
+      );
+      if (updated == 0) {
+        // Stem-only match when practice text includes choice lines / numbering.
+        final normalized = TextNormalizer.normalizeQuestionText(text);
+        await db.customUpdate(
+          'UPDATE questions SET practice_count = practice_count + 1, updated_at = ? '
+          'WHERE normalized_content = ?',
+          variables: [
+            Variable.withInt(now),
+            Variable.withString(normalized),
+          ],
+          updates: {db.questions},
+        );
+      }
+    } on Object catch (e) {
+      _log.warning('Practice count bump failed: ${e.runtimeType}');
     }
   }
 

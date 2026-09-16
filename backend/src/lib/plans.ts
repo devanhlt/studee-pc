@@ -4,12 +4,14 @@ export const TOKENS_PER_LEGACY_SOLVE = 100;
 export const TOKEN_COSTS = {
   text: 100,
   picture: 200,
+  /** One full knowledge-import structuring run. */
+  ingest: 1000,
 } as const;
 
 export type SolveKind = keyof typeof TOKEN_COSTS;
 
 export function isSolveKind(value: unknown): value is SolveKind {
-  return value === "text" || value === "picture";
+  return value === "text" || value === "picture" || value === "ingest";
 }
 
 /** Seed defaults used only when bootstrapping the packages table. */

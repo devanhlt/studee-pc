@@ -10,6 +10,8 @@ import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/domain/entities/practice_turn.dart';
 import 'package:studee_pc/features/practice/application/practice_service.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
+import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 final practiceStateProvider =
     StreamProvider.autoDispose<PracticeSessionState>((ref) {
@@ -89,6 +91,11 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
     final locked = state.stage.locksComposer;
     final canAnswer = state.stage == PracticeStage.awaitingUser;
     final thinking = state.stage.isBusy;
+    final subjectId = state.subjectId;
+    final subject = subjectId == null
+        ? null
+        : ref.watch(subjectByIdProvider(subjectId)).asData?.value;
+    final formatKind = formatKindForSubject(subject);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -112,6 +119,7 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
               return PracticeMessageBubble(
                 message: state.messages[i],
                 index: i,
+                formatKind: formatKind,
               );
             },
           ),
@@ -182,6 +190,7 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
                 for (final choice in state.currentChoices) ...[
                   _ChoiceCard(
                     choice: choice,
+                    formatKind: formatKind,
                     onTap: () => _pickChoice(choice),
                   ),
                   const SizedBox(height: 8),
@@ -285,10 +294,15 @@ class _ThinkingBubble extends StatelessWidget {
 }
 
 class _ChoiceCard extends StatefulWidget {
-  const _ChoiceCard({required this.choice, required this.onTap});
+  const _ChoiceCard({
+    required this.choice,
+    required this.onTap,
+    this.formatKind = SubjectFormatKind.plain,
+  });
 
   final PracticeChoice choice;
   final VoidCallback onTap;
+  final SubjectFormatKind formatKind;
 
   @override
   State<_ChoiceCard> createState() => _ChoiceCardState();
@@ -354,7 +368,11 @@ class _ChoiceCardState extends State<_ChoiceCard> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: StudyMarkdown(widget.choice.display, compact: true),
+                    child: StudyMarkdown(
+                      widget.choice.display,
+                      compact: true,
+                      formatKind: widget.formatKind,
+                    ),
                   ),
                 ],
               ),
@@ -371,10 +389,12 @@ class PracticeMessageBubble extends StatelessWidget {
     super.key,
     required this.message,
     this.index = 0,
+    this.formatKind = SubjectFormatKind.plain,
   });
 
   final PracticeUiMessage message;
   final int index;
+  final SubjectFormatKind formatKind;
 
   @override
   Widget build(BuildContext context) {
@@ -439,7 +459,18 @@ class PracticeMessageBubble extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          StudyMarkdown(message.text, compact: true),
+          StudyMarkdown(
+            message.text,
+            compact: true,
+            formatKind: formatKind,
+            style: message.text.trimLeft().startsWith('Mẹo')
+                ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.primaryText,
+                      height: 1.45,
+                      fontWeight: FontWeight.w400,
+                    )
+                : null,
+          ),
         ],
       ),
     );

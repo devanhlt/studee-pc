@@ -21,8 +21,8 @@ import 'package:studee_pc/features/review/application/review_service.dart';
 import 'package:studee_pc/features/review/presentation/review_panel.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
-import 'package:studee_pc/features/subjects/presentation/study_notes_export_dialog.dart';
 
 enum _WorkspaceMode { solve, practice, review, knowledge, history }
 
@@ -51,19 +51,20 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Drop any prior Giải / Luyện / Ôn tập work before first paint so the
+    // embedded SolveScreen does not hydrate the previous subject's session.
+    ref.read(solveServiceProvider).reset();
+    ref.read(practiceServiceProvider).reset();
+    ref.read(reviewServiceProvider).finish();
+    ref.read(solveTabDraftProvider.notifier).state = '';
+    ref.read(practiceTabDraftProvider.notifier).state = '';
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      // Cancel any in-flight OCR / LLM work left from the previous subject.
+      await _discardAllSessions();
+      if (!mounted) return;
       await ref.read(subjectsActionsProvider).open(widget.subjectId);
-      if (!mounted) return;
-      final practice = ref.read(practiceServiceProvider);
-      final restored =
-          await practice.restoreIncompleteIfNeeded(widget.subjectId);
-      if (!mounted) return;
-      if (restored || practice.hasIncompleteSession) {
-        setState(() {
-          _mode = _WorkspaceMode.practice;
-          _primaryTab = _WorkspaceMode.practice;
-        });
-      }
     });
   }
 
@@ -197,9 +198,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   }
 
   Future<void> _exportStudyNotes(Subject subject) async {
-    final format = await showStudyNotesFormatDialog(context);
-    if (format == null || !mounted) return;
-
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -220,13 +218,12 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
 
     try {
       final tempDir = await getTemporaryDirectory();
-      final fileName = '${subject.name}-ghi-chu.${format.fileExtension}';
+      final fileName = '${subject.name}-ghi-chu.md';
       final tempPath = p.join(tempDir.path, fileName);
       final out = await ref.read(subjectsActionsProvider).exportStudyNotes(
             subjectId: subject.id,
             subjectName: subject.name,
             destinationPath: tempPath,
-            format: format,
           );
       final bytes = await File(out).readAsBytes();
       if (!mounted) return;
@@ -235,7 +232,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
         dialogTitle: 'Xuất tài liệu',
         fileName: fileName,
         type: FileType.custom,
-        allowedExtensions: [format.fileExtension],
+        allowedExtensions: const ['md'],
         bytes: Uint8List.fromList(bytes),
       );
       if (saved == null || !mounted) return;
@@ -484,6 +481,9 @@ class _KnowledgePanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(subjectKnowledgeProvider(subjectId));
     final canImport = !_isMobile;
+    final formatKind = formatKindForSubject(
+      ref.watch(subjectByIdProvider(subjectId)).asData?.value,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -583,6 +583,7 @@ class _KnowledgePanel extends ConsumerWidget {
                           u.content,
                           compact: true,
                           maxLines: 5,
+                          formatKind: formatKind,
                         ),
                       ],
                     ),

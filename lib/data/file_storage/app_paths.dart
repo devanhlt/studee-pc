@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 /// ```text
 /// ApplicationData/
 ///   catalog.db
+///   credentials.v1.dat   # obfuscated activation code / legacy secrets
 ///   models/paddleocr-vl-1.6/
 ///   subjects/subject_<uuid>/
 ///     manifest.json
@@ -55,6 +56,12 @@ class AppPaths {
   Future<String> catalogDbPath() async {
     final root = await ensureApplicationDataRoot();
     return p.join(root, 'catalog.db');
+  }
+
+  /// Obfuscated credentials file (activation code + legacy provider keys).
+  Future<String> credentialsFilePath() async {
+    final root = await ensureApplicationDataRoot();
+    return p.join(root, 'credentials.v1.dat');
   }
 
   Future<String> modelsRoot() async {

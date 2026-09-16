@@ -11,6 +11,7 @@ class Subject extends Equatable {
     required this.schemaVersion,
     required this.createdAt,
     required this.updatedAt,
+    this.pinned = false,
     this.sourceCount = 0,
     this.knowledgeCount = 0,
     this.questionCount = 0,
@@ -24,6 +25,7 @@ class Subject extends Equatable {
   final int schemaVersion;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool pinned;
   final int sourceCount;
   final int knowledgeCount;
   final int questionCount;
@@ -37,6 +39,7 @@ class Subject extends Equatable {
     int? schemaVersion,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? pinned,
     int? sourceCount,
     int? knowledgeCount,
     int? questionCount,
@@ -50,6 +53,7 @@ class Subject extends Equatable {
       schemaVersion: schemaVersion ?? this.schemaVersion,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      pinned: pinned ?? this.pinned,
       sourceCount: sourceCount ?? this.sourceCount,
       knowledgeCount: knowledgeCount ?? this.knowledgeCount,
       questionCount: questionCount ?? this.questionCount,
@@ -66,6 +70,7 @@ class Subject extends Equatable {
         schemaVersion,
         createdAt,
         updatedAt,
+        pinned,
         sourceCount,
         knowledgeCount,
         questionCount,

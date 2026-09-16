@@ -50,13 +50,21 @@ class DeepSeekClientImpl implements DeepSeekClient {
     final userPayload = {
       'source_id': request.sourceId,
       'language': request.language,
+      if (request.subjectName != null &&
+          request.subjectName!.trim().isNotEmpty)
+        'subject_name': request.subjectName!.trim(),
+      if (request.formatKind != null && request.formatKind!.trim().isNotEmpty)
+        'format_kind': request.formatKind!.trim(),
       'pages': request.pageTexts
           .map((p) => {'page_number': p.pageNumber, 'text': p.text})
           .toList(),
     };
 
     final raw = await _chatJson(
-      systemPrompt: DeepSeekPrompts.sourceStructuringSystem(),
+      systemPrompt: DeepSeekPrompts.sourceStructuringSystem(
+        subjectName: request.subjectName,
+        formatKind: request.formatKind,
+      ),
       userContent: jsonEncode(userPayload),
       promptVersion: version,
       maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
@@ -323,9 +331,15 @@ class DeepSeekClientImpl implements DeepSeekClient {
     required String content,
     List<({String label, String content})> choices = const [],
     String? answerContent,
+    String? subjectName,
+    String? formatKind,
   }) async {
     final userPayload = {
       'content': content,
+      if (subjectName != null && subjectName.trim().isNotEmpty)
+        'subject_name': subjectName.trim(),
+      if (formatKind != null && formatKind.trim().isNotEmpty)
+        'format_kind': formatKind.trim(),
       'choices': [
         for (final c in choices)
           {
@@ -337,7 +351,10 @@ class DeepSeekClientImpl implements DeepSeekClient {
         'answer_content': answerContent.trim(),
     };
     final raw = await _chatJson(
-      systemPrompt: DeepSeekPrompts.mathLatexFormatSystem(),
+      systemPrompt: DeepSeekPrompts.mathLatexFormatSystem(
+        subjectName: subjectName,
+        formatKind: formatKind,
+      ),
       userContent: jsonEncode(userPayload),
       promptVersion: DeepSeekPrompts.mathLatexFormatVersion,
       maxTokensOverride: 2048,

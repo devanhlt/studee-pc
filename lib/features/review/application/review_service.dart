@@ -6,6 +6,8 @@ import 'package:studee_pc/app/widgets/question_display_format.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
+import 'package:studee_pc/data/backend/backend_quota_client.dart';
+import 'package:studee_pc/data/backend/quota_tokens.dart';
 import 'package:studee_pc/domain/entities/question.dart';
 import 'package:studee_pc/domain/entities/question_choice.dart';
 import 'package:studee_pc/features/practice/application/practice_mcq_grade.dart';
@@ -15,7 +17,9 @@ import 'package:studee_pc/domain/entities/practice_turn.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
 import 'package:studee_pc/features/review/application/review_answer_style.dart';
 import 'package:studee_pc/features/review/application/review_question_text.dart';
+import 'package:studee_pc/features/review/application/review_quiz_config.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_builder.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
 enum ReviewStage { idle, running, completed }
@@ -48,6 +52,8 @@ class ReviewSessionState {
     this.quizAnswerFromLlm = false,
     this.quizResolvingAnswer = false,
     this.quizLatexLoading = false,
+    this.quizRemaining = Duration.zero,
+    this.quizTimedOut = false,
   });
 
   final ReviewStage stage;
@@ -68,6 +74,9 @@ class ReviewSessionState {
   final bool quizAnswerFromLlm;
   final bool quizResolvingAnswer;
   final bool quizLatexLoading;
+  /// Remaining time for Ôn tập (fixed 30 min exam).
+  final Duration quizRemaining;
+  final bool quizTimedOut;
 
   bool get isIncomplete => stage == ReviewStage.running;
 
@@ -99,7 +108,10 @@ class ReviewSessionState {
     bool? quizAnswerFromLlm,
     bool? quizResolvingAnswer,
     bool? quizLatexLoading,
+    Duration? quizRemaining,
+    bool? quizTimedOut,
     bool clearQuiz = false,
+    bool clearQuizTip = false,
   }) {
     return ReviewSessionState(
       stage: stage ?? this.stage,
@@ -113,8 +125,12 @@ class ReviewSessionState {
           clearQuiz ? null : (quizSelectedLabel ?? this.quizSelectedLabel),
       quizIsCorrect: clearQuiz ? null : (quizIsCorrect ?? this.quizIsCorrect),
       quizAnswered: clearQuiz ? false : (quizAnswered ?? this.quizAnswered),
-      quizTip: clearQuiz ? null : (quizTip ?? this.quizTip),
-      quizTipLoading: clearQuiz ? false : (quizTipLoading ?? this.quizTipLoading),
+      quizTip: clearQuiz || clearQuizTip ? null : (quizTip ?? this.quizTip),
+      quizTipLoading: clearQuiz
+          ? false
+          : quizTipLoading != null
+              ? quizTipLoading
+              : (clearQuizTip ? false : this.quizTipLoading),
       quizCorrectLabel:
           clearQuiz ? null : (quizCorrectLabel ?? this.quizCorrectLabel),
       quizCorrectContent:
@@ -126,6 +142,8 @@ class ReviewSessionState {
           : (quizResolvingAnswer ?? this.quizResolvingAnswer),
       quizLatexLoading:
           clearQuiz ? false : (quizLatexLoading ?? this.quizLatexLoading),
+      quizRemaining: quizRemaining ?? this.quizRemaining,
+      quizTimedOut: quizTimedOut ?? this.quizTimedOut,
     );
   }
 }
@@ -135,6 +153,7 @@ class ReviewService {
   ReviewService({
     required PracticeService practice,
     required DeepSeekClient deepSeek,
+    required BackendQuotaClient quota,
     required Future<List<Question>> Function(String subjectId) loadQuestions,
     required Future<void> Function({
       required String subjectId,
@@ -143,13 +162,23 @@ class ReviewService {
       List<({String id, String content})> choices,
       String? answerContent,
     }) persistQuestionMath,
+    required Future<void> Function({
+      required String subjectId,
+      required String questionId,
+    }) incrementPracticeCount,
+    required Future<SubjectFormatContext> Function(String subjectId)
+        resolveFormatKind,
   })  : _practice = practice,
         _deepSeek = deepSeek,
+        _quota = quota,
         _loadQuestions = loadQuestions,
-        _persistQuestionMath = persistQuestionMath;
+        _persistQuestionMath = persistQuestionMath,
+        _incrementPracticeCount = incrementPracticeCount,
+        _resolveFormatKind = resolveFormatKind;
 
   final PracticeService _practice;
   final DeepSeekClient _deepSeek;
+  final BackendQuotaClient _quota;
   final Future<List<Question>> Function(String subjectId) _loadQuestions;
   final Future<void> Function({
     required String subjectId,
@@ -158,7 +187,15 @@ class ReviewService {
     List<({String id, String content})> choices,
     String? answerContent,
   }) _persistQuestionMath;
+  final Future<void> Function({
+    required String subjectId,
+    required String questionId,
+  }) _incrementPracticeCount;
+  final Future<SubjectFormatContext> Function(String subjectId)
+      _resolveFormatKind;
   final AppLogger _log = AppLogger('ReviewService');
+  SubjectFormatContext _formatContext = SubjectFormatContext.empty;
+  SubjectFormatKind get _formatKind => _formatContext.kind;
 
   final StreamController<ReviewSessionState> _states =
       StreamController<ReviewSessionState>.broadcast();
@@ -169,6 +206,8 @@ class ReviewService {
   StreamSubscription<PracticeSessionState>? _practiceSub;
   int _quizTipRequestId = 0;
   final Map<String, QuizAnswerResolution> _llmAnswers = {};
+  Timer? _quizTicker;
+  DateTime? _quizEndsAt;
 
 
   Stream<ReviewSessionState> get states => _states.stream;
@@ -198,6 +237,12 @@ class ReviewService {
       await cancel();
     }
 
+    try {
+      _formatContext = await _resolveFormatKind(subjectId);
+    } on Object catch (_) {
+      _formatContext = SubjectFormatContext.empty;
+    }
+
     List<Question> questions;
     try {
       questions = (await _loadQuestions(subjectId))
@@ -223,8 +268,10 @@ class ReviewService {
       return const Failure(f);
     }
 
-    _queue = questions;
+    final queue = buildShuffledQuizSet(questions);
+    _queue = queue;
     _countedCurrent = false;
+    _llmAnswers.clear();
     if (mode == ReviewPlayMode.coach) {
       _watchPractice();
     } else {
@@ -236,11 +283,13 @@ class ReviewService {
         stage: ReviewStage.running,
         mode: mode,
         subjectId: subjectId,
-        total: questions.length,
+        total: queue.length,
         currentIndex: 0,
         completedCount: 0,
+        quizRemaining: ReviewQuizConfig.duration,
       ),
     );
+    _startQuizCountdown();
     return _startCurrent();
   }
 
@@ -365,9 +414,6 @@ class ReviewService {
               quizAnswered: true,
               quizIsCorrect: null,
               quizSelectedLabel: choice.label,
-              quizTip:
-                  'Mẹo: chưa có đáp án lưu và chưa gọi được Stud để suy luận. '
-                  'Kiểm tra mã kích hoạt rồi thử lại.',
               errorMessage:
                   'Chưa có đáp án lưu. Cần mã kích hoạt để Stud suy luận đáp án.',
             ),
@@ -401,13 +447,6 @@ class ReviewService {
       }
     }
 
-    final tip = _buildQuizTip(
-      question,
-      choices,
-      answerMeaning: correctContent ?? '',
-    );
-    final tipRequestId = ++_quizTipRequestId;
-
     _emit(
       _state.copyWith(
         quizSelectedLabel: choice.label,
@@ -417,18 +456,68 @@ class ReviewService {
         quizCorrectLabel: correctLabel,
         quizCorrectContent: correctContent,
         quizAnswerFromLlm: fromLlm,
-        quizTip: tip,
-        quizTipLoading: true,
         clearError: true,
       ),
     );
     _markCurrentComplete();
+    return const Success(null);
+  }
+
+  /// User tapped "Gợi ý" — load one tip for the current unanswered question.
+  Future<Result<void>> requestQuizTip() async {
+    if (_state.stage != ReviewStage.running ||
+        _state.mode != ReviewPlayMode.quiz) {
+      return const Success(null);
+    }
+    if (_state.quizAnswered || _state.quizResolvingAnswer) {
+      return const Success(null);
+    }
+    if (_state.quizTipLoading) return const Success(null);
+    if (_state.quizTip != null && _state.quizTip!.trim().isNotEmpty) {
+      return const Success(null);
+    }
+
+    final question = currentQuestion;
+    if (question == null) return const Success(null);
+    final choices = currentQuizChoices
+        .map(
+          (c) => PracticeChoice(
+            label: c.label,
+            content: c.content,
+          ),
+        )
+        .toList();
+    if (choices.isEmpty) return const Success(null);
+
+    final tipRequestId = ++_quizTipRequestId;
+    _emit(
+      _state.copyWith(
+        clearQuizTip: true,
+        quizTipLoading: true,
+        clearError: true,
+      ),
+    );
+
+    final quotaFail = await _quota.consumeSolve(QuotaSolveKind.text);
+    if (quotaFail != null) {
+      if (_quizTipRequestId != tipRequestId) return const Success(null);
+      _emit(
+        _state.copyWith(
+          quizTipLoading: false,
+          errorMessage: quotaFail.userMessage,
+        ),
+      );
+      return Failure(quotaFail);
+    }
+
     unawaited(
       _enrichQuizTip(
         question,
         choices,
         tipRequestId,
-        answerMeaning: correctContent,
+        // Do not pass the correct answer — tip must not spoil before pick.
+        answerMeaning: '',
+        revealAnswer: false,
       ),
     );
     return const Success(null);
@@ -450,6 +539,12 @@ class ReviewService {
         await _practice.prepareCredentials();
       } on Object catch (_) {}
       if (!await _practice.hasApiKey()) return null;
+
+      final quotaFail = await _quota.consumeSolve(QuotaSolveKind.text);
+      if (quotaFail != null) {
+        _emit(_state.copyWith(errorMessage: quotaFail.userMessage));
+        return null;
+      }
 
       final stem = formatReviewQuestion(
         question,
@@ -497,56 +592,79 @@ class ReviewService {
     return tip;
   }
 
+  /// Build one detailed tip (LLM when possible, else heuristic) and show once.
   Future<void> _enrichQuizTip(
     Question question,
     List<PracticeChoice> choices,
     int tipRequestId, {
     String? answerMeaning,
+    bool revealAnswer = false,
   }) async {
-    try {
-      try {
-        await _practice.prepareCredentials();
-      } on Object catch (_) {}
-      if (!await _practice.hasApiKey()) {
-        if (_quizTipRequestId == tipRequestId &&
-            _state.stage == ReviewStage.running &&
-            _state.quizAnswered) {
-          _emit(_state.copyWith(quizTipLoading: false));
-        }
-        return;
-      }
-
-      final stem = formatReviewQuestion(
-        question,
-        number: _state.displayNumber,
-      );
-      final meaning = answerMeaning ??
-          StudyNotesBuilder.answerMeaning(question, compact: false);
-      var tip = await _deepSeek.generateMcqStrategyTip(
-        question: stem,
-        choices: choices.map((c) => c.display).toList(),
-        correctAnswer: meaning,
-      );
-      tip = PracticeMcqTips.withoutQuestionEcho(tip, stem);
-      tip = stripMcqChoiceLetters(tip);
-      if (!tip.startsWith('Mẹo:') && !tip.startsWith('Mẹo :')) {
-        tip = 'Mẹo: $tip';
-      }
-
+    Future<void> publish(String tip) async {
       if (_quizTipRequestId != tipRequestId) return;
-      if (_state.stage != ReviewStage.running || !_state.quizAnswered) return;
+      if (_state.stage != ReviewStage.running) return;
       if (_state.currentIndex >= _queue.length ||
           _queue[_state.currentIndex].id != question.id) {
         return;
       }
       _emit(_state.copyWith(quizTip: tip, quizTipLoading: false));
-    } on Object catch (e) {
-      _log.warning('Quiz tip LLM failed: ${e.runtimeType}');
-      if (_quizTipRequestId == tipRequestId &&
-          _state.stage == ReviewStage.running &&
-          _state.quizAnswered) {
-        _emit(_state.copyWith(quizTipLoading: false));
+    }
+
+    try {
+      try {
+        await _practice.prepareCredentials();
+      } on Object catch (_) {}
+
+      final stem = formatReviewQuestion(
+        question,
+        number: _state.displayNumber,
+      );
+      final meaning = revealAnswer
+          ? (answerMeaning ??
+              StudyNotesBuilder.answerMeaning(question, compact: false))
+          : '';
+
+      String tip;
+      if (await _practice.hasApiKey()) {
+        try {
+          tip = await _deepSeek.generateMcqStrategyTip(
+            question: stem,
+            choices: choices.map((c) => c.display).toList(),
+            correctAnswer: (meaning == null || meaning.trim().isEmpty)
+                ? null
+                : meaning,
+          );
+        } on Object catch (e) {
+          _log.warning('Quiz tip LLM failed: ${e.runtimeType}');
+          tip = _buildQuizTip(
+            question,
+            choices,
+            answerMeaning: meaning ?? '',
+          );
+        }
+      } else {
+        tip = _buildQuizTip(
+          question,
+          choices,
+          answerMeaning: meaning ?? '',
+        );
       }
+
+      tip = PracticeMcqTips.withoutQuestionEcho(tip, stem);
+      tip = stripMcqChoiceLetters(tip);
+      tip = tip.replaceAll(RegExp(r'\*\*|__'), '');
+      if (!tip.startsWith('Mẹo:') && !tip.startsWith('Mẹo :')) {
+        tip = 'Mẹo: $tip';
+      }
+      await publish(tip);
+    } on Object catch (e) {
+      _log.warning('Quiz tip failed: ${e.runtimeType}');
+      final fallback = _buildQuizTip(
+        question,
+        choices,
+        answerMeaning: revealAnswer ? (answerMeaning ?? '') : '',
+      );
+      await publish(fallback);
     }
   }
 
@@ -573,6 +691,7 @@ class ReviewService {
   }
 
   Future<void> cancel() async {
+    _stopQuizCountdown();
     _practiceSub?.cancel();
     _practiceSub = null;
     await _practice.cancel();
@@ -583,6 +702,7 @@ class ReviewService {
   }
 
   void finish() {
+    _stopQuizCountdown();
     _practiceSub?.cancel();
     _practiceSub = null;
     _practice.reset();
@@ -593,6 +713,7 @@ class ReviewService {
   }
 
   void dispose() {
+    _stopQuizCountdown();
     _practiceSub?.cancel();
     _states.close();
   }
@@ -637,9 +758,11 @@ class ReviewService {
   }
 
   /// Heuristic enrich + optional LLM LaTeX polish; persists when improved.
+  /// Skipped entirely for non-math subjects.
   Future<void> _polishCurrentQuestionLatex() async {
     final subjectId = _state.subjectId;
     if (subjectId == null || _queue.isEmpty) return;
+    if (_formatKind != SubjectFormatKind.math) return;
     final index = _state.currentIndex;
     if (index < 0 || index >= _queue.length) return;
 
@@ -671,6 +794,7 @@ class ReviewService {
       content: question.content,
       choiceContents: [for (final c in question.choices) c.content],
       answerContent: question.answerContent,
+      kind: _formatKind,
     );
     if (!needsLlm) return;
 
@@ -691,6 +815,9 @@ class ReviewService {
             (label: c.label, content: c.content),
         ],
         answerContent: question.answerContent,
+        subjectName:
+            _formatContext.name.isEmpty ? null : _formatContext.name,
+        formatKind: _formatKind.wire,
       );
 
       if (_state.stage != ReviewStage.running ||
@@ -703,19 +830,28 @@ class ReviewService {
         final original = question.choices[i];
         String body = original.content;
         if (i < formatted.choices.length) {
-          body = QuestionDisplayFormat.enrich(formatted.choices[i].content);
+          body = QuestionDisplayFormat.enrich(
+            formatted.choices[i].content,
+            kind: _formatKind,
+          );
         } else {
-          body = QuestionDisplayFormat.enrich(body);
+          body = QuestionDisplayFormat.enrich(body, kind: _formatKind);
         }
         polishedChoices.add(original.copyWith(content: body));
       }
 
       final polished = question.copyWith(
-        content: QuestionDisplayFormat.enrich(formatted.content),
+        content: QuestionDisplayFormat.enrich(
+          formatted.content,
+          kind: _formatKind,
+        ),
         choices: polishedChoices,
         answerContent: formatted.answerContent == null
             ? question.answerContent
-            : QuestionDisplayFormat.enrich(formatted.answerContent!),
+            : QuestionDisplayFormat.enrich(
+                formatted.answerContent!,
+                kind: _formatKind,
+              ),
       );
       _replaceQueueQuestion(index, polished);
       try {
@@ -743,13 +879,24 @@ class ReviewService {
 
   Question _applyLocalLatexEnrich(Question question) {
     return question.copyWith(
-      content: QuestionDisplayFormat.enrich(question.content),
+      content: QuestionDisplayFormat.enrich(
+        question.content,
+        kind: _formatKind,
+      ),
       answerContent: question.answerContent == null
           ? null
-          : QuestionDisplayFormat.enrich(question.answerContent!),
+          : QuestionDisplayFormat.enrich(
+              question.answerContent!,
+              kind: _formatKind,
+            ),
       choices: [
         for (final c in question.choices)
-          c.copyWith(content: QuestionDisplayFormat.enrich(c.content)),
+          c.copyWith(
+            content: QuestionDisplayFormat.enrich(
+              c.content,
+              kind: _formatKind,
+            ),
+          ),
       ],
     );
   }
@@ -783,12 +930,16 @@ class ReviewService {
     });
   }
 
-  void _completeRun() {
+  void _completeRun({bool timedOut = false}) {
+    _stopQuizCountdown();
     _practiceSub?.cancel();
     _practiceSub = null;
     _practice.reset();
     final mode = _state.mode;
     final total = _state.total;
+    final done = timedOut
+        ? _state.completedCount.clamp(0, total)
+        : total;
     _queue = const [];
     _countedCurrent = false;
     _emit(
@@ -796,10 +947,43 @@ class ReviewService {
         stage: ReviewStage.completed,
         mode: mode,
         total: total,
-        completedCount: total,
+        completedCount: done,
         currentIndex: total > 0 ? total - 1 : 0,
+        quizTimedOut: timedOut,
+        quizRemaining: Duration.zero,
       ),
     );
+  }
+
+  void _startQuizCountdown() {
+    _stopQuizCountdown();
+    _quizEndsAt = DateTime.now().add(ReviewQuizConfig.duration);
+    _emit(
+      _state.copyWith(
+        quizRemaining: ReviewQuizConfig.duration,
+        quizTimedOut: false,
+      ),
+    );
+    _quizTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      final ends = _quizEndsAt;
+      if (ends == null || _state.stage != ReviewStage.running) {
+        _stopQuizCountdown();
+        return;
+      }
+      final left = ends.difference(DateTime.now());
+      if (left <= Duration.zero) {
+        _emit(_state.copyWith(quizRemaining: Duration.zero));
+        _completeRun(timedOut: true);
+        return;
+      }
+      _emit(_state.copyWith(quizRemaining: left));
+    });
+  }
+
+  void _stopQuizCountdown() {
+    _quizTicker?.cancel();
+    _quizTicker = null;
+    _quizEndsAt = null;
   }
 
   void _markCurrentComplete() {
@@ -809,6 +993,38 @@ class ReviewService {
     if (nextCount != _state.completedCount) {
       _emit(_state.copyWith(completedCount: nextCount));
     }
+    final subjectId = _state.subjectId;
+    final question = currentQuestion;
+    if (subjectId != null && question != null) {
+      // Bump DB + in-memory counts so later duplicates in this run see the bump.
+      unawaited(_recordPractice(subjectId, question.id));
+    }
+  }
+
+  Future<void> _recordPractice(String subjectId, String questionId) async {
+    try {
+      await _incrementPracticeCount(
+        subjectId: subjectId,
+        questionId: questionId,
+      );
+      _bumpQueuePracticeCount(questionId);
+    } on Object catch (e) {
+      _log.warning('Increment practice count failed: ${e.runtimeType}');
+    }
+  }
+
+  void _bumpQueuePracticeCount(String questionId) {
+    var changed = false;
+    final next = <Question>[];
+    for (final q in _queue) {
+      if (q.id == questionId) {
+        next.add(q.copyWith(practiceCount: q.practiceCount + 1));
+        changed = true;
+      } else {
+        next.add(q);
+      }
+    }
+    if (changed) _queue = next;
   }
 
   void _emit(ReviewSessionState state) {
@@ -821,6 +1037,7 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
   final service = ReviewService(
     practice: ref.watch(practiceServiceProvider),
     deepSeek: ref.watch(deepSeekClientProvider),
+    quota: ref.watch(backendQuotaClientProvider),
     loadQuestions: (id) =>
         ref.read(subjectContentProvider).listQuestionsWithChoices(id),
     persistQuestionMath: ({
@@ -837,6 +1054,19 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
             choices: choices,
             answerContent: answerContent,
           );
+    },
+    incrementPracticeCount: ({
+      required subjectId,
+      required questionId,
+    }) {
+      return ref.read(subjectContentProvider).incrementPracticeCount(
+            subjectId: subjectId,
+            questionId: questionId,
+          );
+    },
+    resolveFormatKind: (id) async {
+      final subject = await ref.read(subjectByIdProvider(id).future);
+      return formatContextForSubject(subject);
     },
   );
   ref.onDispose(service.dispose);

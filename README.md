@@ -22,7 +22,7 @@ Personal desktop study assistant (macOS & Windows) that runs as an overlay above
 | OCR | PaddleOCR-VL 1.6 via JSONL worker (`ocr_worker/`) |
 | PDF | PDFium (`pypdfium2`) |
 | AI | DeepSeek API (strict JSON + local validation) |
-| Secrets | macOS Keychain / Windows Credential Manager |
+| Secrets | ApplicationData (obfuscated local file) |
 
 ## Architecture
 
@@ -134,7 +134,7 @@ Recipients: drag **Studee.app** to Applications, then **right-click → Open** (
 
 ## Uninstall (macOS)
 
-Complete removal (app, study data, prefs, Keychain API key, OCR caches):
+Complete removal (app, study data, prefs, activation code file, legacy Keychain leftovers, OCR caches):
 
 ```bash
 # From the DMG volume:

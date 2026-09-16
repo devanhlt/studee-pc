@@ -1,10 +1,11 @@
 import 'package:studee_pc/domain/repositories/stored_api_credentials.dart';
 
-/// Secure OS credential store for the Studee activation code (and legacy keys).
+/// Local credentials store for the Studee activation code (and legacy keys).
 ///
-/// Secrets must never be written to SQLite, logs, or crash reports.
+/// Secrets live in ApplicationData (obfuscated file). They must never be written
+/// to SQLite, logs, or crash reports.
 abstract interface class CredentialsRepository {
-  /// One Keychain read for all app secrets (preferred).
+  /// One read for all app secrets (preferred; uses an in-memory cache).
   Future<StoredApiCredentials> loadAll();
 
   Future<String?> getActivationCode();

@@ -5,8 +5,8 @@ import 'package:studee_pc/data/deepseek/deepseek_config.dart';
 /// Each prompt includes the word `JSON` and an example schema. All instruct
 /// Vietnamese output by default.
 abstract final class DeepSeekPrompts {
-  static const String sourceStructuringVersion = 'sourceStructuring.v5';
-  static const String questionParsingVersion = 'questionParsing.v2';
+  static const String sourceStructuringVersion = 'sourceStructuring.v7';
+  static const String questionParsingVersion = 'questionParsing.v3';
   static const String groundedAnswerVersion = 'groundedAnswer.v2';
   static const String repairVersion = 'repair.v1';
   static const String memorizationTipsVersion = 'memorizationTips.v1';
@@ -17,19 +17,26 @@ abstract final class DeepSeekPrompts {
   static const String ocrPolishVersion = 'ocrPolish.v1';
   static const String practiceVersion = 'practice.v5';
   static const String practiceReviewVersion = 'practice.review.v1';
-  static const String mcqStrategyTipVersion = 'mcqStrategyTip.v1';
+  static const String mcqStrategyTipVersion = 'mcqStrategyTip.v2';
   static const String quizAnswerResolveVersion = 'quizAnswerResolve.v1';
-  static const String mathLatexFormatVersion = 'mathLatexFormat.v1';
+  static const String mathLatexFormatVersion = 'mathLatexFormat.v3';
 
   /// Structures reviewed OCR / page text into knowledge units and questions.
-  static String sourceStructuringSystem() => '''
+  ///
+  /// When [subjectName] / [formatKind] are set (`math`|`code`|`plain`), rule 9
+  /// focuses on that subject's display standardization.
+  static String sourceStructuringSystem({
+    String? subjectName,
+    String? formatKind,
+  }) =>
+      '''
 Bạn là trợ lý cấu trúc tài liệu học tập tiếng Việt.
 ${DeepSeekConfig.vietnameseOutputInstruction}
 
 Nhiệm vụ: chuyển văn bản nguồn đã được người dùng duyệt thành JSON có cấu trúc để LƯU KIẾN THỨC giải bài sau này.
 
 Lưu ý: văn bản có thể chỉ là MỘT PHẦN của tài liệu lớn (đã được hệ thống chia lô). Hãy trích HẾT câu hỏi + đáp án và kiến thức thuần có trong đoạn này; không cần đủ bộ đề.
-
+${_subjectContextBlock(subjectName: subjectName, formatKind: formatKind)}
 Quy tắc bắt buộc:
 1) Nhận diện khối: mỗi câu hỏi thường đi kèm lựa chọn (A/B/C/D), dòng "Đáp án", và/hoặc "Giải thích"/"Lời giải". Giữ chúng thành MỘT mục questions[] — không tách đáp án/lời giải sang câu khác.
 2) Với mỗi câu hỏi có đáp án trong nguồn, phải trích ĐỦ:
@@ -44,12 +51,8 @@ Quy tắc bắt buộc:
 6) Liên kết câu hỏi với kiến thức liên quan qua related_knowledge_indices (chỉ số 0-based trong mảng knowledge_units).
 7) Không bịa đáp án / kiến thức nếu nguồn không có.
 8) Giữ nguyên tiếng Việt và dấu thanh; không dịch sang tiếng Anh.
-9) Công thức toán BẮT BUỘC bọc LaTeX \$...\$ (inline) hoặc \$\$...\$\$ (khối). Áp dụng cho content, choices[].content, answer_content, explanation, knowledge_units.content.
-   - Biến có chỉ số: x1 → \$x_1\$, x2 → \$x_2\$ (không để "x1" thuần).
-   - Hệ phương trình dạng "{ eq1 ; eq2 ; … }" hoặc nhiều dòng → dùng \$\$\\begin{cases}…\\end{cases}\$\$.
-   - Ma trận kiểu [[…],[…]] hoặc ( a b ; c d ) → \$\\begin{bmatrix}…\\end{bmatrix}\$.
-   - Tích chuyển vị A.AT / A.A^T → \$A A^{T}\$.
-   - Giữ nguyên tiếng Việt ngoài công thức; không bỏ nội dung đề.
+9) Chuẩn hóa HIỂN THỊ — áp dụng theo môn học đã xác định ở trên:
+${_displayNormalizeRules(formatKind)}
 10) Mọi đơn vị mới: verification_status = "unreviewed". Bảo toàn số trang nguồn khi có.
 11) type knowledge_units thuộc: theory, definition, formula, theorem, example, question, answer_key, solution, table, note.
 
@@ -96,6 +99,62 @@ Trả về đúng một đối tượng JSON theo schema ví dụ:
 }
 ''';
 
+  static String _subjectContextBlock({
+    String? subjectName,
+    String? formatKind,
+  }) {
+    final name = subjectName?.trim() ?? '';
+    final kind = (formatKind ?? '').trim().toLowerCase();
+    if (name.isEmpty && kind.isEmpty) {
+      return '''
+Môn học: chưa xác định — tự nhận loại nội dung từng đoạn rồi chuẩn hóa theo mục 9.
+''';
+    }
+    final kindLabel = switch (kind) {
+      'math' => 'Toán / Lý / Hóa → ưu tiên LaTeX',
+      'code' => 'Lập trình → ưu tiên fence mã nguồn',
+      'plain' => 'Văn bản / ngoại ngữ → không ép LaTeX/code',
+      _ => kind.isEmpty ? 'tự nhận từ nội dung' : kind,
+    };
+    final namePart = name.isEmpty ? '(không có tên)' : '"$name"';
+    return '''
+Môn học hiện tại: $namePart
+Loại chuẩn hóa bắt buộc: $kindLabel
+Chỉ áp dụng quy tắc chuẩn hóa đúng loại trên; đừng ép định dạng của loại khác.
+''';
+  }
+
+  static String _displayNormalizeRules(String? formatKind) {
+    switch ((formatKind ?? '').trim().toLowerCase()) {
+      case 'math':
+        return '''   a) TOÁN / LÝ / HÓA — công thức BẮT BUỘC LaTeX \$...\$ hoặc \$\$...\$\$:
+      - x1 → \$x_1\$; hệ "{ eq1 ; eq2 }" → \$\$\\begin{cases}…\\end{cases}\$\$;
+      - ma trận [[…]] hoặc ( a b ; c d ) → \$\\begin{bmatrix}…\\end{bmatrix}\$;
+      - A.AT → \$A A^{T}\$.
+      - Không bọc mã nguồn; nếu vô tình gặp đoạn code ngắn thì giữ nguyên, không đổi \{ \} thành cases.''';
+      case 'code':
+        return '''   a) LẬP TRÌNH (C/C++/Java/Python/…) — GIỮ mã nguồn, KHÔNG dùng LaTeX cases:
+      - Bọc đoạn mã trong fence Markdown: \`\`\`c … \`\`\` (hoặc python/java…);
+      - Giữ nguyên ; \{ \} == != #include printf…;
+      - Phần tiếng Việt của đề (câu hỏi) nằm NGOÀI fence;
+      - CẤM \$\\mathrm{…}\$, CẤM \\begin{cases} cho khối lệnh.''';
+      case 'plain':
+        return '''   a) NGOẠI NGỮ / văn bản — giữ prose nguyên văn:
+      - Không ép LaTeX, không bọc code fence trừ khi nguồn đã có;
+      - Giữ dấu tiếng Việt / chính tả nguồn.''';
+      default:
+        return '''   a) TOÁN / LÝ / HÓA — công thức BẮT BUỘC LaTeX \$...\$ hoặc \$\$...\$\$:
+      - x1 → \$x_1\$; hệ "{ eq1 ; eq2 }" → \$\$\\begin{cases}…\\end{cases}\$\$;
+      - ma trận [[…]] hoặc ( a b ; c d ) → \$\\begin{bmatrix}…\\end{bmatrix}\$;
+      - A.AT → \$A A^{T}\$.
+   b) LẬP TRÌNH (C/C++/Java/Python/…) — GIỮ mã nguồn, KHÔNG đổi dấu ngoặc/khối \{ \} sang LaTeX cases:
+      - Bọc đoạn mã trong fence Markdown: \`\`\`c … \`\`\` (hoặc python/java…);
+      - Giữ nguyên ; \{ \} == != #include printf…;
+      - Phần tiếng Việt của đề (câu hỏi) nằm NGOÀI fence.
+   c) NGOẠI NGỮ / văn bản — giữ prose, không ép LaTeX.''';
+    }
+  }
+
   /// Parses a captured question into structured form.
   static String questionParsingSystem() => '''
 Bạn là bộ phân tích câu hỏi thi tiếng Việt.
@@ -110,7 +169,7 @@ Quy tắc:
 - Công thức toán trong content/choices phải dùng LaTeX với \$...\$ hoặc \$\$...\$\$.
 - Nếu nguồn viết ma trận kiểu Python/list (ví dụ [[1,2],[3,4]]) hoặc MATLAB ( 1 2 ; 3 4 ), hãy đổi thành LaTeX \\begin{bmatrix}...\\end{bmatrix} (bọc \$...\$).
 - Hệ phương trình "{ eq ; eq }" → \$\$\\begin{cases}…\\end{cases}\$\$; biến x1 → \$x_1\$.
-- Đoạn mã nguồn (C/Python/…) giữ trong content; có thể để nguyên để UI bọc code fence.
+- Đoạn mã nguồn (C/Python/…): bọc \`\`\`c\`\`\` (hoặc python/java); GIỮ \{ \} ; ==; CẤM đổi khối lệnh thành \\begin{cases}.
 
 Trả về đúng một đối tượng JSON theo schema ví dụ:
 {
@@ -358,15 +417,16 @@ Schema:
 Bạn viết mẹo làm trắc nghiệm tiếng Việt cho học sinh.
 ${DeepSeekConfig.vietnameseOutputInstruction}
 
-Nhiệm vụ: dựa vào câu hỏi + các lựa chọn + đáp án đúng (theo NỘI DUNG), viết một mẹo chiến lược có ví dụ gắn đúng đề.
+Nhiệm vụ: dựa vào câu hỏi + các lựa chọn (và đáp án đúng CHỈ KHI được cung cấp), viết một mẹo chiến lược gắn đúng đề.
 
 Quy tắc BẮT BUỘC:
 1) Trả đúng một object JSON: {"tip":"..."}.
 2) tip dài 2–4 câu, bắt đầu bằng "Mẹo: ".
 3) Nhắc điều kiện/biến cụ thể (vd. hạng = 2, tham số m) nhưng CẤM chép lại toàn bộ đề, CẤM dán lại ma trận/công thức dài, CẤM viết "Áp dụng với đề này:" rồi nhắc lại câu hỏi.
-4) CẤM nhắc lại đáp án đúng (vì UI đã hiện). Chỉ nói cách loại/chọn nhanh.
-5) CẤM chữ cái A/B/C/D hoặc "đáp án A/B".
-6) Giọng giáo viên nói với học sinh ("bạn"), tiếng Việt tự nhiên, không emoji.
+4) Nếu payload KHÔNG có correct_answer: đây là gợi ý TRƯỚC khi học sinh chọn — CẤM tiết lộ đáp án đúng, CẤM chỉ ra lựa chọn nào đúng; chỉ gợi ý cách tiếp cận / loại nhanh.
+5) Nếu payload CÓ correct_answer: CẤM nhắc lại đáp án đúng (vì UI đã hiện). Chỉ nói cách loại/chọn nhanh.
+6) CẤM chữ cái A/B/C/D hoặc "đáp án A/B".
+7) Giọng giáo viên nói với học sinh ("bạn"), tiếng Việt tự nhiên, không emoji.
 ''';
 
   /// Resolve the correct MCQ choice when the bank has no stored answer.
@@ -392,20 +452,23 @@ Schema:
 ''';
 
   /// Convert raw exam math text into display-ready LaTeX (for import + UI polish).
-  static String mathLatexFormatSystem() => '''
-Bạn chuẩn hóa công thức toán trong câu hỏi thi tiếng Việt sang LaTeX để hiển thị.
+  static String mathLatexFormatSystem({
+    String? subjectName,
+    String? formatKind,
+  }) =>
+      '''
+Bạn chuẩn hóa nội dung câu hỏi thi tiếng Việt để hiển thị đúng theo môn học.
 ${DeepSeekConfig.vietnameseOutputInstruction}
 
-Nhiệm vụ: nhận stem + choices (+ answer_content nếu có). Trả lại CÙNG nội dung nhưng công thức đã là LaTeX.
-
+Nhiệm vụ: nhận stem + choices (+ answer_content nếu có). Trả lại CÙNG nội dung đã chuẩn hóa.
+${_subjectContextBlock(subjectName: subjectName, formatKind: formatKind)}
 Quy tắc BẮT BUỘC:
 1) Trả đúng một object JSON.
 2) Giữ nguyên ý nghĩa và tiếng Việt; không giải bài; không đổi đáp án.
-3) Bọc công thức bằng \$...\$ hoặc \$\$...\$\$.
-4) x1,x2… → \$x_1\$, \$x_2\$; hệ "{ eq ; eq }" → \$\$\\begin{cases}…\\end{cases}\$\$.
-5) Ma trận [[…]] hoặc ( a b ; c d ) → \$\\begin{bmatrix}…\\end{bmatrix}\$.
-6) A.AT → \$A A^{T}\$. Lựa chọn kiểu "x1=1,x2=…" → một biểu thức LaTeX gọn.
-7) Nếu đã có LaTeX đúng thì giữ nguyên.
+3) Chuẩn hóa theo loại môn:
+${_displayNormalizeRules(formatKind)}
+4) Nếu đã đúng định dạng thì giữ nguyên.
+5) Không đưa LaTeX vào trong code fence; không đưa code fence vào công thức toán.
 
 Schema:
 {

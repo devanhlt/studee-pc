@@ -1,26 +1,48 @@
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
+
 /// Client-side enrichers so question text renders as math / code in [StudyMarkdown].
 ///
-/// Handles common stored/OCR forms like Python nested lists `[[1,2],[3,4]]`
-/// and MATLAB-style `( 1 2 ; 3 4 )` without an extra LLM round-trip.
+/// Behavior is gated by [SubjectFormatKind]:
+/// - [SubjectFormatKind.math] — matrices, systems, subscripts, …
+/// - [SubjectFormatKind.code] — repair bogus math-in-code only
+/// - [SubjectFormatKind.plain] — no enrichers
 abstract final class QuestionDisplayFormat {
-  /// Convert display-hostile math/code shapes into Markdown + LaTeX.
-  static String enrich(String input) {
+  /// Convert display-hostile math shapes into Markdown + LaTeX.
+  static String enrich(
+    String input, {
+    SubjectFormatKind kind = SubjectFormatKind.plain,
+  }) {
     if (input.trim().isEmpty) return input;
     var text = input.replaceAll('\r\n', '\n');
-    text = _pythonMatricesToLatex(text);
-    text = _matlabMatricesToLatex(text);
-    text = _equationSystemsToLatex(text);
-    text = _assignmentListsToLatex(text);
-    text = _transposeProductsToLatex(text);
-    text = _bareSubscriptsToLatex(text);
-    return text;
+    switch (kind) {
+      case SubjectFormatKind.plain:
+        return text;
+      case SubjectFormatKind.code:
+        return repairSpuriousMathInCode(text);
+      case SubjectFormatKind.math:
+        text = repairSpuriousMathInCode(text);
+        // Still skip if this blob is clearly source code inside a math subject.
+        if (looksLikeSourceCode(text)) return text;
+        text = _pythonMatricesToLatex(text);
+        text = _matlabMatricesToLatex(text);
+        text = _equationSystemsToLatex(text);
+        text = _assignmentListsToLatex(text);
+        text = _transposeProductsToLatex(text);
+        text = _bareSubscriptsToLatex(text);
+        return text;
+    }
   }
 
   /// True when text still looks like raw exam math that needs LaTeX polish.
-  static bool needsLatexPolish(String? text) {
+  static bool needsLatexPolish(
+    String? text, {
+    SubjectFormatKind kind = SubjectFormatKind.plain,
+  }) {
+    if (kind != SubjectFormatKind.math) return false;
     if (text == null) return false;
     final t = text.trim();
     if (t.isEmpty) return false;
+    if (looksLikeSourceCode(t)) return false;
 
     // Raw python / MATLAB matrices still present.
     if (t.contains('[[') && !t.contains(r'\begin{bmatrix}')) return true;
@@ -28,8 +50,12 @@ abstract final class QuestionDisplayFormat {
         !t.contains(r'\begin{bmatrix}')) {
       return true;
     }
-    // Equation system still in `{ eq ; eq }` form.
-    if (RegExp(r'\{[^{};]*;[^}]*[})]').hasMatch(t)) return true;
+    // Equation system still in `{ eq ; eq }` form — but not C braces.
+    if (RegExp(r'\{[^{};]*;[^}]*[})]').hasMatch(t) &&
+        RegExp(r'[=+\-×÷]').hasMatch(t) &&
+        !RegExp(r'\b(return|printf|else|if)\b').hasMatch(t)) {
+      return true;
+    }
     // Bare variable subscripts like x1 / 3x2 (not already x_{1}).
     if (RegExp(
       r'(?<![A-Za-z\\])([xyzuvwabcdmnkijXYZUVWABCDMNKIJ])\d+(?!\d)',
@@ -49,30 +75,67 @@ abstract final class QuestionDisplayFormat {
     return false;
   }
 
+  /// True if stem or any choice still needs subject-aware LLM polish.
+  static bool bundleNeedsDisplayPolish({
+    required String content,
+    List<String> choiceContents = const [],
+    String? answerContent,
+    SubjectFormatKind kind = SubjectFormatKind.plain,
+  }) {
+    switch (kind) {
+      case SubjectFormatKind.plain:
+        return false;
+      case SubjectFormatKind.math:
+        return bundleNeedsLatexPolish(
+          content: content,
+          choiceContents: choiceContents,
+          answerContent: answerContent,
+          kind: kind,
+        );
+      case SubjectFormatKind.code:
+        bool needs(String? t) {
+          if (t == null || t.trim().isEmpty) return false;
+          final s = t.trim();
+          if (s.contains('```')) return false;
+          return looksLikeSourceCode(s) ||
+              RegExp(r'#include\s*[<"]').hasMatch(s) ||
+              RegExp(r'\b(printf|scanf|malloc|return)\s*\(').hasMatch(s);
+        }
+        if (needs(content)) return true;
+        if (choiceContents.any(needs)) return true;
+        return needs(answerContent);
+    }
+  }
+
   /// True if stem or any choice still needs LaTeX.
   static bool bundleNeedsLatexPolish({
     required String content,
     List<String> choiceContents = const [],
     String? answerContent,
+    SubjectFormatKind kind = SubjectFormatKind.plain,
   }) {
-    if (needsLatexPolish(content)) return true;
-    if (choiceContents.any(needsLatexPolish)) return true;
-    return needsLatexPolish(answerContent);
+    if (kind != SubjectFormatKind.math) return false;
+    if (needsLatexPolish(content, kind: kind)) return true;
+    if (choiceContents.any((c) => needsLatexPolish(c, kind: kind))) {
+      return true;
+    }
+    return needsLatexPolish(answerContent, kind: kind);
   }
 
   /// Build a markdown preview from a structured parse (stem + choices).
   static String fromParsed({
     required String content,
     List<({String label, String content})> choices = const [],
+    SubjectFormatKind kind = SubjectFormatKind.plain,
   }) {
     final buf = StringBuffer();
-    buf.write(enrich(content.trim()));
+    buf.write(enrich(content.trim(), kind: kind));
     if (choices.isNotEmpty) {
       buf.writeln();
       buf.writeln();
       for (final c in choices) {
         final label = c.label.trim();
-        final body = enrich(c.content.trim());
+        final body = enrich(c.content.trim(), kind: kind);
         if (label.isEmpty) {
           buf.writeln(body);
         } else if (body.isEmpty) {
@@ -83,6 +146,120 @@ abstract final class QuestionDisplayFormat {
       }
     }
     return buf.toString().trim();
+  }
+
+  /// True when text looks like programming source (C/Python/Java/…).
+  static bool looksLikeSourceCode(String? text) {
+    if (text == null) return false;
+    final t = text.trim();
+    if (t.isEmpty) return false;
+    if (RegExp(r'#include\s*[<"]').hasMatch(t)) return true;
+    if (RegExp(r'\bint\s+main\s*\(').hasMatch(t)) return true;
+    if (RegExp(
+      r'\b(void|int|char|float|double|long|short|bool|unsigned|FILE)\s+\*?\s*\w+\s*\([^;{]*\)\s*\{',
+    ).hasMatch(t)) {
+      return true;
+    }
+    if (RegExp(
+          r'\b(printf|scanf|malloc|free|strcpy|fopen|fprintf|stricmp|strcmp)\s*\(',
+        ).hasMatch(t) &&
+        (t.contains(';') || t.contains('{'))) {
+      return true;
+    }
+    if (RegExp(r'\btypedef\s+struct\b').hasMatch(t)) return true;
+    if (RegExp(r'\b(def|class|import|from)\s+\w+').hasMatch(t) &&
+        (t.contains(':') || t.contains('('))) {
+      return true;
+    }
+    if (RegExp(r'\b(public|private|static)\s+(class|void|int)').hasMatch(t)) {
+      return true;
+    }
+    if (RegExp(r'```(?:c|cpp|python|java|javascript|js|rust|go|csharp)\b',
+            caseSensitive: false)
+        .hasMatch(t)) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Strip LLM/OCR math wrappers that break programming identifiers, e.g.
+  /// `$\mathrm{j}$` → `j`, including broken multiline forms.
+  static String stripMathrmIdentifiers(String input) {
+    var text = input;
+    // $\mathrm{j}$ / $\mathrm { j }$
+    text = text.replaceAllMapped(
+      RegExp(r'\$\s*\\mathrm\s*\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\s*\$'),
+      (m) => m[1]!,
+    );
+    // Broken across lines: $\mathrm {\n j\n }
+    text = text.replaceAllMapped(
+      RegExp(
+        r'\$\s*\\mathrm\s*\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\s*',
+        multiLine: true,
+      ),
+      (m) => m[1]!,
+    );
+    text = text.replaceAllMapped(
+      RegExp(
+        r'\\mathrm\s*\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}',
+      ),
+      (m) => m[1]!,
+    );
+    // Dangling $ left after stripping
+    text = text.replaceAllMapped(
+      RegExp(r'\$\s*([A-Za-z_][A-Za-z0-9_]*)\s*\$'),
+      (m) => m[1]!,
+    );
+    return text;
+  }
+
+  /// Undo `{ code }` → `\begin{cases}` mistakes (and `= =` spacing) in code.
+  static String repairSpuriousMathInCode(String input) {
+    var text = stripMathrmIdentifiers(input);
+    final hasCodeSignal = looksLikeSourceCode(text) ||
+        RegExp(r'\b(printf|return|else|if\s*\(|for\s*\(|while\s*\()').hasMatch(
+          text,
+        );
+    if (!hasCodeSignal) return text;
+
+    // $$ \begin{cases} … \end{cases} $$ or \[ … \]
+    text = text.replaceAllMapped(
+      RegExp(
+        r'(?:\$\$|\\\[)\s*\\begin\s*\{\s*cases\s*\}([\s\S]*?)\\end\s*\{\s*cases\s*\}\s*(?:\$\$|\\\])',
+        caseSensitive: false,
+      ),
+      (m) => _casesBodyToCodeBlock(m.group(1)!),
+    );
+    // Orphaned / half-broken OCR variants: \begin { cases } … cases }]
+    text = text.replaceAllMapped(
+      RegExp(
+        r'\\\[\s*\\begin\s*\{\s*cases\s*\}([\s\S]*?)(?:\\end\s*\{\s*cases\s*\}|\\?e?\s*cases\s*\}\s*\\\])',
+        caseSensitive: false,
+      ),
+      (m) => _casesBodyToCodeBlock(m.group(1)!),
+    );
+    // Fix `= =` / `! =` introduced by math spacing heuristics.
+    text = text.replaceAllMapped(
+      RegExp(r'([=!<>])\s+\1'),
+      (m) => '${m[1]}${m[1]}',
+    );
+    text = text.replaceAll(RegExp(r'!\s+='), '!=');
+    text = text.replaceAll(RegExp(r'<\s+='), '<=');
+    text = text.replaceAll(RegExp(r'>\s+='), '>=');
+    return text;
+  }
+
+  static String _casesBodyToCodeBlock(String body) {
+    var inner = body.trim();
+    // cases rows used \\ as separators — restore `;` / newlines for C.
+    inner = inner.replaceAll(RegExp(r'\s*\\\\\s*'), ';\n');
+    inner = inner.replaceAll(RegExp(r'\\e\b'), '');
+    inner = inner.replaceAll(RegExp(r'\bcases\b', caseSensitive: false), '');
+    inner = inner.replaceAllMapped(
+      RegExp(r'([=!<>])\s+\1'),
+      (m) => '${m[1]}${m[1]}',
+    );
+    return '{\n$inner\n}';
   }
 
   /// `[[a,b],[c,d]]` → `$\begin{bmatrix}a & b \\ c & d\end{bmatrix}$`
@@ -158,6 +335,7 @@ abstract final class QuestionDisplayFormat {
   }
 
   /// `{ eq1 ; eq2 ; eq3 )` / `{…}` → display cases block.
+  /// Skips C/Java-style statement blocks (`return`, `printf`, `==`, …).
   static String _equationSystemsToLatex(String text) {
     if (!text.contains(';')) return text;
     final systemRe = RegExp(
@@ -166,6 +344,9 @@ abstract final class QuestionDisplayFormat {
     return _mapOutsideProtected(text, (segment) {
       return segment.replaceAllMapped(systemRe, (m) {
         final inner = m.group(1)!;
+        if (_innerLooksLikeCodeStatements(inner)) return m.group(0)!;
+        // Require at least one math relation so plain `{a;b}` lists stay put.
+        if (!RegExp(r'[=<>]').hasMatch(inner)) return m.group(0)!;
         final eqs = inner
             .split(';')
             .map((e) => e.trim())
@@ -177,6 +358,18 @@ abstract final class QuestionDisplayFormat {
         return '\n\n\$\$\\begin{cases}$body\\end{cases}\$\$\n\n';
       });
     });
+  }
+
+  static bool _innerLooksLikeCodeStatements(String inner) {
+    final t = inner.toLowerCase();
+    if (RegExp(
+      r'\b(return|printf|scanf|else|malloc|strcpy|cout|cin|def|print)\b',
+    ).hasMatch(t)) {
+      return true;
+    }
+    if (RegExp(r'[=!<>]=|==|!=').hasMatch(inner)) return true;
+    if (RegExp(r'%[dfs]|\\n|"[^"]*"').hasMatch(inner)) return true;
+    return false;
   }
 
   /// `x1=1,x2=1,x3=-1` → `$x_1=1,\ x_2=1,\ x_3=-1$`

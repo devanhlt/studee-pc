@@ -104,7 +104,10 @@ class SubjectRepositoryImpl implements SubjectRepository {
   @override
   Future<List<domain.Subject>> listSubjects() async {
     final rows = await (_catalog.select(_catalog.subjects)
-          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+          ..orderBy([
+            (t) => OrderingTerm.desc(t.pinned),
+            (t) => OrderingTerm.desc(t.updatedAt),
+          ]))
         .get();
 
     final subjects = <domain.Subject>[];
@@ -157,6 +160,25 @@ class SubjectRepositoryImpl implements SubjectRepository {
       ),
     );
     _log.info('Renamed subject id=$subjectId');
+  }
+
+  @override
+  Future<void> setSubjectPinned(
+    String subjectId, {
+    required bool pinned,
+  }) async {
+    await _requireCatalogRow(subjectId);
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await (_catalog.update(_catalog.subjects)
+          ..where((t) => t.id.equals(subjectId)))
+        .write(
+      SubjectsCompanion(
+        pinned: Value(pinned),
+        // Bump updatedAt so freshly pinned subjects rise within the pin section.
+        updatedAt: Value(nowMs),
+      ),
+    );
+    _log.info('Subject id=$subjectId pinned=$pinned');
   }
 
   @override
@@ -285,6 +307,7 @@ class SubjectRepositoryImpl implements SubjectRepository {
           DateTime.fromMillisecondsSinceEpoch(row.createdAt, isUtc: true),
       updatedAt:
           DateTime.fromMillisecondsSinceEpoch(row.updatedAt, isUtc: true),
+      pinned: row.pinned,
       sourceCount: sourceCount,
       knowledgeCount: knowledgeCount,
       questionCount: questionCount,

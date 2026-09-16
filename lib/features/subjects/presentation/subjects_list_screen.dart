@@ -18,7 +18,6 @@ import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
-import 'package:studee_pc/features/subjects/presentation/study_notes_export_dialog.dart';
 
 class SubjectsListScreen extends ConsumerWidget {
   const SubjectsListScreen({super.key});
@@ -56,6 +55,20 @@ class SubjectsListScreen extends ConsumerWidget {
           if (subjects.isEmpty) {
             return const _EmptySubjectsState();
           }
+          final pinned = subjects.where((s) => s.pinned).toList();
+          final others = subjects.where((s) => !s.pinned).toList();
+          final items = <_SubjectsListItem>[
+            if (pinned.isNotEmpty) ...[
+              const _SubjectsListItem.section('Đã ghim'),
+              for (final s in pinned) _SubjectsListItem.subject(s),
+            ],
+            if (others.isNotEmpty) ...[
+              _SubjectsListItem.section(
+                pinned.isEmpty ? 'Môn học của bạn' : 'Khác',
+              ),
+              for (final s in others) _SubjectsListItem.subject(s),
+            ],
+          ];
           return RefreshIndicator(
             color: AppColors.accent,
             onRefresh: () async {
@@ -69,16 +82,22 @@ class SubjectsListScreen extends ConsumerWidget {
                 AppLayout.pagePadding,
                 88,
               ),
-              itemCount: subjects.length + 1,
-              separatorBuilder: (_, index) =>
-                  SizedBox(height: index == 0 ? 14 : 10),
+              itemCount: items.length,
+              separatorBuilder: (_, index) {
+                final nextIsSection = index + 1 < items.length &&
+                    items[index + 1].isSection;
+                return SizedBox(height: nextIsSection ? 14 : 10);
+              },
               itemBuilder: (context, index) {
-                if (index == 0) {
-                  return const StudeeSectionLabel('Môn học của bạn');
+                final item = items[index];
+                final label = item.sectionLabel;
+                if (label != null) {
+                  return StudeeSectionLabel(label);
                 }
+                final subject = item.subject!;
                 return _StaggeredEntrance(
-                  index: index - 1,
-                  child: _SubjectCard(subject: subjects[index - 1]),
+                  index: index,
+                  child: _SubjectCard(subject: subject),
                 );
               },
             ),
@@ -87,6 +106,16 @@ class SubjectsListScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _SubjectsListItem {
+  const _SubjectsListItem.section(this.sectionLabel) : subject = null;
+  const _SubjectsListItem.subject(this.subject) : sectionLabel = null;
+
+  final String? sectionLabel;
+  final Subject? subject;
+
+  bool get isSection => sectionLabel != null;
 }
 
 class _HomeHeader extends StatelessWidget {
@@ -351,6 +380,12 @@ class _SubjectCard extends ConsumerWidget {
             tooltip: 'Thao tác',
             onSelected: (value) async {
               switch (value) {
+                case 'pin':
+                  await ref.read(subjectsActionsProvider).setPinned(
+                        subject.id,
+                        pinned: !subject.pinned,
+                      );
+                  ref.read(subjectsActionsProvider).refresh();
                 case 'rename':
                   await _showRenameDialog(context, ref, subject);
                 case 'export':
@@ -361,20 +396,24 @@ class _SubjectCard extends ConsumerWidget {
                   await _showDeleteDialog(context, ref, subject);
               }
             },
-            itemBuilder: (_) => const [
+            itemBuilder: (_) => [
               PopupMenuItem(
+                value: 'pin',
+                child: Text(subject.pinned ? 'Bỏ ghim' : 'Ghim lên đầu'),
+              ),
+              const PopupMenuItem(
                 value: 'rename',
                 child: Text('Đổi tên'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'export',
                 child: Text('Xuất ZIP'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'export_notes',
                 child: Text('Xuất tài liệu'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'delete',
                 child: Text('Xóa'),
               ),
@@ -801,9 +840,6 @@ Future<void> _exportStudyNotes(
   WidgetRef ref,
   Subject subject,
 ) async {
-  final format = await showStudyNotesFormatDialog(context);
-  if (format == null || !context.mounted) return;
-
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -824,13 +860,12 @@ Future<void> _exportStudyNotes(
 
   try {
     final tempDir = await getTemporaryDirectory();
-    final fileName = '${subject.name}-ghi-chu.${format.fileExtension}';
+    final fileName = '${subject.name}-ghi-chu.md';
     final tempPath = p.join(tempDir.path, fileName);
     final out = await ref.read(subjectsActionsProvider).exportStudyNotes(
           subjectId: subject.id,
           subjectName: subject.name,
           destinationPath: tempPath,
-          format: format,
         );
     final bytes = await File(out).readAsBytes();
     if (context.mounted) {
@@ -840,7 +875,7 @@ Future<void> _exportStudyNotes(
       dialogTitle: 'Xuất tài liệu',
       fileName: fileName,
       type: FileType.custom,
-      allowedExtensions: [format.fileExtension],
+      allowedExtensions: const ['md'],
       bytes: Uint8List.fromList(bytes),
     );
     if (saved == null || !context.mounted) return;

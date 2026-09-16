@@ -6,8 +6,10 @@ import { jsonError, requireActivationCode } from "@/lib/proxy-auth";
 export const runtime = "nodejs";
 
 /**
- * Charge tokens for one question solve (`kind`: text | picture).
- * Call once per completed question (not per OCR/LLM hop).
+ * Charge tokens for one billable action (`kind`: text | picture | ingest).
+ * - text: typed solve / practice / tip
+ * - picture: image/camera solve / practice
+ * - ingest: one "Nhập kiến thức" structuring run
  */
 export async function POST(req: NextRequest) {
   const auth = await requireActivationCode(req);

@@ -11,6 +11,8 @@ class StructureSourceRequest extends Equatable {
     required this.pageTexts,
     this.promptVersion,
     this.language = 'vi',
+    this.subjectName,
+    this.formatKind,
   });
 
   final String sourceId;
@@ -18,8 +20,21 @@ class StructureSourceRequest extends Equatable {
   final String? promptVersion;
   final String language;
 
+  /// Catalog subject name (e.g. "Toán cao cấp") so the LLM can standardize.
+  final String? subjectName;
+
+  /// Wire value: `math` | `code` | `plain`.
+  final String? formatKind;
+
   @override
-  List<Object?> get props => [sourceId, pageTexts, promptVersion, language];
+  List<Object?> get props => [
+        sourceId,
+        pageTexts,
+        promptVersion,
+        language,
+        subjectName,
+        formatKind,
+      ];
 }
 
 class StructurePageText extends Equatable {
@@ -149,11 +164,13 @@ abstract interface class DeepSeekClient {
     required List<({String label, String content})> choices,
   });
 
-  /// Normalize stem/choices/answer math into LaTeX for display + storage.
+  /// Normalize stem/choices/answer for display + storage (math LaTeX or code).
   Future<MathLatexFormatResult> formatMathLatex({
     required String content,
     List<({String label, String content})> choices = const [],
     String? answerContent,
+    String? subjectName,
+    String? formatKind,
   });
 
   /// Clustered study insights for export (stats + examples; no full Q&A dump).

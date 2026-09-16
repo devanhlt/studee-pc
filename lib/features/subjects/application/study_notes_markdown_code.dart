@@ -1,21 +1,103 @@
+import 'package:studee_pc/app/widgets/question_display_format.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
+import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 
 /// Formats Q&A field text so Markdown/PDF can render code fences and LaTeX.
 abstract final class StudyNotesMarkdownCode {
-  /// Process question or answer body for export.
-  static String formatBody(String raw) {
-    final text = _normalizeQuotes(raw.replaceAll('\r\n', '\n')).trim();
-    if (text.isEmpty) return text;
-
-    // Already has fences — still normalize LaTeX in surrounding prose.
-    if (text.contains('```')) {
-      return _prepareOutsideCodeFences(_normalizeFencedCodePlaceholders(text));
+  /// True when [raw] is best shown as a code snippet (not prose/markdown).
+  static bool isCodeSnippet(
+    String raw, {
+    SubjectFormatKind kind = SubjectFormatKind.plain,
+  }) {
+    if (kind == SubjectFormatKind.plain) return false;
+    if (kind == SubjectFormatKind.math) {
+      // Only treat as code when it clearly is (rare in math subjects).
+      final t = QuestionDisplayFormat.repairSpuriousMathInCode(raw).trim();
+      return QuestionDisplayFormat.looksLikeSourceCode(t);
     }
+    final t = QuestionDisplayFormat.repairSpuriousMathInCode(raw).trim();
+    if (t.isEmpty) return false;
+    if (t.contains('```')) return true;
+    return looksLikeCode(t) && t.length < 800;
+  }
 
-    final split = splitProseAndCode(text);
+  /// Plain source for monospace display (fences stripped).
+  static String codeSnippetBody(String raw) {
+    var t = QuestionDisplayFormat.repairSpuriousMathInCode(raw).trim();
+    final fenced = RegExp(
+      r'^```[^\n]*\n([\s\S]*?)```\s*$',
+    ).firstMatch(t);
+    if (fenced != null) {
+      t = fenced.group(1)!.trimRight();
+    } else {
+      t = t
+          .replaceAll(RegExp(r'^```[^\n]*\n?'), '')
+          .replaceAll(RegExp(r'\n?```\s*$'), '')
+          .trim();
+    }
+    return prettifyFlattenedCode(t);
+  }
+
+  /// Process question or answer body for display / export.
+  static String formatBody(
+    String raw, {
+    SubjectFormatKind kind = SubjectFormatKind.plain,
+  }) {
+    final normalized = _normalizeQuotes(raw.replaceAll('\r\n', '\n')).trim();
+    if (normalized.isEmpty) return normalized;
+
+    switch (kind) {
+      case SubjectFormatKind.plain:
+        return normalized;
+      case SubjectFormatKind.code:
+        return _formatCodeBody(normalized);
+      case SubjectFormatKind.math:
+        return _formatMathBody(normalized);
+    }
+  }
+
+  static String _formatCodeBody(String text) {
+    final repaired = QuestionDisplayFormat.repairSpuriousMathInCode(text);
+    if (repaired.contains('```')) {
+      return _normalizeFencedCodePlaceholders(repaired);
+    }
+    final split = splitProseAndCode(repaired);
     if (split != null) {
       final buf = StringBuffer();
-      final prose = StudyMarkdown.prepareForRender(split.prose).trim();
+      if (split.prose.trim().isNotEmpty) {
+        buf.writeln(split.prose.trim());
+        buf.writeln();
+      }
+      buf.writeln('```${split.lang}');
+      buf.writeln(split.code.trimRight());
+      buf.writeln('```');
+      return buf.toString().trimRight();
+    }
+    if (looksLikeCode(repaired) ||
+        QuestionDisplayFormat.looksLikeSourceCode(repaired)) {
+      final lang = guessLanguage(repaired);
+      final code = prettifyFlattenedCode(repaired);
+      return '```$lang\n$code\n```';
+    }
+    return repaired;
+  }
+
+  static String _formatMathBody(String text) {
+    final repaired = QuestionDisplayFormat.repairSpuriousMathInCode(text);
+    if (repaired.contains('```')) {
+      return _prepareOutsideCodeFences(
+        _normalizeFencedCodePlaceholders(repaired),
+        kind: SubjectFormatKind.math,
+      );
+    }
+
+    final split = splitProseAndCode(repaired);
+    if (split != null) {
+      final buf = StringBuffer();
+      final prose = StudyMarkdown.prepareForRender(
+        split.prose,
+        kind: SubjectFormatKind.math,
+      ).trim();
       if (prose.isNotEmpty) {
         buf.writeln(prose);
         buf.writeln();
@@ -26,13 +108,17 @@ abstract final class StudyNotesMarkdownCode {
       return buf.toString().trimRight();
     }
 
-    if (looksLikeCode(text)) {
-      final lang = guessLanguage(text);
-      final code = prettifyFlattenedCode(text);
+    if (looksLikeCode(repaired) &&
+        QuestionDisplayFormat.looksLikeSourceCode(repaired)) {
+      final lang = guessLanguage(repaired);
+      final code = prettifyFlattenedCode(repaired);
       return '```$lang\n$code\n```';
     }
 
-    return StudyMarkdown.prepareForRender(text).trim();
+    return StudyMarkdown.prepareForRender(
+      repaired,
+      kind: SubjectFormatKind.math,
+    ).trim();
   }
 
   /// ASCII-normalize ellipsis placeholders inside ``` fences only.
@@ -56,21 +142,29 @@ abstract final class StudyNotesMarkdownCode {
   }
 
   /// Apply LaTeX prep only outside ``` fences.
-  static String _prepareOutsideCodeFences(String text) {
+  static String _prepareOutsideCodeFences(
+    String text, {
+    SubjectFormatKind kind = SubjectFormatKind.math,
+  }) {
     final parts = <String>[];
     final re = RegExp(r'```[\s\S]*?```');
     var start = 0;
     for (final m in re.allMatches(text)) {
       if (m.start > start) {
         parts.add(
-          StudyMarkdown.prepareForRender(text.substring(start, m.start)),
+          StudyMarkdown.prepareForRender(
+            text.substring(start, m.start),
+            kind: kind,
+          ),
         );
       }
       parts.add(m.group(0)!);
       start = m.end;
     }
     if (start < text.length) {
-      parts.add(StudyMarkdown.prepareForRender(text.substring(start)));
+      parts.add(
+        StudyMarkdown.prepareForRender(text.substring(start), kind: kind),
+      );
     }
     return parts.join().trim();
   }

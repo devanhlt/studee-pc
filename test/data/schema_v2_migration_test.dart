@@ -6,7 +6,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
 
 void main() {
-  test('opens v1-shaped DB and migrates to v2 semantic columns', () async {
+  test('opens v1-shaped DB and migrates to v3 practice_count', () async {
     final dir = await Directory.systemTemp.createTemp('studee_sem_mig_');
     addTearDown(() async {
       if (await dir.exists()) await dir.delete(recursive: true);
@@ -33,7 +33,7 @@ CREATE TABLE questions (
 );
 ''');
     // Minimal stubs so Drift open does not fail on missing tables from createAll
-    // when from < 1 — we start at version 1 so only from < 2 runs.
+    // when from < 1 — we start at version 1 so only from < 2 / < 3 runs.
     raw.dispose();
 
     final db = SubjectDatabase.atPath(dbPath);
@@ -41,11 +41,12 @@ CREATE TABLE questions (
 
     // Touch migrations.
     await db.customSelect('SELECT 1').get();
-    expect(db.schemaVersion, 2);
+    expect(db.schemaVersion, 3);
 
     final info = await db.customSelect("PRAGMA table_info('questions')").get();
     final names = info.map((r) => r.read<String>('name')).toSet();
     expect(names.contains('semantic_key'), isTrue);
     expect(names.contains('semantic_fingerprint'), isTrue);
+    expect(names.contains('practice_count'), isTrue);
   });
 }
