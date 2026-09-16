@@ -554,14 +554,10 @@ button {
   font-weight: 600;
 }
 
-/* —— Download / Pricing bands —— */
+/* —— Download bands —— */
 .band {
   padding: 5rem 0;
   border-top: 1px solid var(--line-soft);
-}
-
-.band-soft {
-  background: rgba(16, 22, 36, 0.65);
 }
 
 .band-head {
@@ -637,140 +633,6 @@ button {
   border-radius: 28px;
 }
 
-.price-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-}
-
-.plan {
-  position: relative;
-  padding: 1.45rem 1.25rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--elevated);
-}
-
-.plan-hot {
-  border-color: rgba(255, 122, 0, 0.55);
-  background: linear-gradient(
-    165deg,
-    rgba(255, 122, 0, 0.14),
-    rgba(22, 30, 48, 0.95) 50%
-  );
-}
-
-.badge {
-  margin: 0 0 0.55rem;
-  color: var(--accent);
-  font-size: 0.74rem;
-  font-weight: 650;
-}
-
-.plan h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--soft);
-}
-
-.amount {
-  margin: 0;
-  font-size: 1.85rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.amount span {
-  margin-left: 0.1rem;
-  color: var(--mute);
-  font-size: 0.95rem;
-  font-weight: 500;
-}
-
-.plan-meta {
-  margin: 0.45rem 0 0;
-  color: var(--mute);
-  font-size: 0.9rem;
-}
-
-.note {
-  margin: 1.2rem 0 0;
-  color: var(--mute);
-  font-size: 0.9rem;
-}
-
-.activate {
-  margin-top: 2rem;
-  padding: 1.35rem 1.4rem 1.45rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--elevated);
-}
-
-.activate-title {
-  margin: 0 0 1.1rem;
-  color: var(--text);
-  font-size: 1.02rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-.activate-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem 1rem;
-  counter-reset: none;
-}
-
-.activate-steps li {
-  position: relative;
-  display: grid;
-  gap: 0.25rem;
-  padding-right: 1.1rem;
-}
-
-.activate-steps li:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  top: 1.05rem;
-  right: -0.15rem;
-  width: 0.55rem;
-  height: 0.55rem;
-  border-top: 2px solid var(--line);
-  border-right: 2px solid var(--line);
-  transform: rotate(45deg);
-  opacity: 0.85;
-}
-
-.step-num {
-  display: grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  margin-bottom: 0.45rem;
-  border-radius: 8px;
-  background: rgba(255, 122, 0, 0.14);
-  border: 1px solid rgba(255, 122, 0, 0.35);
-  color: var(--accent);
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.activate-steps strong {
-  font-size: 0.98rem;
-  letter-spacing: -0.01em;
-}
-
-.activate-steps li > span:last-child {
-  color: var(--mute);
-  font-size: 0.84rem;
-  line-height: 1.4;
-}
-
 /* —— Footer —— */
 .footer {
   border-top: 1px solid var(--line-soft);
@@ -780,7 +642,7 @@ button {
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  grid-template-columns: 1.5fr 1fr 1fr;
   gap: 2rem 1.5rem;
   padding-bottom: 2rem;
   border-bottom: 1px solid var(--line-soft);
@@ -846,9 +708,7 @@ button {
 
 @media (max-width: 920px) {
   .hero-grid,
-  .topic-grid,
-  .price-grid,
-  .activate-steps {
+  .topic-grid {
     grid-template-columns: 1fr;
   }
 
@@ -858,25 +718,6 @@ button {
 
   .platform {
     padding: 3.5rem 0;
-  }
-
-  .activate-steps li {
-    padding-right: 0;
-    padding-bottom: 0.85rem;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
-  .activate-steps li:last-child {
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-
-  .activate-steps li:not(:last-child)::after {
-    top: auto;
-    bottom: -0.1rem;
-    right: auto;
-    left: 0.7rem;
-    transform: rotate(135deg);
   }
 
   .hero {
