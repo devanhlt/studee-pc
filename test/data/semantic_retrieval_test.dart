@@ -357,7 +357,7 @@ void main() {
     });
   });
 
-  group('schema v2 columns', () {
+  group('schema columns', () {
     test('memory database includes semantic columns', () async {
       final db = SubjectDatabase.memory();
       addTearDown(db.close);
@@ -366,7 +366,7 @@ void main() {
       final names = rows.map((r) => r.read<String>('name')).toSet();
       expect(names.contains('semantic_key'), isTrue);
       expect(names.contains('semantic_fingerprint'), isTrue);
-      expect(db.schemaVersion, 2);
+      expect(db.schemaVersion, 3);
     });
   });
 }
