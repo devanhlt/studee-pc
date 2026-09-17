@@ -17,6 +17,7 @@ import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/domain/enums/ingestion_job_status.dart';
 import 'package:studee_pc/domain/enums/source_type.dart';
 import 'package:studee_pc/features/ingestion/application/ingestion_service.dart';
+import 'package:studee_pc/features/settings/presentation/ensure_activation_code.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/presentation/mobile_image_crop.dart';
 import 'package:studee_pc/features/solver/presentation/scan_question_screen.dart';
@@ -88,10 +89,7 @@ class _IngestionScreenState extends ConsumerState<IngestionScreen> {
   Future<bool> _ensureApiKey() async {
     final has = await _service.hasApiKey();
     if (!has && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hãy nhập mã kích hoạt để dùng Trợ lý Stud.')),
-      );
-      context.push('/settings');
+      warnMissingActivationCode(context);
       return false;
     }
     if (!mounted) return false;

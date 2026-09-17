@@ -300,6 +300,11 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                 ref.read(solveServiceProvider).current)
             .stage
             .isInProgress;
+        final reviewRunning = (ref.watch(reviewStateProvider).asData?.value ??
+                    ref.read(reviewServiceProvider).current)
+                .stage ==
+            ReviewStage.running;
+        final focusReview = _mode == _WorkspaceMode.review && reviewRunning;
 
         final subtitle = switch (_mode) {
           _WorkspaceMode.solve =>
@@ -328,7 +333,9 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
           canRequestFocus: false,
           child: StudeePageScaffold(
             atmosphereIntensity: AppLayout.atmospherePage,
-            topBar: StudeeGlassAppBar(
+            topBar: focusReview
+                ? null
+                : StudeeGlassAppBar(
               title: subject.name,
               subtitle: subtitle,
               leading: IconButton(
@@ -393,35 +400,36 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppLayout.pagePadding,
-                    AppLayout.gapXs,
-                    AppLayout.pagePadding,
-                    AppLayout.gapSm,
+                if (!focusReview)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppLayout.pagePadding,
+                      AppLayout.gapXs,
+                      AppLayout.pagePadding,
+                      AppLayout.gapSm,
+                    ),
+                    child: StudeeSegmentedControl<_WorkspaceMode>(
+                      selected: segmentSelected,
+                      onChanged: _setMode,
+                      segments: const [
+                        StudeeSegment(
+                          value: _WorkspaceMode.solve,
+                          label: 'Giải',
+                          icon: AppIcons.solve,
+                        ),
+                        StudeeSegment(
+                          value: _WorkspaceMode.practice,
+                          label: 'Luyện',
+                          icon: AppIcons.practice,
+                        ),
+                        StudeeSegment(
+                          value: _WorkspaceMode.review,
+                          label: 'Ôn tập',
+                          icon: AppIcons.review,
+                        ),
+                      ],
+                    ),
                   ),
-                  child: StudeeSegmentedControl<_WorkspaceMode>(
-                    selected: segmentSelected,
-                    onChanged: _setMode,
-                    segments: const [
-                      StudeeSegment(
-                        value: _WorkspaceMode.solve,
-                        label: 'Giải',
-                        icon: AppIcons.solve,
-                      ),
-                      StudeeSegment(
-                        value: _WorkspaceMode.practice,
-                        label: 'Luyện',
-                        icon: AppIcons.practice,
-                      ),
-                      StudeeSegment(
-                        value: _WorkspaceMode.review,
-                        label: 'Ôn tập',
-                        icon: AppIcons.review,
-                      ),
-                    ],
-                  ),
-                ),
                 Expanded(
                   child: switch (_mode) {
                     _WorkspaceMode.solve => SolveScreen(

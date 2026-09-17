@@ -19,6 +19,7 @@ import 'package:studee_pc/domain/entities/result_reference.dart';
 import 'package:studee_pc/domain/entities/solve_result.dart';
 import 'package:studee_pc/features/practice/application/practice_service.dart';
 import 'package:studee_pc/features/practice/presentation/practice_chat_panel.dart';
+import 'package:studee_pc/features/settings/presentation/ensure_activation_code.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/mobile_image_crop.dart';
@@ -123,20 +124,16 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
     } on Object catch (_) {
       // Still try hasApiKey — it may surface a clearer failure.
     }
-    if (await _service.hasApiKey()) {
-      if (!mounted) return false;
-      final store = ref.read(privacyConsentStoreProvider);
-      return ensureDeepSeekPrivacyConsent(context, store: store);
+    if (!mounted) return false;
+    if (!await ensureActivationCode(
+      context,
+      hasCode: _service.hasApiKey,
+    )) {
+      return false;
     }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.'),
-        ),
-      );
-      context.push('/settings');
-    }
-    return false;
+    if (!mounted) return false;
+    final store = ref.read(privacyConsentStoreProvider);
+    return ensureDeepSeekPrivacyConsent(context, store: store);
   }
 
   void _syncTabDraft() {

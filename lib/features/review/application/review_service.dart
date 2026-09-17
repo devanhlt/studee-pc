@@ -395,6 +395,21 @@ class ReviewService {
         correctContent = cached.content;
         fromLlm = true;
       } else {
+        try {
+          await _practice.prepareCredentials();
+        } on Object catch (_) {}
+        if (!await _practice.hasApiKey()) {
+          const fail = MissingApiKeyFailure();
+          _emit(
+            _state.copyWith(
+              quizSelectedLabel: choice.label,
+              quizResolvingAnswer: false,
+              errorMessage: fail.userMessage,
+            ),
+          );
+          return const Failure(fail);
+        }
+
         _emit(
           _state.copyWith(
             quizSelectedLabel: choice.label,
@@ -411,15 +426,17 @@ class ReviewService {
           _emit(
             _state.copyWith(
               quizResolvingAnswer: false,
-              quizAnswered: true,
-              quizIsCorrect: null,
               quizSelectedLabel: choice.label,
-              errorMessage:
-                  'Chưa có đáp án lưu. Cần mã kích hoạt để Stud suy luận đáp án.',
+              errorMessage: _state.errorMessage ??
+                  'Chưa suy luận được đáp án. Thử lại nhé.',
             ),
           );
-          _markCurrentComplete();
-          return const Success(null);
+          return const Failure(
+            ValidationFailure(
+              userMessage: 'Chưa suy luận được đáp án. Thử lại nhé.',
+              code: 'review_answer_resolve_failed',
+            ),
+          );
         }
         correctLabel = resolved.label;
         correctContent = resolved.content;
@@ -475,6 +492,15 @@ class ReviewService {
     if (_state.quizTipLoading) return const Success(null);
     if (_state.quizTip != null && _state.quizTip!.trim().isNotEmpty) {
       return const Success(null);
+    }
+
+    try {
+      await _practice.prepareCredentials();
+    } on Object catch (_) {}
+    if (!await _practice.hasApiKey()) {
+      const fail = MissingApiKeyFailure();
+      _emit(_state.copyWith(errorMessage: fail.userMessage));
+      return const Failure(fail);
     }
 
     final question = currentQuestion;

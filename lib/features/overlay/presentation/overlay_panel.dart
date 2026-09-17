@@ -9,6 +9,7 @@ import 'package:studee_pc/app/theme/app_layout.dart';
 import 'package:studee_pc/app/theme/app_window_size.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
+import 'package:studee_pc/features/settings/presentation/ensure_activation_code.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
@@ -55,9 +56,11 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
     try {
       await _solve.prepareCredentials();
     } on Object catch (_) {}
-    if (!await _solve.hasApiKey()) {
-      _toast('Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.');
-      if (mounted) context.push('/settings');
+    if (!mounted) return false;
+    if (!await ensureActivationCode(
+      context,
+      hasCode: _solve.hasApiKey,
+    )) {
       return false;
     }
     if (!mounted) return false;

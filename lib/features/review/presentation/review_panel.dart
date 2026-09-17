@@ -14,6 +14,8 @@ import 'package:studee_pc/features/practice/application/practice_service.dart';
 import 'package:studee_pc/features/practice/presentation/practice_chat_panel.dart';
 import 'package:studee_pc/features/review/application/review_service.dart';
 import 'package:studee_pc/features/review/application/review_quiz_config.dart';
+import 'package:studee_pc/core/errors/app_failure.dart';
+import 'package:studee_pc/features/settings/presentation/ensure_activation_code.dart';
 import 'package:studee_pc/features/settings/presentation/privacy_consent_dialog.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_markdown_code.dart';
 import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
@@ -272,6 +274,19 @@ class _RunningQuizReview extends ConsumerWidget {
         : ref.watch(subjectByIdProvider(subjectId)).asData?.value;
     final formatKind = formatKindForSubject(subject);
 
+    ref.listen(reviewStateProvider, (prev, next) {
+      final msg = next.asData?.value.errorMessage;
+      final prevMsg = prev?.asData?.value.errorMessage;
+      if (msg == null || msg.isEmpty || msg == prevMsg) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+      if (isMissingActivationMessage(msg)) {
+        context.push('/settings');
+      }
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -375,8 +390,11 @@ class _RunningQuizReview extends ConsumerWidget {
                                   Align(
                                     alignment: Alignment.centerLeft,
                                     child: OutlinedButton.icon(
-                                      onPressed: () =>
-                                          service.requestQuizTip(),
+                                      onPressed: () => _requestQuizTip(
+                                        context,
+                                        ref,
+                                        service,
+                                      ),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: AppColors.accent,
                                         side: const BorderSide(
@@ -487,7 +505,7 @@ class _ReviewProgressHeader extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppLayout.pagePadding,
-        0,
+        AppLayout.gapMd,
         AppLayout.pagePadding,
         AppLayout.gapSm,
       ),
@@ -884,6 +902,26 @@ class _QuizFeedback extends StatelessWidget {
   }
 }
 
+Future<void> _requestQuizTip(
+  BuildContext context,
+  WidgetRef ref,
+  ReviewService service,
+) async {
+  final practice = ref.read(practiceServiceProvider);
+  try {
+    await practice.prepareCredentials();
+  } on Object catch (_) {}
+  if (!context.mounted) return;
+  if (!await ensureActivationCode(
+    context,
+    hasCode: practice.hasApiKey,
+  )) {
+    return;
+  }
+  if (!context.mounted) return;
+  await service.requestQuizTip();
+}
+
 Future<void> startReviewSession(
   BuildContext context,
   WidgetRef ref,
@@ -895,14 +933,11 @@ Future<void> startReviewSession(
     try {
       await practice.prepareCredentials();
     } on Object catch (_) {}
-    if (!await practice.hasApiKey()) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chưa có mã kích hoạt. Vào Cài đặt để nhập mã nhé.'),
-        ),
-      );
-      context.push('/settings');
+    if (!context.mounted) return;
+    if (!await ensureActivationCode(
+      context,
+      hasCode: practice.hasApiKey,
+    )) {
       return;
     }
     if (!context.mounted) return;
@@ -924,6 +959,10 @@ Future<void> startReviewSession(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(f.userMessage)),
       );
+      if (f is MissingApiKeyFailure ||
+          isMissingActivationMessage(f.userMessage)) {
+        context.push('/settings');
+      }
     },
   );
 }

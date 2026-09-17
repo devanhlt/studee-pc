@@ -42,6 +42,7 @@ class _StudyOverlayAppState extends ConsumerState<StudyOverlayApp> {
       title: 'Studee',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
+      scrollBehavior: const _NoScrollbarBehavior(),
       locale: const Locale('vi'),
       supportedLocales: const [
         Locale('vi'),
@@ -54,5 +55,19 @@ class _StudyOverlayAppState extends ConsumerState<StudyOverlayApp> {
       ],
       routerConfig: router,
     );
+  }
+}
+
+/// Keeps scrolling (mouse / trackpad / touch) but never paints a scrollbar.
+class _NoScrollbarBehavior extends MaterialScrollBehavior {
+  const _NoScrollbarBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return child;
   }
 }
