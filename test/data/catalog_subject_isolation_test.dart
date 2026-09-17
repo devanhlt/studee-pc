@@ -91,5 +91,32 @@ void main() {
       expect(relisted.first.id, b.id);
       expect(relisted.first.pinned, isTrue);
     });
+
+    test('reorderSubjects persists manual order', () async {
+      final a = await repo.createSubject(
+        const CreateSubjectInput(name: 'A'),
+      );
+      final b = await repo.createSubject(
+        const CreateSubjectInput(name: 'B'),
+      );
+      final c = await repo.createSubject(
+        const CreateSubjectInput(name: 'C'),
+      );
+
+      expect(
+        (await repo.listSubjects()).map((s) => s.id).toList(),
+        [a.id, b.id, c.id],
+      );
+
+      await repo.reorderSubjects([c.id, a.id, b.id]);
+
+      final listed = await repo.listSubjects();
+      expect(listed.map((s) => s.id).toList(), [c.id, a.id, b.id]);
+      expect(listed.map((s) => s.sortOrder).toList(), [0, 1, 2]);
+
+      await repo.setSubjectPinned(b.id, pinned: true);
+      final withPin = await repo.listSubjects();
+      expect(withPin.map((s) => s.id).toList(), [b.id, c.id, a.id]);
+    });
   });
 }

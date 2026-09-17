@@ -54,6 +54,8 @@ class ReviewSessionState {
     this.quizLatexLoading = false,
     this.quizRemaining = Duration.zero,
     this.quizTimedOut = false,
+    this.correctCount = 0,
+    this.incorrectCount = 0,
   });
 
   final ReviewStage stage;
@@ -77,6 +79,10 @@ class ReviewSessionState {
   /// Remaining time for Ôn tập (fixed 30 min exam).
   final Duration quizRemaining;
   final bool quizTimedOut;
+  /// Graded correct answers in this run (Giải đề).
+  final int correctCount;
+  /// Graded incorrect answers in this run (Giải đề).
+  final int incorrectCount;
 
   bool get isIncomplete => stage == ReviewStage.running;
 
@@ -84,9 +90,22 @@ class ReviewSessionState {
 
   int get displayNumber => total == 0 ? 0 : currentIndex + 1;
 
+  int get answeredCount => correctCount + incorrectCount;
+
+  int get unansweredCount {
+    final left = total - answeredCount;
+    return left < 0 ? 0 : left;
+  }
+
   double get progress {
     if (total <= 0) return 0;
     return (completedCount / total).clamp(0.0, 1.0);
+  }
+
+  /// Accuracy over graded answers only (0–1). Null when none graded.
+  double? get accuracy {
+    if (answeredCount <= 0) return null;
+    return correctCount / answeredCount;
   }
 
   ReviewSessionState copyWith({
@@ -110,6 +129,8 @@ class ReviewSessionState {
     bool? quizLatexLoading,
     Duration? quizRemaining,
     bool? quizTimedOut,
+    int? correctCount,
+    int? incorrectCount,
     bool clearQuiz = false,
     bool clearQuizTip = false,
   }) {
@@ -144,6 +165,8 @@ class ReviewSessionState {
           clearQuiz ? false : (quizLatexLoading ?? this.quizLatexLoading),
       quizRemaining: quizRemaining ?? this.quizRemaining,
       quizTimedOut: quizTimedOut ?? this.quizTimedOut,
+      correctCount: correctCount ?? this.correctCount,
+      incorrectCount: incorrectCount ?? this.incorrectCount,
     );
   }
 }
@@ -166,6 +189,10 @@ class ReviewService {
       required String subjectId,
       required String questionId,
     }) incrementPracticeCount,
+    required Future<void> Function({
+      required String subjectId,
+      required String questionId,
+    }) incrementIncorrectCount,
     required Future<SubjectFormatContext> Function(String subjectId)
         resolveFormatKind,
   })  : _practice = practice,
@@ -174,6 +201,7 @@ class ReviewService {
         _loadQuestions = loadQuestions,
         _persistQuestionMath = persistQuestionMath,
         _incrementPracticeCount = incrementPracticeCount,
+        _incrementIncorrectCount = incrementIncorrectCount,
         _resolveFormatKind = resolveFormatKind;
 
   final PracticeService _practice;
@@ -191,6 +219,10 @@ class ReviewService {
     required String subjectId,
     required String questionId,
   }) _incrementPracticeCount;
+  final Future<void> Function({
+    required String subjectId,
+    required String questionId,
+  }) _incrementIncorrectCount;
   final Future<SubjectFormatContext> Function(String subjectId)
       _resolveFormatKind;
   final AppLogger _log = AppLogger('ReviewService');
@@ -286,6 +318,8 @@ class ReviewService {
         total: queue.length,
         currentIndex: 0,
         completedCount: 0,
+        correctCount: 0,
+        incorrectCount: 0,
         quizRemaining: ReviewQuizConfig.duration,
       ),
     );
@@ -464,29 +498,40 @@ class ReviewService {
       }
     }
 
+    final gradedCorrect = isCorrect ?? false;
     _emit(
       _state.copyWith(
         quizSelectedLabel: choice.label,
-        quizIsCorrect: isCorrect ?? false,
+        quizIsCorrect: gradedCorrect,
         quizAnswered: true,
         quizResolvingAnswer: false,
         quizCorrectLabel: correctLabel,
         quizCorrectContent: correctContent,
         quizAnswerFromLlm: fromLlm,
+        correctCount:
+            gradedCorrect ? _state.correctCount + 1 : _state.correctCount,
+        incorrectCount:
+            gradedCorrect ? _state.incorrectCount : _state.incorrectCount + 1,
         clearError: true,
       ),
     );
     _markCurrentComplete();
+    if (!gradedCorrect) {
+      final subjectId = _state.subjectId;
+      if (subjectId != null) {
+        unawaited(_recordIncorrect(subjectId, question.id));
+      }
+    }
     return const Success(null);
   }
 
-  /// User tapped "Gợi ý" — load one tip for the current unanswered question.
+  /// User tapped "Gợi ý" — load one tip for the current question.
   Future<Result<void>> requestQuizTip() async {
     if (_state.stage != ReviewStage.running ||
         _state.mode != ReviewPlayMode.quiz) {
       return const Success(null);
     }
-    if (_state.quizAnswered || _state.quizResolvingAnswer) {
+    if (_state.quizResolvingAnswer) {
       return const Success(null);
     }
     if (_state.quizTipLoading) return const Success(null);
@@ -536,14 +581,22 @@ class ReviewService {
       return Failure(quotaFail);
     }
 
+    final answered = _state.quizAnswered;
+    final meaning = answered
+        ? (_state.quizCorrectContent ??
+                StudyNotesBuilder.answerMeaning(question, compact: false) ??
+                '')
+            .trim()
+        : '';
+
     unawaited(
       _enrichQuizTip(
         question,
         choices,
         tipRequestId,
-        // Do not pass the correct answer — tip must not spoil before pick.
-        answerMeaning: '',
-        revealAnswer: false,
+        // Spoil only after the user has already answered.
+        answerMeaning: meaning,
+        revealAnswer: answered,
       ),
     );
     return const Success(null);
@@ -966,17 +1019,22 @@ class ReviewService {
     final done = timedOut
         ? _state.completedCount.clamp(0, total)
         : total;
+    final correct = _state.correctCount;
+    final incorrect = _state.incorrectCount;
     _queue = const [];
     _countedCurrent = false;
     _emit(
       ReviewSessionState(
         stage: ReviewStage.completed,
         mode: mode,
+        subjectId: _state.subjectId,
         total: total,
         completedCount: done,
         currentIndex: total > 0 ? total - 1 : 0,
         quizTimedOut: timedOut,
         quizRemaining: Duration.zero,
+        correctCount: correct,
+        incorrectCount: incorrect,
       ),
     );
   }
@@ -1039,12 +1097,38 @@ class ReviewService {
     }
   }
 
+  Future<void> _recordIncorrect(String subjectId, String questionId) async {
+    try {
+      await _incrementIncorrectCount(
+        subjectId: subjectId,
+        questionId: questionId,
+      );
+      _bumpQueueIncorrectCount(questionId);
+    } on Object catch (e) {
+      _log.warning('Increment incorrect count failed: ${e.runtimeType}');
+    }
+  }
+
   void _bumpQueuePracticeCount(String questionId) {
     var changed = false;
     final next = <Question>[];
     for (final q in _queue) {
       if (q.id == questionId) {
         next.add(q.copyWith(practiceCount: q.practiceCount + 1));
+        changed = true;
+      } else {
+        next.add(q);
+      }
+    }
+    if (changed) _queue = next;
+  }
+
+  void _bumpQueueIncorrectCount(String questionId) {
+    var changed = false;
+    final next = <Question>[];
+    for (final q in _queue) {
+      if (q.id == questionId) {
+        next.add(q.copyWith(incorrectCount: q.incorrectCount + 1));
         changed = true;
       } else {
         next.add(q);
@@ -1086,6 +1170,15 @@ final reviewServiceProvider = Provider<ReviewService>((ref) {
       required questionId,
     }) {
       return ref.read(subjectContentProvider).incrementPracticeCount(
+            subjectId: subjectId,
+            questionId: questionId,
+          );
+    },
+    incrementIncorrectCount: ({
+      required subjectId,
+      required questionId,
+    }) {
+      return ref.read(subjectContentProvider).incrementIncorrectCount(
             subjectId: subjectId,
             questionId: questionId,
           );

@@ -44,6 +44,7 @@ class PracticeChatPanel extends ConsumerStatefulWidget {
 class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
   final _answerController = TextEditingController();
   final _scrollController = ScrollController();
+  String? _seenSessionId;
 
   PracticeService get _service => ref.read(practiceServiceProvider);
 
@@ -54,9 +55,16 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
     super.dispose();
   }
 
+  void _scrollToTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(0);
+    });
+  }
+
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: AppMotion.slow,
@@ -86,7 +94,19 @@ class _PracticeChatPanelState extends ConsumerState<PracticeChatPanel> {
   Widget build(BuildContext context) {
     final async = ref.watch(practiceStateProvider);
     final state = async.asData?.value ?? _service.current;
-    ref.listen(practiceStateProvider, (_, next) => _scrollToEnd());
+    if (_seenSessionId != state.sessionId) {
+      _seenSessionId = state.sessionId;
+      _scrollToTop();
+    }
+    ref.listen(practiceStateProvider, (prev, next) {
+      final prevId = prev?.asData?.value.sessionId;
+      final nextId = next.asData?.value.sessionId ?? _service.current.sessionId;
+      if (prevId != null && nextId != null && prevId != nextId) {
+        _scrollToTop();
+        return;
+      }
+      _scrollToEnd();
+    });
 
     final locked = state.stage.locksComposer;
     final canAnswer = state.stage == PracticeStage.awaitingUser;

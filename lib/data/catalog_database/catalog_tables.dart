@@ -14,6 +14,9 @@ class Subjects extends Table {
       integer().named('schema_version').withDefault(const Constant(1))();
   BoolColumn get pinned =>
       boolean().withDefault(const Constant(false))();
+  /// Manual list order (lower = higher in list within pin group).
+  IntColumn get sortOrder =>
+      integer().named('sort_order').withDefault(const Constant(0))();
   IntColumn get createdAt => integer().named('created_at')();
   IntColumn get updatedAt => integer().named('updated_at')();
 

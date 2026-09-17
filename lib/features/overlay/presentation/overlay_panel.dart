@@ -22,12 +22,6 @@ final overlayModeProvider =
 
 final overlaySubjectIdProvider = StateProvider<String?>((ref) => null);
 
-enum OverlayShortcutAction { capture, paste }
-
-/// Pending global-hotkey action for [OverlayPanel] to consume.
-final overlayShortcutActionProvider =
-    StateProvider<OverlayShortcutAction?>((ref) => null);
-
 /// Compact / expanded always-on-top study overlay.
 class OverlayPanel extends ConsumerStatefulWidget {
   const OverlayPanel({super.key});
@@ -148,21 +142,6 @@ class _OverlayPanelState extends ConsumerState<OverlayPanel> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<OverlayShortcutAction?>(overlayShortcutActionProvider, (
-      _,
-      next,
-    ) {
-      if (next == null) return;
-      ref.read(overlayShortcutActionProvider.notifier).state = null;
-      if (_solve.current.stage.isInProgress) return;
-      switch (next) {
-        case OverlayShortcutAction.capture:
-          _capture();
-        case OverlayShortcutAction.paste:
-          _paste();
-      }
-    });
-
     final mode = ref.watch(overlayModeProvider);
     final solveAsync = ref.watch(solveStateProvider);
     final state = solveAsync.asData?.value ?? _solve.current;

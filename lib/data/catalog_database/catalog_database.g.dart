@@ -81,6 +81,18 @@ class $SubjectsTable extends Subjects
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -112,6 +124,7 @@ class $SubjectsTable extends Subjects
     color,
     schemaVersion,
     pinned,
+    sortOrder,
     createdAt,
     updatedAt,
   ];
@@ -175,6 +188,12 @@ class $SubjectsTable extends Subjects
         pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
       );
     }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -228,6 +247,10 @@ class $SubjectsTable extends Subjects
         DriftSqlType.bool,
         data['${effectivePrefix}pinned'],
       )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
@@ -254,6 +277,9 @@ class CatalogSubjectRow extends DataClass
   final int? color;
   final int schemaVersion;
   final bool pinned;
+
+  /// Manual list order (lower = higher in list within pin group).
+  final int sortOrder;
   final int createdAt;
   final int updatedAt;
   const CatalogSubjectRow({
@@ -264,6 +290,7 @@ class CatalogSubjectRow extends DataClass
     this.color,
     required this.schemaVersion,
     required this.pinned,
+    required this.sortOrder,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -281,6 +308,7 @@ class CatalogSubjectRow extends DataClass
     }
     map['schema_version'] = Variable<int>(schemaVersion);
     map['pinned'] = Variable<bool>(pinned);
+    map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
@@ -297,6 +325,7 @@ class CatalogSubjectRow extends DataClass
           : Value(color),
       schemaVersion: Value(schemaVersion),
       pinned: Value(pinned),
+      sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -315,6 +344,7 @@ class CatalogSubjectRow extends DataClass
       color: serializer.fromJson<int?>(json['color']),
       schemaVersion: serializer.fromJson<int>(json['schemaVersion']),
       pinned: serializer.fromJson<bool>(json['pinned']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
@@ -330,6 +360,7 @@ class CatalogSubjectRow extends DataClass
       'color': serializer.toJson<int?>(color),
       'schemaVersion': serializer.toJson<int>(schemaVersion),
       'pinned': serializer.toJson<bool>(pinned),
+      'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
@@ -343,6 +374,7 @@ class CatalogSubjectRow extends DataClass
     Value<int?> color = const Value.absent(),
     int? schemaVersion,
     bool? pinned,
+    int? sortOrder,
     int? createdAt,
     int? updatedAt,
   }) => CatalogSubjectRow(
@@ -353,6 +385,7 @@ class CatalogSubjectRow extends DataClass
     color: color.present ? color.value : this.color,
     schemaVersion: schemaVersion ?? this.schemaVersion,
     pinned: pinned ?? this.pinned,
+    sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -369,6 +402,7 @@ class CatalogSubjectRow extends DataClass
           ? data.schemaVersion.value
           : this.schemaVersion,
       pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -384,6 +418,7 @@ class CatalogSubjectRow extends DataClass
           ..write('color: $color, ')
           ..write('schemaVersion: $schemaVersion, ')
           ..write('pinned: $pinned, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -399,6 +434,7 @@ class CatalogSubjectRow extends DataClass
     color,
     schemaVersion,
     pinned,
+    sortOrder,
     createdAt,
     updatedAt,
   );
@@ -413,6 +449,7 @@ class CatalogSubjectRow extends DataClass
           other.color == this.color &&
           other.schemaVersion == this.schemaVersion &&
           other.pinned == this.pinned &&
+          other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -425,6 +462,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
   final Value<int?> color;
   final Value<int> schemaVersion;
   final Value<bool> pinned;
+  final Value<int> sortOrder;
   final Value<int> createdAt;
   final Value<int> updatedAt;
   final Value<int> rowid;
@@ -436,6 +474,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     this.color = const Value.absent(),
     this.schemaVersion = const Value.absent(),
     this.pinned = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -448,6 +487,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     this.color = const Value.absent(),
     this.schemaVersion = const Value.absent(),
     this.pinned = const Value.absent(),
+    this.sortOrder = const Value.absent(),
     required int createdAt,
     required int updatedAt,
     this.rowid = const Value.absent(),
@@ -464,6 +504,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     Expression<int>? color,
     Expression<int>? schemaVersion,
     Expression<bool>? pinned,
+    Expression<int>? sortOrder,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
@@ -476,6 +517,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
       if (color != null) 'color': color,
       if (schemaVersion != null) 'schema_version': schemaVersion,
       if (pinned != null) 'pinned': pinned,
+      if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -490,6 +532,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     Value<int?>? color,
     Value<int>? schemaVersion,
     Value<bool>? pinned,
+    Value<int>? sortOrder,
     Value<int>? createdAt,
     Value<int>? updatedAt,
     Value<int>? rowid,
@@ -502,6 +545,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
       color: color ?? this.color,
       schemaVersion: schemaVersion ?? this.schemaVersion,
       pinned: pinned ?? this.pinned,
+      sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -532,6 +576,9 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
     if (pinned.present) {
       map['pinned'] = Variable<bool>(pinned.value);
     }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -554,6 +601,7 @@ class SubjectsCompanion extends UpdateCompanion<CatalogSubjectRow> {
           ..write('color: $color, ')
           ..write('schemaVersion: $schemaVersion, ')
           ..write('pinned: $pinned, ')
+          ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -582,6 +630,7 @@ typedef $$SubjectsTableCreateCompanionBuilder =
       Value<int?> color,
       Value<int> schemaVersion,
       Value<bool> pinned,
+      Value<int> sortOrder,
       required int createdAt,
       required int updatedAt,
       Value<int> rowid,
@@ -595,6 +644,7 @@ typedef $$SubjectsTableUpdateCompanionBuilder =
       Value<int?> color,
       Value<int> schemaVersion,
       Value<bool> pinned,
+      Value<int> sortOrder,
       Value<int> createdAt,
       Value<int> updatedAt,
       Value<int> rowid,
@@ -641,6 +691,11 @@ class $$SubjectsTableFilterComposer
 
   ColumnFilters<bool> get pinned => $composableBuilder(
     column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -699,6 +754,11 @@ class $$SubjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -743,6 +803,9 @@ class $$SubjectsTableAnnotationComposer
 
   GeneratedColumn<bool> get pinned =>
       $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -793,6 +856,7 @@ class $$SubjectsTableTableManager
                 Value<int?> color = const Value.absent(),
                 Value<int> schemaVersion = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -804,6 +868,7 @@ class $$SubjectsTableTableManager
                 color: color,
                 schemaVersion: schemaVersion,
                 pinned: pinned,
+                sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -817,6 +882,7 @@ class $$SubjectsTableTableManager
                 Value<int?> color = const Value.absent(),
                 Value<int> schemaVersion = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
                 required int createdAt,
                 required int updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -828,6 +894,7 @@ class $$SubjectsTableTableManager
                 color: color,
                 schemaVersion: schemaVersion,
                 pinned: pinned,
+                sortOrder: sortOrder,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

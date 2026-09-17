@@ -10,9 +10,12 @@ abstract final class ReviewQuizConfig {
 
 /// Build an Ôn tập set of exactly [size] questions.
 ///
-/// Sorts by [Question.practiceCount] ascending (least practiced first),
-/// shuffles within the same count, takes the first [size] unique items, then
-/// pads by cycling that ordered list when fewer than [size] exist.
+/// Priority order:
+/// 1. Higher [Question.incorrectCount] first (often missed)
+/// 2. Lower [Question.practiceCount] next (little practice)
+/// Shuffles within the same (incorrect, practice) pair, takes the first
+/// [size] unique items, then pads by cycling that ordered list when fewer
+/// than [size] exist.
 List<Question> buildShuffledQuizSet(
   List<Question> source, {
   int size = ReviewQuizConfig.questionCount,
@@ -21,14 +24,22 @@ List<Question> buildShuffledQuizSet(
   if (source.isEmpty || size <= 0) return const [];
   final rng = random ?? Random();
 
-  final byCount = <int, List<Question>>{};
+  final byKey = <(int, int), List<Question>>{};
   for (final q in source) {
-    byCount.putIfAbsent(q.practiceCount, () => []).add(q);
+    byKey.putIfAbsent((q.incorrectCount, q.practiceCount), () => []).add(q);
   }
-  final counts = byCount.keys.toList()..sort();
+  final keys = byKey.keys.toList()
+    ..sort((a, b) {
+      // More incorrect first.
+      final incorrectCmp = b.$1.compareTo(a.$1);
+      if (incorrectCmp != 0) return incorrectCmp;
+      // Then less practiced first.
+      return a.$2.compareTo(b.$2);
+    });
+
   final ordered = <Question>[];
-  for (final count in counts) {
-    final batch = byCount[count]!..shuffle(rng);
+  for (final key in keys) {
+    final batch = byKey[key]!..shuffle(rng);
     ordered.addAll(batch);
   }
 

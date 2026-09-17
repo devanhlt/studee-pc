@@ -366,7 +366,7 @@ void main() {
       final names = rows.map((r) => r.read<String>('name')).toSet();
       expect(names.contains('semantic_key'), isTrue);
       expect(names.contains('semantic_fingerprint'), isTrue);
-      expect(db.schemaVersion, 3);
+      expect(db.schemaVersion, 4);
     });
   });
 }

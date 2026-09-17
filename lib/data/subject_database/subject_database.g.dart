@@ -2197,6 +2197,18 @@ class $QuestionsTable extends Questions
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _incorrectCountMeta = const VerificationMeta(
+    'incorrectCount',
+  );
+  @override
+  late final GeneratedColumn<int> incorrectCount = GeneratedColumn<int>(
+    'incorrect_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -2235,6 +2247,7 @@ class $QuestionsTable extends Questions
     explanation,
     verificationStatus,
     practiceCount,
+    incorrectCount,
     createdAt,
     updatedAt,
   ];
@@ -2381,6 +2394,15 @@ class $QuestionsTable extends Questions
         ),
       );
     }
+    if (data.containsKey('incorrect_count')) {
+      context.handle(
+        _incorrectCountMeta,
+        incorrectCount.isAcceptableOrUnknown(
+          data['incorrect_count']!,
+          _incorrectCountMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -2462,6 +2484,10 @@ class $QuestionsTable extends Questions
         DriftSqlType.int,
         data['${effectivePrefix}practice_count'],
       )!,
+      incorrectCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}incorrect_count'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}created_at'],
@@ -2498,6 +2524,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
 
   /// How many times this question was practiced (Giải / Luyện / Ôn tập).
   final int practiceCount;
+
+  /// How many times the user answered this question incorrectly in Ôn tập.
+  final int incorrectCount;
   final int createdAt;
   final int updatedAt;
   const QuestionRow({
@@ -2515,6 +2544,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     this.explanation,
     required this.verificationStatus,
     required this.practiceCount,
+    required this.incorrectCount,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -2547,6 +2577,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     }
     map['verification_status'] = Variable<String>(verificationStatus);
     map['practice_count'] = Variable<int>(practiceCount);
+    map['incorrect_count'] = Variable<int>(incorrectCount);
     map['created_at'] = Variable<int>(createdAt);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
@@ -2580,6 +2611,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
           : Value(explanation),
       verificationStatus: Value(verificationStatus),
       practiceCount: Value(practiceCount),
+      incorrectCount: Value(incorrectCount),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -2611,6 +2643,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
         json['verificationStatus'],
       ),
       practiceCount: serializer.fromJson<int>(json['practiceCount']),
+      incorrectCount: serializer.fromJson<int>(json['incorrectCount']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
@@ -2633,6 +2666,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       'explanation': serializer.toJson<String?>(explanation),
       'verificationStatus': serializer.toJson<String>(verificationStatus),
       'practiceCount': serializer.toJson<int>(practiceCount),
+      'incorrectCount': serializer.toJson<int>(incorrectCount),
       'createdAt': serializer.toJson<int>(createdAt),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
@@ -2653,6 +2687,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     Value<String?> explanation = const Value.absent(),
     String? verificationStatus,
     int? practiceCount,
+    int? incorrectCount,
     int? createdAt,
     int? updatedAt,
   }) => QuestionRow(
@@ -2676,6 +2711,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     explanation: explanation.present ? explanation.value : this.explanation,
     verificationStatus: verificationStatus ?? this.verificationStatus,
     practiceCount: practiceCount ?? this.practiceCount,
+    incorrectCount: incorrectCount ?? this.incorrectCount,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -2719,6 +2755,9 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
       practiceCount: data.practiceCount.present
           ? data.practiceCount.value
           : this.practiceCount,
+      incorrectCount: data.incorrectCount.present
+          ? data.incorrectCount.value
+          : this.incorrectCount,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -2741,6 +2780,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
           ..write('explanation: $explanation, ')
           ..write('verificationStatus: $verificationStatus, ')
           ..write('practiceCount: $practiceCount, ')
+          ..write('incorrectCount: $incorrectCount, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -2763,6 +2803,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
     explanation,
     verificationStatus,
     practiceCount,
+    incorrectCount,
     createdAt,
     updatedAt,
   );
@@ -2784,6 +2825,7 @@ class QuestionRow extends DataClass implements Insertable<QuestionRow> {
           other.explanation == this.explanation &&
           other.verificationStatus == this.verificationStatus &&
           other.practiceCount == this.practiceCount &&
+          other.incorrectCount == this.incorrectCount &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -2803,6 +2845,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
   final Value<String?> explanation;
   final Value<String> verificationStatus;
   final Value<int> practiceCount;
+  final Value<int> incorrectCount;
   final Value<int> createdAt;
   final Value<int> updatedAt;
   final Value<int> rowid;
@@ -2821,6 +2864,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     this.explanation = const Value.absent(),
     this.verificationStatus = const Value.absent(),
     this.practiceCount = const Value.absent(),
+    this.incorrectCount = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2840,6 +2884,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     this.explanation = const Value.absent(),
     required String verificationStatus,
     this.practiceCount = const Value.absent(),
+    this.incorrectCount = const Value.absent(),
     required int createdAt,
     required int updatedAt,
     this.rowid = const Value.absent(),
@@ -2867,6 +2912,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     Expression<String>? explanation,
     Expression<String>? verificationStatus,
     Expression<int>? practiceCount,
+    Expression<int>? incorrectCount,
     Expression<int>? createdAt,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
@@ -2888,6 +2934,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
       if (explanation != null) 'explanation': explanation,
       if (verificationStatus != null) 'verification_status': verificationStatus,
       if (practiceCount != null) 'practice_count': practiceCount,
+      if (incorrectCount != null) 'incorrect_count': incorrectCount,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2909,6 +2956,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     Value<String?>? explanation,
     Value<String>? verificationStatus,
     Value<int>? practiceCount,
+    Value<int>? incorrectCount,
     Value<int>? createdAt,
     Value<int>? updatedAt,
     Value<int>? rowid,
@@ -2928,6 +2976,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
       explanation: explanation ?? this.explanation,
       verificationStatus: verificationStatus ?? this.verificationStatus,
       practiceCount: practiceCount ?? this.practiceCount,
+      incorrectCount: incorrectCount ?? this.incorrectCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -2979,6 +3028,9 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
     if (practiceCount.present) {
       map['practice_count'] = Variable<int>(practiceCount.value);
     }
+    if (incorrectCount.present) {
+      map['incorrect_count'] = Variable<int>(incorrectCount.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<int>(createdAt.value);
     }
@@ -3008,6 +3060,7 @@ class QuestionsCompanion extends UpdateCompanion<QuestionRow> {
           ..write('explanation: $explanation, ')
           ..write('verificationStatus: $verificationStatus, ')
           ..write('practiceCount: $practiceCount, ')
+          ..write('incorrectCount: $incorrectCount, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -9460,6 +9513,7 @@ typedef $$QuestionsTableCreateCompanionBuilder =
       Value<String?> explanation,
       required String verificationStatus,
       Value<int> practiceCount,
+      Value<int> incorrectCount,
       required int createdAt,
       required int updatedAt,
       Value<int> rowid,
@@ -9480,6 +9534,7 @@ typedef $$QuestionsTableUpdateCompanionBuilder =
       Value<String?> explanation,
       Value<String> verificationStatus,
       Value<int> practiceCount,
+      Value<int> incorrectCount,
       Value<int> createdAt,
       Value<int> updatedAt,
       Value<int> rowid,
@@ -9600,6 +9655,11 @@ class $$QuestionsTableFilterComposer
 
   ColumnFilters<int> get practiceCount => $composableBuilder(
     column: $table.practiceCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get incorrectCount => $composableBuilder(
+    column: $table.incorrectCount,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9736,6 +9796,11 @@ class $$QuestionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get incorrectCount => $composableBuilder(
+    column: $table.incorrectCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -9840,6 +9905,11 @@ class $$QuestionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get incorrectCount => $composableBuilder(
+    column: $table.incorrectCount,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -9940,6 +10010,7 @@ class $$QuestionsTableTableManager
                 Value<String?> explanation = const Value.absent(),
                 Value<String> verificationStatus = const Value.absent(),
                 Value<int> practiceCount = const Value.absent(),
+                Value<int> incorrectCount = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -9958,6 +10029,7 @@ class $$QuestionsTableTableManager
                 explanation: explanation,
                 verificationStatus: verificationStatus,
                 practiceCount: practiceCount,
+                incorrectCount: incorrectCount,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -9978,6 +10050,7 @@ class $$QuestionsTableTableManager
                 Value<String?> explanation = const Value.absent(),
                 required String verificationStatus,
                 Value<int> practiceCount = const Value.absent(),
+                Value<int> incorrectCount = const Value.absent(),
                 required int createdAt,
                 required int updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -9996,6 +10069,7 @@ class $$QuestionsTableTableManager
                 explanation: explanation,
                 verificationStatus: verificationStatus,
                 practiceCount: practiceCount,
+                incorrectCount: incorrectCount,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

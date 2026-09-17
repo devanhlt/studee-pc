@@ -24,6 +24,7 @@ class Question extends Equatable {
     this.sourceTitle,
     this.page,
     this.practiceCount = 0,
+    this.incorrectCount = 0,
   });
 
   final String id;
@@ -45,6 +46,8 @@ class Question extends Equatable {
   final int? page;
   /// Times practiced via Giải / Luyện / Ôn tập.
   final int practiceCount;
+  /// Times answered incorrectly in Ôn tập (Giải đề).
+  final int incorrectCount;
 
   Question copyWith({
     String? id,
@@ -65,6 +68,7 @@ class Question extends Equatable {
     String? sourceTitle,
     int? page,
     int? practiceCount,
+    int? incorrectCount,
   }) {
     return Question(
       id: id ?? this.id,
@@ -85,6 +89,7 @@ class Question extends Equatable {
       sourceTitle: sourceTitle ?? this.sourceTitle,
       page: page ?? this.page,
       practiceCount: practiceCount ?? this.practiceCount,
+      incorrectCount: incorrectCount ?? this.incorrectCount,
     );
   }
 
@@ -108,5 +113,6 @@ class Question extends Equatable {
         sourceTitle,
         page,
         practiceCount,
+        incorrectCount,
       ];
 }

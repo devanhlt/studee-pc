@@ -12,6 +12,7 @@ class Subject extends Equatable {
     required this.createdAt,
     required this.updatedAt,
     this.pinned = false,
+    this.sortOrder = 0,
     this.sourceCount = 0,
     this.knowledgeCount = 0,
     this.questionCount = 0,
@@ -26,6 +27,7 @@ class Subject extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool pinned;
+  final int sortOrder;
   final int sourceCount;
   final int knowledgeCount;
   final int questionCount;
@@ -40,6 +42,7 @@ class Subject extends Equatable {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? pinned,
+    int? sortOrder,
     int? sourceCount,
     int? knowledgeCount,
     int? questionCount,
@@ -54,6 +57,7 @@ class Subject extends Equatable {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       pinned: pinned ?? this.pinned,
+      sortOrder: sortOrder ?? this.sortOrder,
       sourceCount: sourceCount ?? this.sourceCount,
       knowledgeCount: knowledgeCount ?? this.knowledgeCount,
       questionCount: questionCount ?? this.questionCount,
@@ -71,6 +75,7 @@ class Subject extends Equatable {
         createdAt,
         updatedAt,
         pinned,
+        sortOrder,
         sourceCount,
         knowledgeCount,
         questionCount,

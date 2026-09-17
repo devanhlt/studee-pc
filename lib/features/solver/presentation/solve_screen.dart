@@ -1,13 +1,12 @@
 import 'package:clipboard/clipboard.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
-import 'package:studee_pc/app/widgets/app_shortcuts.dart';
 import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/app/widgets/studee_controls.dart';
@@ -46,7 +45,6 @@ class SolveScreen extends ConsumerStatefulWidget {
     super.key,
     required this.subjectId,
     this.embedded = false,
-    this.shortcutsActive = true,
     this.showModeToggle = true,
     this.initialSurfaceMode = SolveSurfaceMode.solve,
   });
@@ -55,9 +53,6 @@ class SolveScreen extends ConsumerStatefulWidget {
 
   /// When true, render without its own [Scaffold]/AppBar] (for subject tabs).
   final bool embedded;
-
-  /// When embedded, set true only while this tab is visible so ⌘/Ctrl+↵ works.
-  final bool shortcutsActive;
 
   /// Standalone solve route keeps the Giải/Luyện toggle; workspace tabs hide it.
   final bool showModeToggle;
@@ -648,9 +643,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             child: StudeeGradientButton(
               onPressed: inputsLocked ? null : _solveText,
               icon: isPractice ? AppIcons.practice : AppIcons.solve,
-              label: isPractice
-                  ? AppShortcuts.label('Bắt đầu luyện', '↵')
-                  : AppShortcuts.label('Giải', '↵'),
+              label: isPractice ? 'Bắt đầu luyện' : 'Giải',
             ),
           ),
         if (belowFooter.isNotEmpty)
@@ -895,7 +888,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: inputsLocked ? null : _continueOcr,
-              child: Text(AppShortcuts.label('Tiếp tục giải', '↵')),
+              child: const Text('Tiếp tục giải'),
             ),
             const SizedBox(height: 24),
           ],
@@ -921,7 +914,7 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
               children: [
                 FilledButton(
                   onPressed: inputsLocked ? null : _confirmQuestionAndSolve,
-                  child: Text(AppShortcuts.label('Xác nhận và giải', '↵')),
+                  child: const Text('Xác nhận và giải'),
                 ),
                 TextButton(
                   onPressed: inputsLocked ? null : _newQuestion,
@@ -950,27 +943,9 @@ class _SolveScreenState extends ConsumerState<SolveScreen> {
       );
     }
 
-    final wrapped = CallbackShortcuts(
-      bindings: widget.shortcutsActive
-          ? <ShortcutActivator, VoidCallback>{
-              AppShortcuts.activator(LogicalKeyboardKey.enter): () {
-                if (inputsLocked) return;
-                if (state.needsOcrReview) {
-                  _continueOcr();
-                } else if (state.needsQuestionConfirm) {
-                  _confirmQuestionAndSolve();
-                } else if (showInputForm) {
-                  _solveText();
-                }
-              },
-            }
-          : const <ShortcutActivator, VoidCallback>{},
-      child: Focus(
-        child: _wrapWithModeToggle(
-          enabled: modeSwitchEnabled,
-          child: body,
-        ),
-      ),
+    final wrapped = _wrapWithModeToggle(
+      enabled: modeSwitchEnabled,
+      child: body,
     );
 
     if (widget.embedded) return wrapped;

@@ -743,6 +743,9 @@ class IngestionService {
 
       final questions = <StructureDraftQuestion>[];
       final formatKind = subjectCtx.kind;
+      final existingFingerprints = await _loadExistingQuestionFingerprints(db);
+      final seenFingerprints = <String>{};
+      var skippedDuplicates = 0;
       for (final m in response.questions) {
         final content = (m['content'] as String? ?? '').trim();
         if (content.isEmpty) continue;
@@ -840,6 +843,19 @@ class IngestionService {
           relatedIds.add(units[idx].id);
         }
 
+        final fingerprint = Fingerprints.questionFingerprint(
+          questionText: polishedContent,
+          choiceContents: [
+            for (final c in polishedChoices) c['content'] ?? '',
+          ],
+        );
+        if (seenFingerprints.contains(fingerprint) ||
+            existingFingerprints.contains(fingerprint)) {
+          skippedDuplicates++;
+          continue;
+        }
+        seenFingerprints.add(fingerprint);
+
         // Ensure detailed answer / solution exist as knowledge units for retrieval.
         if (polishedAnswer != null && polishedAnswer.isNotEmpty) {
           final answerUnit = StructureDraftUnit(
@@ -881,6 +897,13 @@ class IngestionService {
         );
       }
 
+      if (skippedDuplicates > 0) {
+        _log.info(
+          'Skipped $skippedDuplicates duplicate question(s) during structure '
+          '(batch or already in subject)',
+        );
+      }
+
       // Persist model relations by converting unit indices → draft ids after
       // answer/solution units were appended (index-based links only for original).
       final draftJson = jsonEncode({
@@ -888,6 +911,7 @@ class IngestionService {
         'questions': response.questions,
         'relations': response.relations,
         'prompt_version': response.promptVersion,
+        'skipped_duplicate_questions': skippedDuplicates,
       });
       await (db.update(db.ingestionJobs)
             ..where((t) => t.id.equals(current.jobId)))
@@ -991,6 +1015,48 @@ class IngestionService {
         }
       }
 
+      final existingKeys = await _loadExistingQuestionKeys(db);
+      final toSave = <StructureDraftQuestion>[];
+      final seenFingerprints = <String>{...existingKeys.fingerprints};
+      final seenSemantic = <String>{...existingKeys.semanticFingerprints};
+      var skippedDuplicates = 0;
+      for (final q in selectedQuestions) {
+        final choiceContents = [
+          for (final c in q.choices) c['content'] ?? '',
+        ];
+        final fingerprint = Fingerprints.questionFingerprint(
+          questionText: q.content,
+          choiceContents: choiceContents,
+        );
+        final semantic = semanticById[q.id];
+        final semanticFp = semantic == null
+            ? null
+            : Fingerprints.semanticFingerprint(semantic.semanticKey);
+        final isDup = seenFingerprints.contains(fingerprint) ||
+            (semanticFp != null && seenSemantic.contains(semanticFp));
+        if (isDup) {
+          skippedDuplicates++;
+          continue;
+        }
+        seenFingerprints.add(fingerprint);
+        if (semanticFp != null) seenSemantic.add(semanticFp);
+        toSave.add(q);
+      }
+      if (skippedDuplicates > 0) {
+        _log.info(
+          'Skipped $skippedDuplicates duplicate question(s) on save',
+        );
+      }
+      if (selectedUnits.isEmpty && toSave.isEmpty) {
+        return const Failure(
+          ValidationFailure(
+            userMessage:
+                'Các câu hỏi đã chọn trùng với kiến thức đã có. Không có mục mới để lưu.',
+            code: 'structure_all_duplicates',
+          ),
+        );
+      }
+
       await db.transaction(() async {
         final savedUnitIds = <String>{};
 
@@ -1013,7 +1079,7 @@ class IngestionService {
 
         // Also keep related units referenced by selected questions even if the
         // user somehow deselected them (answer/solution auto-units).
-        for (final q in selectedQuestions) {
+        for (final q in toSave) {
           for (final relatedId in q.relatedUnitIds) {
             if (savedUnitIds.contains(relatedId)) continue;
             final unit = units.where((u) => u.id == relatedId).firstOrNull;
@@ -1035,7 +1101,7 @@ class IngestionService {
           }
         }
 
-        for (final q in selectedQuestions) {
+        for (final q in toSave) {
           final detailedAnswer = _enrichAnswerContent(
             answerLabel: q.answerLabel,
             answerContent: q.answerContent,
@@ -1244,6 +1310,32 @@ class IngestionService {
     }
 
     return content?.isNotEmpty == true ? content : null;
+  }
+
+  Future<Set<String>> _loadExistingQuestionFingerprints(
+    SubjectDatabase db,
+  ) async {
+    final keys = await _loadExistingQuestionKeys(db);
+    return keys.fingerprints;
+  }
+
+  Future<({Set<String> fingerprints, Set<String> semanticFingerprints})>
+      _loadExistingQuestionKeys(SubjectDatabase db) async {
+    final rows = await db.customSelect(
+      'SELECT question_fingerprint, semantic_fingerprint FROM questions',
+    ).get();
+    final fingerprints = <String>{};
+    final semanticFingerprints = <String>{};
+    for (final row in rows) {
+      final fp = row.read<String>('question_fingerprint').trim();
+      if (fp.isNotEmpty) fingerprints.add(fp);
+      final sem = row.readNullable<String>('semantic_fingerprint')?.trim();
+      if (sem != null && sem.isNotEmpty) semanticFingerprints.add(sem);
+    }
+    return (
+      fingerprints: fingerprints,
+      semanticFingerprints: semanticFingerprints,
+    );
   }
 
   Future<SubjectFormatContext> _formatContextForCurrent() async {

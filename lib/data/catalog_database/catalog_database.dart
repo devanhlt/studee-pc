@@ -34,7 +34,7 @@ class CatalogDatabase extends _$CatalogDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -44,6 +44,17 @@ class CatalogDatabase extends _$CatalogDatabase {
         onUpgrade: (Migrator m, int from, int to) async {
           if (from < 2) {
             await m.addColumn(subjects, subjects.pinned);
+          }
+          if (from < 3) {
+            await m.addColumn(subjects, subjects.sortOrder);
+            // Preserve a stable order from creation time.
+            final rows = await (select(subjects)
+                  ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+                .get();
+            for (var i = 0; i < rows.length; i++) {
+              await (update(subjects)..where((t) => t.id.equals(rows[i].id)))
+                  .write(SubjectsCompanion(sortOrder: Value(i)));
+            }
           }
         },
         beforeOpen: (details) async {

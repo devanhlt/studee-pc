@@ -15,6 +15,9 @@ abstract interface class SubjectRepository {
 
   Future<void> setSubjectPinned(String subjectId, {required bool pinned});
 
+  /// Persist a new manual order for [orderedIds] (index = sort order).
+  Future<void> reorderSubjects(List<String> orderedIds);
+
   Future<void> deleteSubject(String subjectId);
 
   /// Exports the subject folder as a ZIP; returns the created archive path.

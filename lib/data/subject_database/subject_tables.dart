@@ -102,6 +102,9 @@ class Questions extends Table {
   /// How many times this question was practiced (Giải / Luyện / Ôn tập).
   IntColumn get practiceCount =>
       integer().named('practice_count').withDefault(const Constant(0))();
+  /// How many times the user answered this question incorrectly in Ôn tập.
+  IntColumn get incorrectCount =>
+      integer().named('incorrect_count').withDefault(const Constant(0))();
   IntColumn get createdAt => integer().named('created_at')();
   IntColumn get updatedAt => integer().named('updated_at')();
 

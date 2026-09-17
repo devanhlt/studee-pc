@@ -94,6 +94,7 @@ class SubjectContentQueries {
             updatedAt:
                 DateTime.fromMillisecondsSinceEpoch(r.updatedAt, isUtc: true),
             practiceCount: r.practiceCount,
+            incorrectCount: r.incorrectCount,
           ),
         )
         .toList();
@@ -143,6 +144,7 @@ class SubjectContentQueries {
               DateTime.fromMillisecondsSinceEpoch(r.updatedAt, isUtc: true),
           choices: choices,
           practiceCount: r.practiceCount,
+          incorrectCount: r.incorrectCount,
         ),
       );
     }
@@ -159,6 +161,21 @@ class SubjectContentQueries {
     final now = DateTime.now().toUtc().millisecondsSinceEpoch;
     await db.customUpdate(
       'UPDATE questions SET practice_count = practice_count + 1, updated_at = ? WHERE id = ?',
+      variables: [Variable.withInt(now), Variable.withString(questionId)],
+      updates: {db.questions},
+    );
+  }
+
+  /// Bump incorrect-answer count for a stored question (Ôn tập Giải đề).
+  Future<void> incrementIncorrectCount({
+    required String subjectId,
+    required String questionId,
+  }) async {
+    if (questionId.trim().isEmpty) return;
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+    await db.customUpdate(
+      'UPDATE questions SET incorrect_count = incorrect_count + 1, updated_at = ? WHERE id = ?',
       variables: [Variable.withInt(now), Variable.withString(questionId)],
       updates: {db.questions},
     );
@@ -499,6 +516,10 @@ class SubjectsActions {
     return _ref
         .read(subjectRepositoryProvider)
         .setSubjectPinned(id, pinned: pinned);
+  }
+
+  Future<void> reorder(List<String> orderedIds) {
+    return _ref.read(subjectRepositoryProvider).reorderSubjects(orderedIds);
   }
 
   Future<void> delete(String id) {

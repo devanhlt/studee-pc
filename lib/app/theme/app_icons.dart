@@ -9,6 +9,7 @@ abstract final class AppIcons {
   static const settings = Icons.settings_rounded;
   static const more = Icons.more_horiz_rounded;
   static const moreVert = Icons.more_vert_rounded;
+  static const dragHandle = Icons.drag_handle_rounded;
   static const edit = Icons.edit_rounded;
   static const delete = Icons.delete_rounded;
   static const refresh = Icons.refresh_rounded;

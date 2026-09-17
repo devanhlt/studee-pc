@@ -41,10 +41,7 @@ class ReviewPanel extends ConsumerWidget {
         ),
       ReviewStage.completed => _CompletedReview(
           subjectId: subjectId,
-          total: review.total,
-          mode: review.mode,
-          completedCount: review.completedCount,
-          timedOut: review.quizTimedOut,
+          review: review,
         ),
       ReviewStage.running => _RunningReview(mode: review.mode),
     };
@@ -159,20 +156,18 @@ class _IdleReview extends ConsumerWidget {
 class _CompletedReview extends ConsumerWidget {
   const _CompletedReview({
     required this.subjectId,
-    required this.total,
-    required this.mode,
-    required this.completedCount,
-    required this.timedOut,
+    required this.review,
   });
 
   final String subjectId;
-  final int total;
-  final ReviewPlayMode mode;
-  final int completedCount;
-  final bool timedOut;
+  final ReviewSessionState review;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final mode = review.mode;
+    final timedOut = review.quizTimedOut;
+    final total = review.total;
+    final completedCount = review.completedCount;
     final againLabel =
         mode == ReviewPlayMode.quiz ? 'Giải đề lại' : 'Luyện lại từ đầu';
     final title = timedOut
@@ -180,21 +175,171 @@ class _CompletedReview extends ConsumerWidget {
         : (mode == ReviewPlayMode.quiz
             ? 'Đã làm xong $total câu'
             : 'Đã ôn xong $total câu');
-    final message = timedOut
-        ? 'Hết ${ReviewQuizConfig.duration.inMinutes} phút. '
-            'Bạn đã làm $completedCount/$total câu. Có thể giải đề lại bất cứ lúc nào.'
-        : 'Bạn có thể ôn lại từ đầu, hoặc chuyển sang Luyện / Giải.';
-    return StudeeStatusState(
-      icon: timedOut ? AppIcons.timer : AppIcons.checkCircle,
-      title: title,
-      message: message,
-      actionLabel: againLabel,
-      onAction: () => startReviewSession(
-        context,
-        ref,
-        subjectId,
-        mode: mode,
+    final showQuizStats = mode == ReviewPlayMode.quiz;
+    final accuracy = review.accuracy;
+    final accuracyLabel = accuracy == null
+        ? '—'
+        : '${(accuracy * 100).round()}%';
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: AppLayout.pageInsets(context),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(
+              timedOut ? AppIcons.timer : AppIcons.checkCircle,
+              size: AppIcons.sizeEmptyState,
+              color: AppColors.accent.withValues(alpha: 0.85),
+            ),
+            const SizedBox(height: AppLayout.gapMd),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppLayout.gapSm),
+            Text(
+              timedOut
+                  ? 'Hết ${ReviewQuizConfig.duration.inMinutes} phút. '
+                      'Bạn đã làm $completedCount/$total câu.'
+                  : 'Bạn có thể ôn lại từ đầu, hoặc chuyển sang Luyện / Giải.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.secondaryText,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            if (showQuizStats) ...[
+              const SizedBox(height: AppLayout.gapLg),
+              StudeeGlass(
+                padding: const EdgeInsets.all(AppLayout.cardPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Kết quả',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: AppLayout.gapMd),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ResultStat(
+                            label: 'Đúng',
+                            value: '${review.correctCount}',
+                            color: AppColors.success,
+                          ),
+                        ),
+                        Expanded(
+                          child: _ResultStat(
+                            label: 'Sai',
+                            value: '${review.incorrectCount}',
+                            color: AppColors.error,
+                          ),
+                        ),
+                        Expanded(
+                          child: _ResultStat(
+                            label: timedOut ? 'Chưa làm' : 'Đã làm',
+                            value: timedOut
+                                ? '${review.unansweredCount}'
+                                : '${review.answeredCount}/$total',
+                            color: AppColors.secondaryText,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppLayout.gapMd),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.accent.withValues(alpha: 0.08),
+                        border: Border.all(
+                          color: AppColors.accent.withValues(alpha: 0.28),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Tỷ lệ đúng',
+                              style: TextStyle(
+                                color: AppColors.secondaryText,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            accuracyLabel,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              color: AppColors.primaryText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: AppLayout.gapLg),
+            FilledButton(
+              onPressed: () => startReviewSession(
+                context,
+                ref,
+                subjectId,
+                mode: mode,
+              ),
+              child: Text(againLabel),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _ResultStat extends StatelessWidget {
+  const _ResultStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 22,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.secondaryText,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -258,11 +403,32 @@ class _RunningCoachReview extends ConsumerWidget {
   }
 }
 
-class _RunningQuizReview extends ConsumerWidget {
+class _RunningQuizReview extends ConsumerStatefulWidget {
   const _RunningQuizReview();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RunningQuizReview> createState() => _RunningQuizReviewState();
+}
+
+class _RunningQuizReviewState extends ConsumerState<_RunningQuizReview> {
+  final _scrollController = ScrollController();
+  int? _seenIndex;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToQuestionTop() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final service = ref.read(reviewServiceProvider);
     final review = ref.watch(reviewStateProvider).asData?.value ?? service.current;
     final question = service.currentQuestion;
@@ -273,6 +439,11 @@ class _RunningQuizReview extends ConsumerWidget {
         ? null
         : ref.watch(subjectByIdProvider(subjectId)).asData?.value;
     final formatKind = formatKindForSubject(subject);
+
+    if (_seenIndex != review.currentIndex) {
+      _seenIndex = review.currentIndex;
+      _scrollToQuestionTop();
+    }
 
     ref.listen(reviewStateProvider, (prev, next) {
       final msg = next.asData?.value.errorMessage;
@@ -308,6 +479,7 @@ class _RunningQuizReview extends ConsumerWidget {
                       children: [
                         Expanded(
                           child: SingleChildScrollView(
+                            controller: _scrollController,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -380,8 +552,7 @@ class _RunningQuizReview extends ConsumerWidget {
                                       ),
                                     ),
                                   ),
-                                if (!review.quizAnswered &&
-                                    !review.quizResolvingAnswer &&
+                                if (!review.quizResolvingAnswer &&
                                     choices.isNotEmpty &&
                                     !review.quizTipLoading &&
                                     (review.quizTip == null ||

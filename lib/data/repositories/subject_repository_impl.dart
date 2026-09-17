@@ -74,6 +74,7 @@ class SubjectRepositoryImpl implements SubjectRepository {
 
     final now = DateTime.now().toUtc();
     final nowMs = now.millisecondsSinceEpoch;
+    final sortOrder = await _nextSortOrder();
 
     await _catalog.into(_catalog.subjects).insert(
           SubjectsCompanion.insert(
@@ -83,6 +84,7 @@ class SubjectRepositoryImpl implements SubjectRepository {
             icon: Value(input.icon),
             color: Value(input.color),
             schemaVersion: const Value(schemaVersion),
+            sortOrder: Value(sortOrder),
             createdAt: nowMs,
             updatedAt: nowMs,
           ),
@@ -98,6 +100,7 @@ class SubjectRepositoryImpl implements SubjectRepository {
       schemaVersion: schemaVersion,
       createdAt: now,
       updatedAt: now,
+      sortOrder: sortOrder,
     );
   }
 
@@ -106,7 +109,8 @@ class SubjectRepositoryImpl implements SubjectRepository {
     final rows = await (_catalog.select(_catalog.subjects)
           ..orderBy([
             (t) => OrderingTerm.desc(t.pinned),
-            (t) => OrderingTerm.desc(t.updatedAt),
+            (t) => OrderingTerm.asc(t.sortOrder),
+            (t) => OrderingTerm.asc(t.createdAt),
           ]))
         .get();
 
@@ -182,6 +186,20 @@ class SubjectRepositoryImpl implements SubjectRepository {
   }
 
   @override
+  Future<void> reorderSubjects(List<String> orderedIds) async {
+    if (orderedIds.isEmpty) return;
+    await _catalog.transaction(() async {
+      for (var i = 0; i < orderedIds.length; i++) {
+        final id = orderedIds[i];
+        await (_catalog.update(_catalog.subjects)
+              ..where((t) => t.id.equals(id)))
+            .write(SubjectsCompanion(sortOrder: Value(i)));
+      }
+    });
+    _log.info('Reordered ${orderedIds.length} subjects');
+  }
+
+  @override
   Future<void> deleteSubject(String subjectId) async {
     final row = await _requireCatalogRow(subjectId);
     final folderPath = row.folderPath;
@@ -253,6 +271,7 @@ class SubjectRepositoryImpl implements SubjectRepository {
     final folderPath = await _paths.subjectFolder(imported.subjectId);
     final now = DateTime.now().toUtc();
     final nowMs = now.millisecondsSinceEpoch;
+    final sortOrder = await _nextSortOrder();
 
     await _catalog.into(_catalog.subjects).insert(
           SubjectsCompanion.insert(
@@ -260,6 +279,7 @@ class SubjectRepositoryImpl implements SubjectRepository {
             name: imported.displayName,
             folderPath: folderPath,
             schemaVersion: Value(imported.schemaVersion),
+            sortOrder: Value(sortOrder),
             createdAt: nowMs,
             updatedAt: nowMs,
           ),
@@ -308,10 +328,18 @@ class SubjectRepositoryImpl implements SubjectRepository {
       updatedAt:
           DateTime.fromMillisecondsSinceEpoch(row.updatedAt, isUtc: true),
       pinned: row.pinned,
+      sortOrder: row.sortOrder,
       sourceCount: sourceCount,
       knowledgeCount: knowledgeCount,
       questionCount: questionCount,
     );
+  }
+
+  Future<int> _nextSortOrder() async {
+    final row = await _catalog
+        .customSelect('SELECT COALESCE(MAX(sort_order), -1) AS m FROM subjects')
+        .getSingle();
+    return (row.read<int>('m')) + 1;
   }
 
   Future<CatalogSubjectRow> _requireCatalogRow(String subjectId) async {

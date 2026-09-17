@@ -55,67 +55,153 @@ class SubjectsListScreen extends ConsumerWidget {
           if (subjects.isEmpty) {
             return const _EmptySubjectsState();
           }
-          final pinned = subjects.where((s) => s.pinned).toList();
-          final others = subjects.where((s) => !s.pinned).toList();
-          final items = <_SubjectsListItem>[
-            if (pinned.isNotEmpty) ...[
-              const _SubjectsListItem.section('Đã ghim'),
-              for (final s in pinned) _SubjectsListItem.subject(s),
-            ],
-            if (others.isNotEmpty) ...[
-              _SubjectsListItem.section(
-                pinned.isEmpty ? 'Môn học của bạn' : 'Khác',
-              ),
-              for (final s in others) _SubjectsListItem.subject(s),
-            ],
-          ];
-          return RefreshIndicator(
-            color: AppColors.accent,
-            onRefresh: () async {
-              ref.invalidate(subjectsListProvider);
-              await ref.read(subjectsListProvider.future);
-            },
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(
-                AppLayout.pagePadding,
-                AppLayout.gapXs,
-                AppLayout.pagePadding,
-                88,
-              ),
-              itemCount: items.length,
-              separatorBuilder: (_, index) {
-                final nextIsSection = index + 1 < items.length &&
-                    items[index + 1].isSection;
-                return SizedBox(height: nextIsSection ? 14 : 10);
-              },
-              itemBuilder: (context, index) {
-                final item = items[index];
-                final label = item.sectionLabel;
-                if (label != null) {
-                  return StudeeSectionLabel(label);
-                }
-                final subject = item.subject!;
-                return _StaggeredEntrance(
-                  index: index,
-                  child: _SubjectCard(subject: subject),
-                );
-              },
-            ),
-          );
+          return _SubjectsReorderableList(subjects: subjects);
         },
       ),
     );
   }
 }
 
-class _SubjectsListItem {
-  const _SubjectsListItem.section(this.sectionLabel) : subject = null;
-  const _SubjectsListItem.subject(this.subject) : sectionLabel = null;
+class _SubjectsReorderableList extends ConsumerWidget {
+  const _SubjectsReorderableList({required this.subjects});
 
-  final String? sectionLabel;
-  final Subject? subject;
+  final List<Subject> subjects;
 
-  bool get isSection => sectionLabel != null;
+  Future<void> _persistOrder(
+    WidgetRef ref, {
+    required List<Subject> pinned,
+    required List<Subject> others,
+  }) async {
+    final orderedIds = [
+      ...pinned.map((s) => s.id),
+      ...others.map((s) => s.id),
+    ];
+    await ref.read(subjectsActionsProvider).reorder(orderedIds);
+    ref.read(subjectsActionsProvider).refresh();
+  }
+
+  void _onReorderGroup({
+    required WidgetRef ref,
+    required List<Subject> group,
+    required List<Subject> otherGroup,
+    required bool groupIsPinned,
+    required int oldIndex,
+    required int newIndex,
+  }) {
+    final updated = List<Subject>.of(group);
+    final item = updated.removeAt(oldIndex);
+    updated.insert(newIndex, item);
+    final pinned = groupIsPinned ? updated : otherGroup;
+    final others = groupIsPinned ? otherGroup : updated;
+    _persistOrder(ref, pinned: pinned, others: others);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pinned = subjects.where((s) => s.pinned).toList();
+    final others = subjects.where((s) => !s.pinned).toList();
+
+    return RefreshIndicator(
+      color: AppColors.accent,
+      onRefresh: () async {
+        ref.invalidate(subjectsListProvider);
+        await ref.read(subjectsListProvider.future);
+      },
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          const SliverToBoxAdapter(child: SizedBox(height: AppLayout.gapXs)),
+          if (pinned.isNotEmpty) ...[
+            const SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: AppLayout.pagePadding),
+              sliver: SliverToBoxAdapter(
+                child: StudeeSectionLabel('Đã ghim'),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppLayout.pagePadding,
+                0,
+                AppLayout.pagePadding,
+                4,
+              ),
+              sliver: SliverReorderableList(
+                itemCount: pinned.length,
+                onReorderItem: (oldIndex, newIndex) => _onReorderGroup(
+                  ref: ref,
+                  group: pinned,
+                  otherGroup: others,
+                  groupIsPinned: true,
+                  oldIndex: oldIndex,
+                  newIndex: newIndex,
+                ),
+                itemBuilder: (context, index) {
+                  final subject = pinned[index];
+                  return Padding(
+                    key: ValueKey(subject.id),
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _StaggeredEntrance(
+                      index: index,
+                      child: _SubjectCard(
+                        subject: subject,
+                        dragIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+          if (others.isNotEmpty) ...[
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                AppLayout.pagePadding,
+                pinned.isEmpty ? 0 : 14,
+                AppLayout.pagePadding,
+                0,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: StudeeSectionLabel(
+                  pinned.isEmpty ? 'Môn học của bạn' : 'Khác',
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppLayout.pagePadding,
+              ),
+              sliver: SliverReorderableList(
+                itemCount: others.length,
+                onReorderItem: (oldIndex, newIndex) => _onReorderGroup(
+                  ref: ref,
+                  group: others,
+                  otherGroup: pinned,
+                  groupIsPinned: false,
+                  oldIndex: oldIndex,
+                  newIndex: newIndex,
+                ),
+                itemBuilder: (context, index) {
+                  final subject = others[index];
+                  return Padding(
+                    key: ValueKey(subject.id),
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _StaggeredEntrance(
+                      index: pinned.length + index,
+                      child: _SubjectCard(
+                        subject: subject,
+                        dragIndex: index,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+          const SliverToBoxAdapter(child: SizedBox(height: 88)),
+        ],
+      ),
+    );
+  }
 }
 
 class _HomeHeader extends StatelessWidget {
@@ -294,9 +380,13 @@ class _EmptySubjectsState extends ConsumerWidget {
 }
 
 class _SubjectCard extends ConsumerWidget {
-  const _SubjectCard({required this.subject});
+  const _SubjectCard({
+    required this.subject,
+    required this.dragIndex,
+  });
 
   final Subject subject;
+  final int dragIndex;
 
   Future<void> _openMenu(
     BuildContext context,
@@ -369,6 +459,17 @@ class _SubjectCard extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          ReorderableDragStartListener(
+            index: dragIndex,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10, right: 6),
+              child: Icon(
+                AppIcons.dragHandle,
+                size: AppIcons.sizeAction,
+                color: AppColors.mutedText.withValues(alpha: 0.85),
+              ),
+            ),
+          ),
           Container(
             width: 42,
             height: 42,
