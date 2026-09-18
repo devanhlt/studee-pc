@@ -374,7 +374,7 @@ class SubjectFileStore {
         );
       }
 
-      return _importSubjectZipBytes(zipBytes);
+      return await _importSubjectZipBytes(zipBytes);
     } on AppFailure catch (f) {
       return Failure(f);
     } on Object catch (e) {
