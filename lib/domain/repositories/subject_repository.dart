@@ -20,11 +20,11 @@ abstract interface class SubjectRepository {
 
   Future<void> deleteSubject(String subjectId);
 
-  /// Exports the subject folder as a ZIP; returns the created archive path.
+  /// Exports the subject folder as an encrypted `.stud` pack.
   Future<String> exportSubject(String subjectId, String destination);
 
-  /// Imports a previously exported subject ZIP; returns the restored subject.
-  Future<Subject> importSubject(String zipPath);
+  /// Imports a subject from an encrypted `.stud` pack path.
+  Future<Subject> importSubject(String studPath);
 
   String? get activeSubjectId;
 }

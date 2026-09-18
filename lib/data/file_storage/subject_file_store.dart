@@ -10,6 +10,7 @@ import 'package:studee_pc/core/logging/app_logger.dart';
 import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/core/utils/path_safety.dart';
 import 'package:studee_pc/data/file_storage/app_paths.dart';
+import 'package:studee_pc/data/file_storage/stud_codec.dart';
 
 /// Filesystem operations for a single subject's folder tree.
 ///
@@ -276,10 +277,11 @@ class SubjectFileStore {
     }
   }
 
-  /// Exports subject folder (manifest + DB + sources + attachments) as one ZIP.
-  Future<Result<String>> exportZip({
+  /// Exports subject folder (manifest + DB + sources + attachments) as
+  /// an encrypted `.stud` pack.
+  Future<Result<String>> exportStud({
     required String subjectId,
-    required String destinationZipPath,
+    required String destinationStudPath,
   }) async {
     try {
       final folder = await _paths.subjectFolder(subjectId);
@@ -303,23 +305,14 @@ class SubjectFileStore {
         );
       }
 
-      final archive = Archive();
-      await for (final entity in dir.list(recursive: true, followLinks: false)) {
-        if (entity is! File) continue;
-        final relative = p.relative(entity.path, from: folder);
-        final data = await entity.readAsBytes();
-        archive.addFile(
-          ArchiveFile(relative.replaceAll('\\', '/'), data.length, data),
-        );
-      }
+      final zipBytes = await _zipSubjectFolder(folder);
+      final studBytes = StudCodec.seal(zipBytes);
 
-      final encoded = ZipEncoder().encode(archive);
-
-      final out = File(destinationZipPath);
+      final out = File(destinationStudPath);
       await out.parent.create(recursive: true);
-      await out.writeAsBytes(Uint8List.fromList(encoded), flush: true);
-      _log.info('Exported subject id=$subjectId');
-      return Success(destinationZipPath);
+      await out.writeAsBytes(studBytes, flush: true);
+      _log.info('Exported subject id=$subjectId as .stud');
+      return Success(destinationStudPath);
     } on Object catch (e) {
       return Failure(
         DatabaseFailure(
@@ -331,30 +324,93 @@ class SubjectFileStore {
     }
   }
 
-  /// Restores a subject folder from an exported ZIP.
+  /// Restores a subject folder from an encrypted `.stud` pack.
   ///
   /// Returns manifest fields needed to register the subject in the catalog.
   Future<Result<({String subjectId, String displayName, int schemaVersion})>>
-      importZip({required String zipPath}) async {
+      importStud({required String studPath}) async {
     try {
-      final zipFile = File(zipPath);
-      if (!await zipFile.exists()) {
+      final studFile = File(studPath);
+      if (!await studFile.exists()) {
         return Failure(
           NotFoundFailure(
-            userMessage: 'Không tìm thấy tệp ZIP.',
-            code: 'import_zip_missing',
-            details: zipPath,
+            userMessage: 'Không tìm thấy tệp .stud.',
+            code: 'import_stud_missing',
+            details: studPath,
           ),
         );
       }
 
-      final bytes = await zipFile.readAsBytes();
-      final archive = ZipDecoder().decodeBytes(bytes);
+      final lower = studPath.toLowerCase();
+      if (!lower.endsWith(StudCodec.fileExtension)) {
+        return const Failure(
+          ValidationFailure(
+            userMessage: 'Chỉ hỗ trợ tệp .stud.',
+            code: 'import_stud_extension',
+          ),
+        );
+      }
+
+      final studBytes = await studFile.readAsBytes();
+      late final Uint8List zipBytes;
+      try {
+        zipBytes = StudCodec.open(studBytes);
+      } on FormatException {
+        return const Failure(
+          ValidationFailure(
+            userMessage:
+                'Tệp .stud không hợp lệ hoặc bị hỏng. Hãy xuất lại từ Studee.',
+            code: 'import_stud_corrupt',
+          ),
+        );
+      } on Object catch (e) {
+        return Failure(
+          ValidationFailure(
+            userMessage:
+                'Không giải mã được tệp .stud. Hãy xuất lại từ Studee.',
+            code: 'import_stud_decrypt_failed',
+            details: e.runtimeType.toString(),
+          ),
+        );
+      }
+
+      return _importSubjectZipBytes(zipBytes);
+    } on AppFailure catch (f) {
+      return Failure(f);
+    } on Object catch (e) {
+      return Failure(
+        DatabaseFailure(
+          userMessage: 'Nhập môn học từ .stud thất bại.',
+          code: 'import_failed',
+          details: e.runtimeType.toString(),
+        ),
+      );
+    }
+  }
+
+  Future<Uint8List> _zipSubjectFolder(String folder) async {
+    final archive = Archive();
+    final dir = Directory(folder);
+    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final relative = p.relative(entity.path, from: folder);
+      final data = await entity.readAsBytes();
+      archive.addFile(
+        ArchiveFile(relative.replaceAll('\\', '/'), data.length, data),
+      );
+    }
+    return Uint8List.fromList(ZipEncoder().encode(archive));
+  }
+
+  Future<Result<({String subjectId, String displayName, int schemaVersion})>>
+      _importSubjectZipBytes(Uint8List zipBytes) async {
+    try {
+      final archive = ZipDecoder().decodeBytes(zipBytes);
       if (archive.isEmpty) {
         return const Failure(
           ValidationFailure(
-            userMessage: 'Tệp ZIP trống hoặc không hợp lệ.',
-            code: 'import_zip_empty',
+            userMessage: 'Tệp .stud trống hoặc không hợp lệ.',
+            code: 'import_stud_empty',
           ),
         );
       }
@@ -376,7 +432,7 @@ class SubjectFileStore {
         return const Failure(
           ValidationFailure(
             userMessage:
-                'ZIP thiếu manifest.json nên không phải bản xuất môn học của Studee.',
+                'Tệp .stud thiếu manifest.json nên không phải bản xuất môn học của Studee.',
             code: 'import_manifest_missing',
           ),
         );
@@ -450,7 +506,7 @@ class SubjectFileStore {
         );
       }
 
-      // Ensure expected top-level dirs exist even if zip omitted empties.
+      // Ensure expected top-level dirs exist even if pack omitted empties.
       await Directory(p.join(folder, 'sources')).create(recursive: true);
       await Directory(p.join(folder, 'attachments')).create(recursive: true);
 
@@ -459,13 +515,13 @@ class SubjectFileStore {
         await Directory(folder).delete(recursive: true);
         return const Failure(
           ValidationFailure(
-            userMessage: 'ZIP thiếu subject.db nên không nhập được môn học.',
+            userMessage: 'Tệp .stud thiếu subject.db nên không nhập được môn học.',
             code: 'import_db_missing',
           ),
         );
       }
 
-      _log.info('Imported subject id=$subjectId from zip');
+      _log.info('Imported subject id=$subjectId from .stud');
       return Success((
         subjectId: subjectId,
         displayName: displayName,
@@ -476,7 +532,7 @@ class SubjectFileStore {
     } on Object catch (e) {
       return Failure(
         DatabaseFailure(
-          userMessage: 'Nhập môn học từ ZIP thất bại.',
+          userMessage: 'Nhập môn học từ .stud thất bại.',
           code: 'import_failed',
           details: e.runtimeType.toString(),
         ),

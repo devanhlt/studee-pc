@@ -1,7 +1,7 @@
 name: studee_pc
 description: Personal desktop study overlay assistant for Vietnamese learners.
 publish_to: 'none'
-version: 1.0.12+15
+version: 1.0.13+16
 
 environment:
   sdk: ^3.12.2
@@ -43,6 +43,7 @@ dependencies:
   image_cropper: ^12.2.1
   camera: ^0.12.1
   image: ^4.9.2
+  pointycastle: ^4.0.0
 
 dev_dependencies:
   flutter_test:

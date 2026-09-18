@@ -14,7 +14,7 @@ import 'package:studee_pc/domain/enums/confidence_level.dart';
 import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
-/// Lists solve sessions for a subject (tab or `/history` route).
+/// Lists solve sessions for a subject (`HistoryScreen` / detail routes).
 class HistoryList extends ConsumerWidget {
   const HistoryList({super.key, required this.subjectId});
 
@@ -201,9 +201,29 @@ class HistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = subjectId;
+    final subjectName = id == null
+        ? null
+        : ref.watch(subjectByIdProvider(id)).asData?.value?.name;
+
     return StudeePageScaffold(
       atmosphereIntensity: AppLayout.atmospherePage,
-      topBar: const StudeeGlassAppBar(title: 'Lịch sử giải'),
+      topBar: StudeeGlassAppBar(
+        title: 'Lịch sử giải',
+        subtitle: subjectName,
+        leading: IconButton(
+          tooltip: 'Quay lại',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else if (id != null) {
+              context.go('/subjects/$id');
+            } else {
+              context.go('/');
+            }
+          },
+          icon: const Icon(AppIcons.back),
+        ),
+      ),
       body: id == null
           ? const StudeeStatusState(
               icon: AppIcons.history,

@@ -11,6 +11,8 @@ import 'package:studee_pc/features/overlay/presentation/overlay_panel.dart';
 import 'package:studee_pc/features/settings/presentation/request_activation_code_screen.dart';
 import 'package:studee_pc/features/settings/presentation/settings_screen.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
+import 'package:studee_pc/features/subjects/presentation/knowledge_screen.dart';
+import 'package:studee_pc/features/subjects/presentation/report_screen.dart';
 import 'package:studee_pc/features/subjects/presentation/subject_detail_screen.dart';
 import 'package:studee_pc/features/subjects/presentation/subjects_list_screen.dart';
 
@@ -67,7 +69,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return _fadeRisePage(
             key: state.pageKey,
-            child: SubjectDetailScreen(subjectId: id),
+            child: SubjectDetailScreen(
+              subjectId: id,
+              initialTab: state.uri.queryParameters['tab'],
+            ),
           );
         },
         routes: [
@@ -86,6 +91,39 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               return _fadeRisePage(
                 key: state.pageKey,
                 child: IngestionScreen(subjectId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: 'report',
+            name: 'subjectReport',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id']!;
+              return _fadeRisePage(
+                key: state.pageKey,
+                child: SubjectReportScreen(subjectId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: 'knowledge',
+            name: 'subjectKnowledge',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id']!;
+              return _fadeRisePage(
+                key: state.pageKey,
+                child: SubjectKnowledgeScreen(subjectId: id),
+              );
+            },
+          ),
+          GoRoute(
+            path: 'history',
+            name: 'subjectHistory',
+            pageBuilder: (context, state) {
+              final id = state.pathParameters['id']!;
+              return _fadeRisePage(
+                key: state.pageKey,
+                child: HistoryScreen(subjectId: id),
               );
             },
           ),

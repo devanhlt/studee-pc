@@ -114,5 +114,19 @@ void main() {
   test('quiz config defaults', () {
     expect(ReviewQuizConfig.questionCount, 40);
     expect(ReviewQuizConfig.duration, const Duration(minutes: 30));
+    expect(ReviewQuizConfig.defaultDurationMinutes, 30);
+    expect(
+      ReviewQuizConfig.clampDurationMinutes(2),
+      ReviewQuizConfig.minDurationMinutes,
+    );
+    expect(
+      ReviewQuizConfig.clampDurationMinutes(999),
+      ReviewQuizConfig.maxDurationMinutes,
+    );
+    expect(ReviewQuizConfig.durationFromMinutes(45).inMinutes, 45);
+    expect(ReviewQuizConfig.durationMinutePresets, [30, 45, 60]);
+    expect(ReviewQuizConfig.snapDurationMinutes(15), 30);
+    expect(ReviewQuizConfig.snapDurationMinutes(50), 45);
+    expect(ReviewQuizConfig.snapDurationMinutes(70), 60);
   });
 }

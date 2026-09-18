@@ -181,6 +181,28 @@ abstract interface class DeepSeekClient {
     required List<KnowledgeSummaryQa> questions,
   });
 
+  /// Practice progress advice for the subject report screen.
+  /// Returns Markdown body (no document title).
+  Future<String> generateProgressAdvice({
+    required String subjectName,
+    required int totalQuestions,
+    required int practicedQuestions,
+    required int neverPracticedQuestions,
+    required int weakQuestions,
+    double? averageScore,
+    required int totalPracticeAttempts,
+    required int totalIncorrectAttempts,
+    List<ProgressAdviceWeakSample> weakSamples = const [],
+  });
+
+  /// Generate practice Q&A from theory-only knowledge units (ingest).
+  /// Returns maps in the same shape as [StructureSourceResponse.questions].
+  Future<List<Map<String, dynamic>>> generateQuestionsFromKnowledge({
+    required List<KnowledgeSummaryUnit> units,
+    String? subjectName,
+    String? formatKind,
+  });
+
   /// Canonical semantic keys for question meaning (no answers in keys).
   Future<Map<String, SemanticCanonicalization>> canonicalizeQuestions(
     List<CanonicalizeItem> items,
@@ -302,6 +324,22 @@ class KnowledgeSummaryQa extends Equatable {
 
   @override
   List<Object?> get props => [question, answer, explanation];
+}
+
+/// Weak question sample for [DeepSeekClient.generateProgressAdvice].
+class ProgressAdviceWeakSample extends Equatable {
+  const ProgressAdviceWeakSample({
+    required this.stem,
+    required this.practiceCount,
+    required this.incorrectCount,
+  });
+
+  final String stem;
+  final int practiceCount;
+  final int incorrectCount;
+
+  @override
+  List<Object?> get props => [stem, practiceCount, incorrectCount];
 }
 
 /// Input for [DeepSeekClient.canonicalizeQuestions].

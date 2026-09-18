@@ -11,28 +11,43 @@ import 'package:studee_pc/app/dependency_setup.dart';
 import 'package:studee_pc/app/theme/app_colors.dart';
 import 'package:studee_pc/app/theme/app_icons.dart';
 import 'package:studee_pc/app/theme/app_layout.dart';
-import 'package:studee_pc/app/widgets/study_markdown.dart';
 import 'package:studee_pc/app/widgets/studee_chrome.dart';
 import 'package:studee_pc/app/widgets/studee_controls.dart';
 import 'package:studee_pc/core/errors/app_failure.dart';
 import 'package:studee_pc/domain/entities/subject.dart';
-import 'package:studee_pc/features/history/presentation/history_list.dart';
 import 'package:studee_pc/features/review/application/review_service.dart';
 import 'package:studee_pc/features/review/presentation/review_panel.dart';
 import 'package:studee_pc/features/solver/application/solve_service.dart';
 import 'package:studee_pc/features/solver/presentation/solve_screen.dart';
-import 'package:studee_pc/features/subjects/application/subject_format_kind.dart';
 import 'package:studee_pc/features/subjects/application/subjects_providers.dart';
 
-enum _WorkspaceMode { solve, practice, review, knowledge, history }
+enum _WorkspaceMode { solve, practice, review }
 
 bool get _isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
-/// Subject workspace with Giải / Luyện / Ôn tập tabs; Kiến thức & Lịch sử in menu.
+_WorkspaceMode _initialModeFromTab(String? tab) {
+  switch (tab) {
+    case 'review':
+      return _WorkspaceMode.review;
+    case 'practice':
+      return _WorkspaceMode.practice;
+    default:
+      return _WorkspaceMode.solve;
+  }
+}
+
+/// Subject workspace with Giải / Luyện / Ôn tập tabs; Báo cáo / Kiến thức / Lịch sử in menu.
 class SubjectDetailScreen extends ConsumerStatefulWidget {
-  const SubjectDetailScreen({super.key, required this.subjectId});
+  const SubjectDetailScreen({
+    super.key,
+    required this.subjectId,
+    this.initialTab,
+  });
 
   final String subjectId;
+
+  /// Optional `solve` / `practice` / `review` from the route query.
+  final String? initialTab;
 
   @override
   ConsumerState<SubjectDetailScreen> createState() =>
@@ -40,10 +55,7 @@ class SubjectDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
-  _WorkspaceMode _mode = _WorkspaceMode.solve;
-
-  /// Last Giải / Luyện / Ôn tập tab — kept while viewing Kiến thức or Lịch sử.
-  _WorkspaceMode _primaryTab = _WorkspaceMode.solve;
+  late _WorkspaceMode _mode;
 
   /// Set after discard confirm so [PopScope] can complete the pop.
   bool _allowPop = false;
@@ -51,6 +63,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _mode = _initialModeFromTab(widget.initialTab);
     // Drop any prior Giải / Luyện / Ôn tập work before first paint so the
     // embedded SolveScreen does not hydrate the previous subject's session.
     ref.read(solveServiceProvider).reset();
@@ -91,9 +104,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
             draft.isNotEmpty;
       case _WorkspaceMode.review:
         return ref.read(reviewServiceProvider).hasIncompleteSession;
-      case _WorkspaceMode.knowledge:
-      case _WorkspaceMode.history:
-        return false;
     }
   }
 
@@ -111,9 +121,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
         ref.read(practiceTabDraftProvider.notifier).state = '';
       case _WorkspaceMode.review:
         await ref.read(reviewServiceProvider).cancel();
-      case _WorkspaceMode.knowledge:
-      case _WorkspaceMode.history:
-        break;
     }
   }
 
@@ -124,18 +131,28 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   }
 
   Future<bool> _showDiscardProgressDialog() async {
+    final reviewRunning =
+        ref.read(reviewServiceProvider).hasIncompleteSession;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        content: const Text('Bạn có muốn hủy bỏ tiến trình hiện tại?'),
+        title: reviewRunning ? const Text('Hủy ôn tập?') : null,
+        content: Text(
+          reviewRunning
+              ? 'Tiến trình ôn tập hiện tại sẽ bị hủy. Không thể hoàn tác.'
+              : 'Bạn có muốn hủy bỏ tiến trình hiện tại?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Ở lại'),
           ),
           FilledButton(
+            style: reviewRunning
+                ? FilledButton.styleFrom(backgroundColor: AppColors.error)
+                : null,
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Hủy và chuyển'),
+            child: Text(reviewRunning ? 'Hủy ôn tập' : 'Hủy và chuyển'),
           ),
         ],
       ),
@@ -175,26 +192,8 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
     if (_mode == mode) return;
     if (!await _confirmLeaveCurrentTab()) return;
     if (!mounted) return;
-    setState(() {
-      _mode = mode;
-      if (mode == _WorkspaceMode.solve ||
-          mode == _WorkspaceMode.practice ||
-          mode == _WorkspaceMode.review) {
-        _primaryTab = mode;
-      }
-    });
+    setState(() => _mode = mode);
     await ref.read(subjectsActionsProvider).open(widget.subjectId);
-    if (!mounted) return;
-    switch (mode) {
-      case _WorkspaceMode.knowledge:
-        ref.invalidate(subjectKnowledgeProvider(widget.subjectId));
-      case _WorkspaceMode.history:
-        ref.invalidate(subjectHistoryProvider(widget.subjectId));
-      case _WorkspaceMode.solve:
-      case _WorkspaceMode.practice:
-      case _WorkspaceMode.review:
-        break;
-    }
   }
 
   Future<void> _exportStudyNotes(Subject subject) async {
@@ -252,16 +251,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   }
 
   void _refresh() {
-    switch (_mode) {
-      case _WorkspaceMode.solve:
-      case _WorkspaceMode.practice:
-      case _WorkspaceMode.review:
-        ref.invalidate(subjectByIdProvider(widget.subjectId));
-      case _WorkspaceMode.knowledge:
-        ref.invalidate(subjectKnowledgeProvider(widget.subjectId));
-      case _WorkspaceMode.history:
-        ref.invalidate(subjectHistoryProvider(widget.subjectId));
-    }
+    ref.invalidate(subjectByIdProvider(widget.subjectId));
   }
 
   @override
@@ -311,17 +301,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
             solveBusy ? 'Đang giải…' : 'Giải câu hỏi',
           _WorkspaceMode.practice => 'Luyện từng bước',
           _WorkspaceMode.review => 'Ôn tập',
-          _WorkspaceMode.knowledge =>
-            solveBusy ? 'Kiến thức · đang giải…' : 'Kiến thức hỗ trợ',
-          _WorkspaceMode.history =>
-            solveBusy ? 'Lịch sử · đang giải…' : 'Lịch sử giải',
         };
-
-        final segmentSelected =
-            (_mode == _WorkspaceMode.knowledge ||
-                    _mode == _WorkspaceMode.history)
-                ? _primaryTab
-                : _mode;
 
         return PopScope(
           canPop: _allowPop,
@@ -365,10 +345,12 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                   icon: const Icon(AppIcons.moreVert),
                   onSelected: (action) {
                     switch (action) {
+                      case _HeaderMenuAction.report:
+                        context.push('/subjects/${widget.subjectId}/report');
                       case _HeaderMenuAction.knowledge:
-                        _setMode(_WorkspaceMode.knowledge);
+                        context.push('/subjects/${widget.subjectId}/knowledge');
                       case _HeaderMenuAction.history:
-                        _setMode(_WorkspaceMode.history);
+                        context.push('/subjects/${widget.subjectId}/history');
                       case _HeaderMenuAction.export:
                         _exportStudyNotes(subject);
                       case _HeaderMenuAction.refresh:
@@ -376,6 +358,10 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                     }
                   },
                   itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: _HeaderMenuAction.report,
+                      child: Text('Báo cáo'),
+                    ),
                     const PopupMenuItem(
                       value: _HeaderMenuAction.knowledge,
                       child: Text('Kiến thức'),
@@ -409,7 +395,7 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                       AppLayout.gapSm,
                     ),
                     child: StudeeSegmentedControl<_WorkspaceMode>(
-                      selected: segmentSelected,
+                      selected: _mode,
                       onChanged: _setMode,
                       segments: const [
                         StudeeSegment(
@@ -449,15 +435,6 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
                     _WorkspaceMode.review => ReviewPanel(
                         subjectId: widget.subjectId,
                       ),
-                    _WorkspaceMode.knowledge => _KnowledgePanel(
-                        subjectId: widget.subjectId,
-                        onImport: _openImport,
-                        onBackToSolve: () => _setMode(_WorkspaceMode.solve),
-                      ),
-                    _WorkspaceMode.history => _HistoryPanel(
-                        subjectId: widget.subjectId,
-                        onBackToSolve: () => _setMode(_WorkspaceMode.solve),
-                      ),
                   },
                 ),
               ],
@@ -470,190 +447,4 @@ class _SubjectDetailScreenState extends ConsumerState<SubjectDetailScreen> {
   }
 }
 
-enum _HeaderMenuAction { knowledge, history, export, refresh }
-
-class _KnowledgePanel extends ConsumerWidget {
-  const _KnowledgePanel({
-    required this.subjectId,
-    required this.onImport,
-    required this.onBackToSolve,
-  });
-
-  final String subjectId;
-  final VoidCallback onImport;
-  final VoidCallback onBackToSolve;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(subjectKnowledgeProvider(subjectId));
-    final canImport = !_isMobile;
-    final formatKind = formatKindForSubject(
-      ref.watch(subjectByIdProvider(subjectId)).asData?.value,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: AppLayout.pageInsets(context).copyWith(bottom: 0),
-          child: StudeeGlass(
-            padding: const EdgeInsets.all(AppLayout.cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const StudeeSectionLabel('Kiến thức'),
-                const SizedBox(height: AppLayout.gapSm),
-                Text(
-                  'Dùng khi Trợ lý Stud giải bài',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: AppLayout.gapXs),
-                Text(
-                  canImport
-                      ? 'Càng nhiều tài liệu, đáp án càng sát với giáo trình bạn đang học.'
-                      : 'Kiến thức đã lưu trên máy. Trên điện thoại, thêm môn bằng Nhập từ ZIP.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: AppLayout.gapMd),
-                Row(
-                  children: [
-                    if (canImport) ...[
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: onImport,
-                          icon: const Icon(
-                            AppIcons.libraryAdd,
-                            size: AppIcons.sizeInline,
-                          ),
-                          label: const Text('Nhập thêm'),
-                        ),
-                      ),
-                      const SizedBox(width: AppLayout.gapSm),
-                    ],
-                    if (canImport)
-                      OutlinedButton(
-                        onPressed: onBackToSolve,
-                        child: const Text('Giải ngay'),
-                      )
-                    else
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: onBackToSolve,
-                          child: const Text('Giải ngay'),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: AppLayout.gapSm),
-        Expanded(
-          child: async.when(
-            loading: () => const StudeeSkeletonList(),
-            error: (e, _) => StudeeStatusState(
-              icon: AppIcons.error,
-              title: 'Không tải được kiến thức',
-              message: '$e',
-            ),
-            data: (items) {
-              if (items.isEmpty) {
-                return StudeeStatusState(
-                  icon: AppIcons.book,
-                  title: 'Chưa có kiến thức nào',
-                  message: canImport
-                      ? 'Thêm tài liệu vào đây để Trợ lý Stud giải bài dựa trên những gì bạn đã lưu.'
-                      : 'Trên điện thoại hãy dùng Nhập từ ZIP để mang môn học (kèm kiến thức) từ máy tính.',
-                  actionLabel: canImport ? 'Nhập kiến thức' : null,
-                  onAction: canImport ? onImport : null,
-                );
-              }
-              return ListView.separated(
-                padding: AppLayout.pageInsets(context),
-                itemCount: items.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(height: AppLayout.gapSm),
-                itemBuilder: (_, i) {
-                  final u = items[i];
-                  return StudeeCard(
-                    accentColor: AppColors.accent,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          u.type.labelVi,
-                          style: Theme.of(context).textTheme.labelMedium,
-                        ),
-                        const SizedBox(height: AppLayout.gapXs),
-                        StudyMarkdown(
-                          u.content,
-                          compact: true,
-                          maxLines: 5,
-                          formatKind: formatKind,
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HistoryPanel extends StatelessWidget {
-  const _HistoryPanel({
-    required this.subjectId,
-    required this.onBackToSolve,
-  });
-
-  final String subjectId;
-  final VoidCallback onBackToSolve;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding:
-              AppLayout.pageInsets(context).copyWith(bottom: AppLayout.gapSm),
-          child: StudeeGlass(
-            padding: const EdgeInsets.all(AppLayout.cardPadding),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const StudeeSectionLabel('Lịch sử'),
-                      const SizedBox(height: AppLayout.gapSm),
-                      Text(
-                        'Các lần giải trước',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: AppLayout.gapXs),
-                      Text(
-                        'Xem lại những câu bạn đã giải trong môn này.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppLayout.gapSm),
-                OutlinedButton(
-                  onPressed: onBackToSolve,
-                  child: const Text('Giải tiếp'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Expanded(child: HistoryList(subjectId: subjectId)),
-      ],
-    );
-  }
-}
+enum _HeaderMenuAction { report, knowledge, history, export, refresh }

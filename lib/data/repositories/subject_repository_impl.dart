@@ -6,6 +6,7 @@ import 'package:studee_pc/core/result/result.dart';
 import 'package:studee_pc/core/utils/path_safety.dart';
 import 'package:studee_pc/data/catalog_database/catalog_database.dart';
 import 'package:studee_pc/data/file_storage/app_paths.dart';
+import 'package:studee_pc/data/file_storage/stud_codec.dart';
 import 'package:studee_pc/data/file_storage/subject_file_store.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/data/subject_database/subject_database_manager.dart';
@@ -235,13 +236,16 @@ class SubjectRepositoryImpl implements SubjectRepository {
   Future<String> exportSubject(String subjectId, String destination) async {
     await _requireCatalogRow(subjectId);
 
-    final zipPath = destination.toLowerCase().endsWith('.zip')
+    final studPath = destination.toLowerCase().endsWith(StudCodec.fileExtension)
         ? destination
-        : p.join(destination, '${AppPaths.subjectFolderName(subjectId)}.zip');
+        : p.join(
+            destination,
+            '${AppPaths.subjectFolderName(subjectId)}${StudCodec.fileExtension}',
+          );
 
-    final result = await _files.exportZip(
+    final result = await _files.exportStud(
       subjectId: subjectId,
-      destinationZipPath: zipPath,
+      destinationStudPath: studPath,
     );
     return switch (result) {
       Success(:final value) => value,
@@ -250,8 +254,8 @@ class SubjectRepositoryImpl implements SubjectRepository {
   }
 
   @override
-  Future<domain.Subject> importSubject(String zipPath) async {
-    final result = await _files.importZip(zipPath: zipPath);
+  Future<domain.Subject> importSubject(String studPath) async {
+    final result = await _files.importStud(studPath: studPath);
     if (result is Failure<({String subjectId, String displayName, int schemaVersion})>) {
       throw result.failure;
     }

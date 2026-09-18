@@ -741,12 +741,52 @@ class IngestionService {
         );
       }
 
+      var structuredQuestionMaps = response.questions;
+      if (structuredQuestionMaps.isEmpty && units.isNotEmpty) {
+        if (_cancelled) {
+          return const Failure(CancelledFailure(code: 'cancelled'));
+        }
+        _emit(
+          current.copyWith(
+            status: IngestionJobStatus.structuring,
+            pages: reviewedPages,
+            progressMessage: 'Đang tạo câu hỏi từ kiến thức…',
+            clearError: true,
+          ),
+        );
+        try {
+          structuredQuestionMaps =
+              await _deepSeek.generateQuestionsFromKnowledge(
+            units: [
+              for (final u in units)
+                KnowledgeSummaryUnit(
+                  type: u.type.wireName,
+                  content: u.content,
+                ),
+            ],
+            subjectName:
+                subjectCtx.name.isEmpty ? null : subjectCtx.name,
+            formatKind: subjectCtx.kind.wire,
+          );
+          _log.info(
+            'Generated ${structuredQuestionMaps.length} question(s) '
+            'from ${units.length} knowledge unit(s)',
+          );
+        } on Object catch (e) {
+          _log.warning(
+            'generateQuestionsFromKnowledge failed: ${e.runtimeType}',
+          );
+          // Continue with empty questions — user can still save units.
+          structuredQuestionMaps = const [];
+        }
+      }
+
       final questions = <StructureDraftQuestion>[];
       final formatKind = subjectCtx.kind;
       final existingFingerprints = await _loadExistingQuestionFingerprints(db);
       final seenFingerprints = <String>{};
       var skippedDuplicates = 0;
-      for (final m in response.questions) {
+      for (final m in structuredQuestionMaps) {
         final content = (m['content'] as String? ?? '').trim();
         if (content.isEmpty) continue;
         final choicesRaw = m['choices'] as List<dynamic>? ?? const [];

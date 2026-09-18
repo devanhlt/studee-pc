@@ -53,6 +53,7 @@ class ReviewSessionState {
     this.quizResolvingAnswer = false,
     this.quizLatexLoading = false,
     this.quizRemaining = Duration.zero,
+    this.quizLimit = Duration.zero,
     this.quizTimedOut = false,
     this.correctCount = 0,
     this.incorrectCount = 0,
@@ -76,8 +77,10 @@ class ReviewSessionState {
   final bool quizAnswerFromLlm;
   final bool quizResolvingAnswer;
   final bool quizLatexLoading;
-  /// Remaining time for Ôn tập (fixed 30 min exam).
+  /// Remaining time for Ôn tập.
   final Duration quizRemaining;
+  /// Configured exam length for this run (shown on start / timeout copy).
+  final Duration quizLimit;
   final bool quizTimedOut;
   /// Graded correct answers in this run (Giải đề).
   final int correctCount;
@@ -128,6 +131,7 @@ class ReviewSessionState {
     bool? quizResolvingAnswer,
     bool? quizLatexLoading,
     Duration? quizRemaining,
+    Duration? quizLimit,
     bool? quizTimedOut,
     int? correctCount,
     int? incorrectCount,
@@ -164,6 +168,7 @@ class ReviewSessionState {
       quizLatexLoading:
           clearQuiz ? false : (quizLatexLoading ?? this.quizLatexLoading),
       quizRemaining: quizRemaining ?? this.quizRemaining,
+      quizLimit: quizLimit ?? this.quizLimit,
       quizTimedOut: quizTimedOut ?? this.quizTimedOut,
       correctCount: correctCount ?? this.correctCount,
       incorrectCount: incorrectCount ?? this.incorrectCount,
@@ -240,6 +245,7 @@ class ReviewService {
   final Map<String, QuizAnswerResolution> _llmAnswers = {};
   Timer? _quizTicker;
   DateTime? _quizEndsAt;
+  Duration _quizLimit = ReviewQuizConfig.duration;
 
 
   Stream<ReviewSessionState> get states => _states.stream;
@@ -264,6 +270,7 @@ class ReviewService {
   Future<Result<void>> start(
     String subjectId, {
     ReviewPlayMode mode = ReviewPlayMode.coach,
+    Duration? duration,
   }) async {
     if (_state.stage == ReviewStage.running) {
       await cancel();
@@ -304,6 +311,10 @@ class ReviewService {
     _queue = queue;
     _countedCurrent = false;
     _llmAnswers.clear();
+    final quizLimit = duration != null && duration > Duration.zero
+        ? duration
+        : ReviewQuizConfig.duration;
+    _quizLimit = quizLimit;
     if (mode == ReviewPlayMode.coach) {
       _watchPractice();
     } else {
@@ -320,7 +331,8 @@ class ReviewService {
         completedCount: 0,
         correctCount: 0,
         incorrectCount: 0,
-        quizRemaining: ReviewQuizConfig.duration,
+        quizRemaining: quizLimit,
+        quizLimit: quizLimit,
       ),
     );
     _startQuizCountdown();
@@ -1033,6 +1045,7 @@ class ReviewService {
         currentIndex: total > 0 ? total - 1 : 0,
         quizTimedOut: timedOut,
         quizRemaining: Duration.zero,
+        quizLimit: _quizLimit,
         correctCount: correct,
         incorrectCount: incorrect,
       ),
@@ -1041,10 +1054,11 @@ class ReviewService {
 
   void _startQuizCountdown() {
     _stopQuizCountdown();
-    _quizEndsAt = DateTime.now().add(ReviewQuizConfig.duration);
+    _quizEndsAt = DateTime.now().add(_quizLimit);
     _emit(
       _state.copyWith(
-        quizRemaining: ReviewQuizConfig.duration,
+        quizRemaining: _quizLimit,
+        quizLimit: _quizLimit,
         quizTimedOut: false,
       ),
     );

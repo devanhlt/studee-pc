@@ -41,7 +41,7 @@ class SubjectsListScreen extends ConsumerWidget {
         orElse: () => null,
       ),
       topBar: _HomeHeader(
-        onImport: () => _importSubjectZip(context, ref),
+        onImport: () => _importSubjectStud(context, ref),
         onSettings: () => context.push('/settings'),
       ),
       body: asyncSubjects.when(
@@ -121,7 +121,7 @@ class _SubjectsReorderableList extends ConsumerWidget {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
                 AppLayout.pagePadding,
-                0,
+                4,
                 AppLayout.pagePadding,
                 4,
               ),
@@ -169,6 +169,7 @@ class _SubjectsReorderableList extends ConsumerWidget {
             SliverPadding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppLayout.pagePadding,
+                vertical: 4,
               ),
               sliver: SliverReorderableList(
                 itemCount: others.length,
@@ -262,7 +263,7 @@ class _HomeHeader extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Nhập từ ZIP',
+                tooltip: 'Nhập từ .stud',
                 onPressed: onImport,
                 icon: const Icon(AppIcons.importZip),
               ),
@@ -366,9 +367,9 @@ class _EmptySubjectsState extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () => _importSubjectZip(context, ref),
+                  onPressed: () => _importSubjectStud(context, ref),
                   icon: const Icon(AppIcons.importZip),
-                  label: const Text('Nhập từ ZIP'),
+                  label: const Text('Nhập từ .stud'),
                 ),
               ),
             ],
@@ -411,7 +412,7 @@ class _SubjectCard extends ConsumerWidget {
         ),
         const PopupMenuItem(
           value: 'export',
-          child: Text('Xuất ZIP'),
+          child: Text('Xuất .stud'),
         ),
         const PopupMenuItem(
           value: 'export_notes',
@@ -922,7 +923,7 @@ Future<void> _exportSubject(
 ) async {
   try {
     final tempDir = await getTemporaryDirectory();
-    final tempPath = p.join(tempDir.path, '${subject.name}.zip');
+    final tempPath = p.join(tempDir.path, '${subject.name}.stud');
     final out = await ref.read(subjectsActionsProvider).export(
           subject.id,
           tempPath,
@@ -930,9 +931,9 @@ Future<void> _exportSubject(
     final bytes = await File(out).readAsBytes();
     final saved = await FilePicker.saveFile(
       dialogTitle: 'Xuất môn học',
-      fileName: '${subject.name}.zip',
+      fileName: '${subject.name}.stud',
       type: FileType.custom,
-      allowedExtensions: const ['zip'],
+      allowedExtensions: const ['stud'],
       bytes: Uint8List.fromList(bytes),
     );
     if (saved == null || !context.mounted) return;
@@ -1008,15 +1009,23 @@ Future<void> _exportStudyNotes(
   }
 }
 
-Future<void> _importSubjectZip(BuildContext context, WidgetRef ref) async {
+Future<void> _importSubjectStud(BuildContext context, WidgetRef ref) async {
   final picked = await FilePicker.pickFiles(
-    dialogTitle: 'Nhập môn học từ ZIP',
+    dialogTitle: 'Nhập môn học từ .stud',
     type: FileType.custom,
-    allowedExtensions: const ['zip'],
+    allowedExtensions: const ['stud'],
     allowMultiple: false,
   );
   final path = picked?.files.single.path;
   if (path == null) return;
+  if (!path.toLowerCase().endsWith('.stud')) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chỉ hỗ trợ tệp .stud.')),
+      );
+    }
+    return;
+  }
   try {
     final subject = await ref.read(subjectsActionsProvider).importZip(path);
     ref.read(subjectsActionsProvider).refresh();
@@ -1027,9 +1036,7 @@ Future<void> _importSubjectZip(BuildContext context, WidgetRef ref) async {
     }
   } on Object catch (e) {
     if (context.mounted) {
-      final message = e is AppFailure
-          ? e.userMessage
-          : 'Nhập ZIP thất bại: $e';
+      final message = e is AppFailure ? e.userMessage : 'Nhập thất bại: $e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );

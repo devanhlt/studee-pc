@@ -444,6 +444,108 @@ class DeepSeekClientImpl implements DeepSeekClient {
   }
 
   @override
+  Future<String> generateProgressAdvice({
+    required String subjectName,
+    required int totalQuestions,
+    required int practicedQuestions,
+    required int neverPracticedQuestions,
+    required int weakQuestions,
+    double? averageScore,
+    required int totalPracticeAttempts,
+    required int totalIncorrectAttempts,
+    List<ProgressAdviceWeakSample> weakSamples = const [],
+  }) async {
+    final version = DeepSeekPrompts.progressAdviceVersion;
+    final userPayload = {
+      'subject_name': subjectName,
+      'total_questions': totalQuestions,
+      'practiced_questions': practicedQuestions,
+      'never_practiced_questions': neverPracticedQuestions,
+      'weak_questions': weakQuestions,
+      if (averageScore != null)
+        'average_score_out_of_10':
+            double.parse(averageScore.toStringAsFixed(2)),
+      'total_practice_attempts': totalPracticeAttempts,
+      'total_incorrect_attempts': totalIncorrectAttempts,
+      'weak_samples': [
+        for (final s in weakSamples)
+          {
+            'stem': s.stem,
+            'practice_count': s.practiceCount,
+            'incorrect_count': s.incorrectCount,
+          },
+      ],
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.progressAdviceSystem(),
+      userContent: jsonEncode(userPayload),
+      promptVersion: version,
+      maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
+    );
+    return _parseProgressAdvice(raw);
+  }
+
+  String _parseProgressAdvice(String raw) {
+    final map = _requireJsonObject(raw);
+    final md =
+        '${map['advice_markdown'] ?? map['adviceMarkdown'] ?? map['insights_markdown'] ?? ''}'
+            .trim();
+    if (md.isEmpty) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi báo cáo trống hoặc không hợp lệ.',
+        code: 'progress_advice_schema',
+      );
+    }
+    return md;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> generateQuestionsFromKnowledge({
+    required List<KnowledgeSummaryUnit> units,
+    String? subjectName,
+    String? formatKind,
+  }) async {
+    if (units.isEmpty) return const [];
+
+    final version = DeepSeekPrompts.generateQuestionsFromKnowledgeVersion;
+    final userPayload = {
+      'knowledge_units': [
+        for (final u in units)
+          {
+            'type': u.type,
+            'content': u.content,
+          },
+      ],
+    };
+    final raw = await _chatJson(
+      systemPrompt: DeepSeekPrompts.generateQuestionsFromKnowledgeSystem(
+        subjectName: subjectName,
+        formatKind: formatKind,
+      ),
+      userContent: jsonEncode(userPayload),
+      promptVersion: version,
+      maxTokensOverride: DeepSeekConfig.structuringMaxTokens,
+    );
+    return _parseGeneratedQuestions(raw);
+  }
+
+  List<Map<String, dynamic>> _parseGeneratedQuestions(String raw) {
+    final map = _requireJsonObject(raw);
+    final list = map['questions'];
+    if (list is! List) {
+      throw const UnknownFailure(
+        userMessage: 'Phản hồi tạo câu hỏi không hợp lệ.',
+        code: 'generate_questions_schema',
+      );
+    }
+    return [
+      for (final item in list)
+        if (item is Map)
+          Map<String, dynamic>.from(item),
+    ];
+  }
+
+  @override
   Future<Map<String, SemanticCanonicalization>> canonicalizeQuestions(
     List<CanonicalizeItem> items,
   ) async {

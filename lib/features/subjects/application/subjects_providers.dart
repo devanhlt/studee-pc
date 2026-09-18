@@ -18,6 +18,7 @@ import 'package:studee_pc/core/utils/fingerprints.dart';
 import 'package:studee_pc/core/utils/text_normalizer.dart';
 import 'package:studee_pc/data/subject_database/subject_database.dart';
 import 'package:studee_pc/domain/repositories/deepseek_client.dart';
+import 'package:studee_pc/features/subjects/application/question_with_related_knowledge.dart';
 import 'package:studee_pc/features/subjects/application/study_notes_builder.dart';
 
 final subjectsListProvider =
@@ -149,6 +150,164 @@ class SubjectContentQueries {
       );
     }
     return out;
+  }
+
+  KnowledgeUnit _unitFromRow(KnowledgeUnitRow r) {
+    return KnowledgeUnit(
+      id: r.id,
+      sourceId: r.sourceId,
+      sourcePageId: r.sourcePageId,
+      type: KnowledgeUnitType.fromWire(r.type),
+      content: r.content,
+      normalizedContent: r.normalizedContent,
+      bboxJson: r.bboxJson,
+      verificationStatus: VerificationStatus.fromWire(r.verificationStatus),
+      sourcePriority: r.sourcePriority,
+      contentHash: r.contentHash,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(r.createdAt, isUtc: true),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(r.updatedAt, isUtc: true),
+    );
+  }
+
+  /// Questions with choices, parent KU, and related KUs via knowledge_relations.
+  Future<List<QuestionWithRelatedKnowledge>> listQuestionsWithRelatedKnowledge(
+    String subjectId,
+  ) async {
+    final questions = await listQuestionsWithChoices(subjectId);
+    if (questions.isEmpty) return const [];
+
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final parentIds = questions.map((q) => q.knowledgeUnitId).toSet();
+
+    final parentRows = await (db.select(db.knowledgeUnits)
+          ..where((u) => u.id.isIn(parentIds)))
+        .get();
+    final parentsById = {
+      for (final r in parentRows) r.id: _unitFromRow(r),
+    };
+
+    final relatedByParent = <String, Set<String>>{
+      for (final id in parentIds) id: <String>{},
+    };
+    for (final parentId in parentIds) {
+      final outgoing = await (db.select(db.knowledgeRelations)
+            ..where((r) => r.fromUnitId.equals(parentId)))
+          .get();
+      for (final rel in outgoing) {
+        relatedByParent[parentId]!.add(rel.toUnitId);
+      }
+      final incoming = await (db.select(db.knowledgeRelations)
+            ..where((r) => r.toUnitId.equals(parentId)))
+          .get();
+      for (final rel in incoming) {
+        relatedByParent[parentId]!.add(rel.fromUnitId);
+      }
+    }
+
+    final allRelatedIds = <String>{};
+    for (final ids in relatedByParent.values) {
+      allRelatedIds.addAll(ids);
+    }
+    allRelatedIds.removeAll(parentIds);
+
+    final relatedRows = allRelatedIds.isEmpty
+        ? <KnowledgeUnitRow>[]
+        : await (db.select(db.knowledgeUnits)
+              ..where((u) => u.id.isIn(allRelatedIds)))
+            .get();
+    final relatedById = {
+      for (final r in relatedRows) r.id: _unitFromRow(r),
+    };
+
+    return [
+      for (final q in questions)
+        QuestionWithRelatedKnowledge(
+          question: q,
+          parent: parentsById[q.knowledgeUnitId],
+          related: [
+            for (final id in relatedByParent[q.knowledgeUnitId] ?? const {})
+              if (id != q.knowledgeUnitId && relatedById.containsKey(id))
+                relatedById[id]!,
+          ],
+        ),
+    ];
+  }
+
+  /// Deletes [questionId] and exclusive related knowledge units.
+  ///
+  /// Shared parent / related units still used by other questions are kept.
+  Future<void> deleteQuestionCascade({
+    required String subjectId,
+    required String questionId,
+  }) async {
+    final id = questionId.trim();
+    if (id.isEmpty) return;
+
+    final db = await _ref.read(subjectDatabaseManagerProvider).open(subjectId);
+    final question = await (db.select(db.questions)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (question == null) return;
+
+    final parentId = question.knowledgeUnitId;
+    final relatedIds = <String>{};
+    final outgoing = await (db.select(db.knowledgeRelations)
+          ..where((r) => r.fromUnitId.equals(parentId)))
+        .get();
+    for (final rel in outgoing) {
+      relatedIds.add(rel.toUnitId);
+    }
+    final incoming = await (db.select(db.knowledgeRelations)
+          ..where((r) => r.toUnitId.equals(parentId)))
+        .get();
+    for (final rel in incoming) {
+      relatedIds.add(rel.fromUnitId);
+    }
+    relatedIds.remove(parentId);
+
+    await db.transaction(() async {
+      await (db.delete(db.questions)..where((t) => t.id.equals(id))).go();
+
+      final remainingOnParent = await (db.select(db.questions)
+            ..where((t) => t.knowledgeUnitId.equals(parentId)))
+          .get();
+      if (remainingOnParent.isNotEmpty) {
+        // Shared parent — leave parent + related units for remaining questions.
+        return;
+      }
+
+      for (final relatedId in relatedIds) {
+        final usedAsParent = await (db.select(db.questions)
+              ..where((t) => t.knowledgeUnitId.equals(relatedId)))
+            .get();
+        if (usedAsParent.isNotEmpty) continue;
+
+        final usedByOtherParent = await db.customSelect(
+          '''
+          SELECT 1 AS x FROM knowledge_relations kr
+          INNER JOIN questions q
+            ON q.knowledge_unit_id = kr.from_unit_id
+            OR q.knowledge_unit_id = kr.to_unit_id
+          WHERE (kr.from_unit_id = ? OR kr.to_unit_id = ?)
+          LIMIT 1
+          ''',
+          variables: [
+            Variable.withString(relatedId),
+            Variable.withString(relatedId),
+          ],
+          readsFrom: {db.knowledgeRelations, db.questions},
+        ).get();
+        if (usedByOtherParent.isNotEmpty) continue;
+
+        await (db.delete(db.knowledgeUnits)
+              ..where((u) => u.id.equals(relatedId)))
+            .go();
+      }
+
+      await (db.delete(db.knowledgeUnits)
+            ..where((u) => u.id.equals(parentId)))
+          .go();
+    });
   }
 
   /// Bump practice count for a stored question (Giải / Luyện / Ôn tập).
@@ -473,6 +632,12 @@ final subjectKnowledgeProvider =
   (ref, subjectId) => ref.watch(subjectContentProvider).listKnowledge(subjectId),
 );
 
+final subjectKnowledgeQuestionsProvider = FutureProvider.autoDispose
+    .family<List<QuestionWithRelatedKnowledge>, String>(
+  (ref, subjectId) =>
+      ref.watch(subjectContentProvider).listQuestionsWithRelatedKnowledge(subjectId),
+);
+
 final subjectQuestionsProvider =
     FutureProvider.autoDispose.family<List<Question>, String>(
   (ref, subjectId) => ref.watch(subjectContentProvider).listQuestions(subjectId),
@@ -653,6 +818,21 @@ class SubjectsActions {
         (subjectId: subjectId, sessionId: sessionId),
       ),
     );
+  }
+
+  Future<void> deleteQuestionCascade({
+    required String subjectId,
+    required String questionId,
+  }) async {
+    await _ref.read(subjectContentProvider).deleteQuestionCascade(
+          subjectId: subjectId,
+          questionId: questionId,
+        );
+    _ref.invalidate(subjectKnowledgeQuestionsProvider(subjectId));
+    _ref.invalidate(subjectQuestionsProvider(subjectId));
+    _ref.invalidate(subjectKnowledgeProvider(subjectId));
+    _ref.invalidate(subjectByIdProvider(subjectId));
+    _ref.invalidate(subjectsListProvider);
   }
 
   void refresh() {

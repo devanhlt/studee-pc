@@ -20,6 +20,9 @@ abstract final class DeepSeekPrompts {
   static const String mcqStrategyTipVersion = 'mcqStrategyTip.v2';
   static const String quizAnswerResolveVersion = 'quizAnswerResolve.v1';
   static const String mathLatexFormatVersion = 'mathLatexFormat.v3';
+  static const String progressAdviceVersion = 'progressAdvice.v1';
+  static const String generateQuestionsFromKnowledgeVersion =
+      'generateQuestionsFromKnowledge.v1';
 
   /// Structures reviewed OCR / page text into knowledge units and questions.
   ///
@@ -448,6 +451,67 @@ Schema:
   "correct_label": "C",
   "correct_content": "nội dung lựa chọn đúng",
   "brief_reason": "…"
+}
+''';
+
+  /// Subject practice report: stats + short study advice (Markdown).
+  static String progressAdviceSystem() => '''
+Bạn là giáo viên kèm tiếng Việt, phân tích tiến độ ôn tập của học sinh.
+${DeepSeekConfig.vietnameseOutputInstruction}
+
+Nhiệm vụ: dựa CHỈ vào thống kê và mẫu câu yếu đã cung cấp, viết lời khuyên ôn tập ngắn gọn, khích lệ, thực tế.
+
+Quy tắc BẮT BUỘC:
+1) CHỈ dùng số liệu trong payload. CẤM bịa điểm số / số câu / nội dung đề ngoài nguồn.
+2) Nhắc đúng: số câu đã luyện / tổng, điểm trung bình (thang 10) nếu có, số câu chưa luyện / câu yếu nếu có.
+3) Đưa 3–5 gợi ý hành động cụ thể (ưu tiên Ôn tập Giải đề / Luyện / Giải, tập trung dạng bài yếu…).
+4) Nếu chưa luyện gì: khuyến khích bắt đầu bằng vài câu dễ, đừng trách móc.
+5) CẤM chữ cái A/B/C/D như đáp án cần nhớ. CẤM dump lại toàn bộ đề bài.
+6) Giọng "bạn", tiếng Việt tự nhiên, không emoji, không teen code.
+7) Trả Markdown ngắn (khoảng 120–280 từ). Bắt đầu bằng ### hoặc đoạn văn — KHÔNG dùng tiêu đề "# …".
+
+Trả về đúng một object JSON:
+{
+  "advice_markdown": "### Nhận xét\\n…\\n\\n### Gợi ý tuần này\\n- …\\n- …"
+}
+''';
+
+  /// Create practice Q&A from theory-only knowledge units (ingest branch).
+  static String generateQuestionsFromKnowledgeSystem({
+    String? subjectName,
+    String? formatKind,
+  }) =>
+      '''
+Bạn tạo câu hỏi ôn tập tiếng Việt từ kiến thức đã cho.
+${DeepSeekConfig.vietnameseOutputInstruction}
+
+Nhiệm vụ: dựa CHỈ vào knowledge_units (lý thuyết / định nghĩa / công thức…), tạo danh sách câu hỏi kèm đáp án để học sinh luyện.
+${_subjectContextBlock(subjectName: subjectName, formatKind: formatKind)}
+Quy tắc BẮT BUỘC:
+1) CHỈ dùng nội dung trong knowledge_units. CẤM bịa kiến thức ngoài nguồn.
+2) Mỗi câu phải có đáp án rõ (answer_content chi tiết; MCQ thì có choices + answer_label + answer_content là nội dung lựa chọn đúng).
+3) Ưu tiên trắc nghiệm (multiple_choice) khi phù hợp; có thể text_response nếu nguồn thích hợp.
+4) related_knowledge_indices: chỉ số 0-based vào mảng knowledge_units đầu vào (đơn vị liên quan giúp trả lời câu đó).
+5) explanation: lời giải ngắn dựa trên kiến thức nguồn (hoặc null).
+6) Số câu: khoảng 3–12 tùy độ phong phú của nguồn; nguồn ít thì ít câu hơn, vẫn đủ để ôn.
+7) Không lặp lại nguyên văn cả đoạn lý thuyết làm stem; stem phải là câu hỏi.
+8) Chuẩn hóa hiển thị theo môn (LaTeX / code fence) nếu phù hợp.
+
+Trả về đúng một object JSON:
+{
+  "questions": [
+    {
+      "question_type": "multiple_choice",
+      "content": "stem…",
+      "choices": [{"label":"A","content":"…"},{"label":"B","content":"…"},{"label":"C","content":"…"},{"label":"D","content":"…"}],
+      "answer_label": "B",
+      "answer_content": "nội dung lựa chọn đúng",
+      "explanation": "…",
+      "related_knowledge_indices": [0],
+      "page": null,
+      "verification_status": "inferred"
+    }
+  ]
 }
 ''';
 

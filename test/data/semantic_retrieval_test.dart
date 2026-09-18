@@ -153,6 +153,43 @@ class _FakeDeepSeek implements DeepSeekClient {
       '- Tóm tắt giả lập cho $subjectName';
 
   @override
+  Future<String> generateProgressAdvice({
+    required String subjectName,
+    required int totalQuestions,
+    required int practicedQuestions,
+    required int neverPracticedQuestions,
+    required int weakQuestions,
+    double? averageScore,
+    required int totalPracticeAttempts,
+    required int totalIncorrectAttempts,
+    List<ProgressAdviceWeakSample> weakSamples = const [],
+  }) async =>
+      '### Nhận xét\nGiả lập báo cáo cho $subjectName '
+      '($practicedQuestions/$totalQuestions).';
+
+  @override
+  Future<List<Map<String, dynamic>>> generateQuestionsFromKnowledge({
+    required List<KnowledgeSummaryUnit> units,
+    String? subjectName,
+    String? formatKind,
+  }) async {
+    if (units.isEmpty) return const [];
+    return [
+      {
+        'question_type': 'text_response',
+        'content': 'Câu hỏi giả lập từ kiến thức?',
+        'choices': <Map<String, String>>[],
+        'answer_label': null,
+        'answer_content': units.first.content,
+        'explanation': null,
+        'related_knowledge_indices': [0],
+        'page': null,
+        'verification_status': 'inferred',
+      },
+    ];
+  }
+
+  @override
   Future<String> polishOcrText({
     required String raw,
     required String heuristic,

@@ -22,6 +22,7 @@ import 'package:studee_pc/domain/repositories/platform_integration.dart';
 import 'package:studee_pc/domain/repositories/subject_repository.dart';
 import 'package:studee_pc/features/ingestion/application/ingestion_service.dart';
 import 'package:studee_pc/features/practice/application/practice_service.dart';
+import 'package:studee_pc/features/review/application/review_quiz_settings_store.dart';
 import 'package:studee_pc/features/settings/application/privacy_consent_store.dart';
 import 'package:studee_pc/features/settings/application/quota_revision.dart';
 import 'package:studee_pc/features/settings/application/settings_service.dart';
@@ -137,6 +138,15 @@ final settingsServiceProvider = Provider<SettingsService>((ref) {
 
 final privacyConsentStoreProvider = Provider<PrivacyConsentStore>((ref) {
   return PrivacyConsentStore();
+});
+
+final reviewQuizSettingsStoreProvider = Provider<ReviewQuizSettingsStore>((ref) {
+  return ReviewQuizSettingsStore();
+});
+
+final reviewQuizDurationMinutesProvider =
+    FutureProvider.autoDispose<int>((ref) async {
+  return ref.watch(reviewQuizSettingsStoreProvider).loadDurationMinutes();
 });
 
 final desktopBootstrapProvider = Provider<DesktopBootstrap>((ref) {

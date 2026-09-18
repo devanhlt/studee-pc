@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -100,6 +102,8 @@ class _IdleReview extends ConsumerWidget {
                       ),
                     ],
                     const SizedBox(height: AppLayout.gapMd),
+                    const _ReviewDurationPicker(),
+                    const SizedBox(height: AppLayout.gapMd),
                     LayoutBuilder(
                       builder: (context, constraints) {
                         final narrow = constraints.maxWidth < 420;
@@ -153,6 +157,51 @@ class _IdleReview extends ConsumerWidget {
   }
 }
 
+class _ReviewDurationPicker extends ConsumerWidget {
+  const _ReviewDurationPicker();
+
+  Future<void> _setMinutes(WidgetRef ref, int minutes) async {
+    await ref.read(reviewQuizSettingsStoreProvider).setDurationMinutes(minutes);
+    ref.invalidate(reviewQuizDurationMinutesProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncMinutes = ref.watch(reviewQuizDurationMinutesProvider);
+    final theme = Theme.of(context).textTheme;
+    final selected = asyncMinutes.asData?.value ??
+        ReviewQuizConfig.defaultDurationMinutes;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Thời gian: $selected phút',
+          style: theme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: AppLayout.gapXs),
+        Text(
+          'Áp dụng cho Giải đề và Giải & luyện.',
+          style: theme.bodySmall?.copyWith(color: AppColors.secondaryText),
+        ),
+        const SizedBox(height: AppLayout.gapSm),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final minutes in ReviewQuizConfig.durationMinutePresets)
+              ChoiceChip(
+                label: Text('$minutes phút'),
+                selected: selected == minutes,
+                onSelected: (_) => _setMinutes(ref, minutes),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _CompletedReview extends ConsumerWidget {
   const _CompletedReview({
     required this.subjectId,
@@ -202,7 +251,7 @@ class _CompletedReview extends ConsumerWidget {
             const SizedBox(height: AppLayout.gapSm),
             Text(
               timedOut
-                  ? 'Hết ${ReviewQuizConfig.duration.inMinutes} phút. '
+                  ? 'Hết ${review.quizLimit.inMinutes} phút. '
                       'Bạn đã làm $completedCount/$total câu.'
                   : 'Bạn có thể ôn lại từ đầu, hoặc chuyển sang Luyện / Giải.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -371,34 +420,38 @@ class _RunningCoachReview extends ConsumerWidget {
     final lastDone =
         review.isLastQuestion && practice.stage == PracticeStage.completed;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _ReviewProgressHeader(review: review),
-        Expanded(
-          child: PracticeChatPanel(
-            showCancelAlways: false,
-            completedMessage: lastDone
-                ? 'Đã ôn xong tất cả câu hỏi.'
-                : 'Đã xong câu này. Bấm “Câu tiếp” để ôn câu sau.',
-            completedComposerHint: lastDone
-                ? 'Đã ôn xong tất cả câu hỏi'
-                : 'Đã xong câu này',
-            nextQuestionLabel: failed
-                ? 'Thử lại'
-                : (lastDone ? 'Xong' : 'Câu tiếp'),
-            onCancel: () => ref.read(reviewServiceProvider).cancel(),
-            onNewQuestion: () {
-              final service = ref.read(reviewServiceProvider);
-              if (failed) {
-                service.retryCurrent();
-                return;
-              }
-              service.continueNext();
-            },
+    return Padding(
+      padding: const EdgeInsets.all(AppLayout.cardPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ReviewProgressHeader(review: review),
+          const SizedBox(height: AppLayout.gapSm),
+          Expanded(
+            child: PracticeChatPanel(
+              showCancelAlways: false,
+              completedMessage: lastDone
+                  ? 'Đã ôn xong tất cả câu hỏi.'
+                  : 'Đã xong câu này. Bấm “Câu tiếp” để ôn câu sau.',
+              completedComposerHint: lastDone
+                  ? 'Đã ôn xong tất cả câu hỏi'
+                  : 'Đã xong câu này',
+              nextQuestionLabel: failed
+                  ? 'Thử lại'
+                  : (lastDone ? 'Xong' : 'Câu tiếp'),
+              onCancel: () => confirmCancelReviewSession(context, ref),
+              onNewQuestion: () {
+                final service = ref.read(reviewServiceProvider);
+                if (failed) {
+                  service.retryCurrent();
+                  return;
+                }
+                service.continueNext();
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -413,9 +466,97 @@ class _RunningQuizReview extends ConsumerStatefulWidget {
 class _RunningQuizReviewState extends ConsumerState<_RunningQuizReview> {
   final _scrollController = ScrollController();
   int? _seenIndex;
+  Timer? _autoNextTimer;
+  /// Remaining fraction 1→0 while auto-advance is counting down.
+  double? _autoNextProgress;
+  /// Set when the user opens Gợi ý so auto-advance does not restart.
+  bool _autoNextSuppressed = false;
+
+  bool _canAdvance(ReviewSessionState review, List<QuestionChoice> choices) {
+    if (review.quizResolvingAnswer) return false;
+    return review.quizAnswered || choices.isEmpty;
+  }
+
+  void _clearAutoNextTimer() {
+    _autoNextTimer?.cancel();
+    _autoNextTimer = null;
+    _autoNextProgress = null;
+  }
+
+  void _stopAutoNext({bool suppress = false}) {
+    _clearAutoNextTimer();
+    if (suppress) _autoNextSuppressed = true;
+  }
+
+  void _startAutoNext() {
+    if (_autoNextSuppressed || _autoNextTimer != null) return;
+    final totalMs = ReviewQuizConfig.autoAdvanceDelay.inMilliseconds;
+    if (totalMs <= 0) {
+      _goNext();
+      return;
+    }
+    final endsAt = DateTime.now().add(ReviewQuizConfig.autoAdvanceDelay);
+    _autoNextProgress = 1.0;
+    _autoNextTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final leftMs = endsAt.difference(DateTime.now()).inMilliseconds;
+      if (leftMs <= 0) {
+        timer.cancel();
+        _autoNextTimer = null;
+        _autoNextProgress = null;
+        _goNext();
+        return;
+      }
+      setState(() {
+        _autoNextProgress = (leftMs / totalMs).clamp(0.0, 1.0);
+      });
+    });
+    setState(() {});
+  }
+
+  void _syncAutoNext({required bool canAdvance}) {
+    if (!canAdvance || _autoNextSuppressed) {
+      if (_autoNextTimer != null || _autoNextProgress != null) {
+        _clearAutoNextTimer();
+        if (mounted) setState(() {});
+      }
+      return;
+    }
+    if (_autoNextTimer == null) _startAutoNext();
+  }
+
+  void _goNext() {
+    _clearAutoNextTimer();
+    final service = ref.read(reviewServiceProvider);
+    final review = service.current;
+    final choices = service.currentQuizChoices;
+    if (!_canAdvance(review, choices)) {
+      if (mounted) setState(() {});
+      return;
+    }
+    if (!review.quizAnswered && choices.isEmpty) {
+      service.skipQuizWithoutChoices();
+    }
+    service.continueNext();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _onRequestTip() async {
+    _stopAutoNext(suppress: true);
+    if (mounted) setState(() {});
+    await _requestQuizTip(
+      context,
+      ref,
+      ref.read(reviewServiceProvider),
+    );
+  }
 
   @override
   void dispose() {
+    _clearAutoNextTimer();
     _scrollController.dispose();
     super.dispose();
   }
@@ -434,6 +575,7 @@ class _RunningQuizReviewState extends ConsumerState<_RunningQuizReview> {
     final question = service.currentQuestion;
     final choices = service.currentQuizChoices;
     final lastDone = review.isLastQuestion && review.quizAnswered;
+    final canAdvance = _canAdvance(review, choices);
     final subjectId = review.subjectId;
     final subject = subjectId == null
         ? null
@@ -442,224 +584,275 @@ class _RunningQuizReviewState extends ConsumerState<_RunningQuizReview> {
 
     if (_seenIndex != review.currentIndex) {
       _seenIndex = review.currentIndex;
+      _autoNextSuppressed = false;
+      _clearAutoNextTimer();
       _scrollToQuestionTop();
     }
 
     ref.listen(reviewStateProvider, (prev, next) {
-      final msg = next.asData?.value.errorMessage;
-      final prevMsg = prev?.asData?.value.errorMessage;
-      if (msg == null || msg.isEmpty || msg == prevMsg) return;
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
-      if (isMissingActivationMessage(msg)) {
-        context.push('/settings');
+      final prevReview = prev?.asData?.value;
+      final nextReview = next.asData?.value;
+      if (nextReview == null) return;
+
+      final msg = nextReview.errorMessage;
+      final prevMsg = prevReview?.errorMessage;
+      if (msg != null && msg.isNotEmpty && msg != prevMsg) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
+          if (isMissingActivationMessage(msg)) {
+            context.push('/settings');
+          }
+        }
       }
+
+      final choicesNow =
+          ref.read(reviewServiceProvider).currentQuizChoices;
+      final canAdvanceNow = _canAdvance(nextReview, choicesNow);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _syncAutoNext(canAdvance: canAdvanceNow);
+      });
     });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _ReviewProgressHeader(review: review),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppLayout.pagePadding,
-              0,
-              AppLayout.pagePadding,
-              AppLayout.pagePadding,
-            ),
-            child: StudeeGlass(
-              padding: const EdgeInsets.all(AppLayout.cardPadding),
-              child: question == null
-                  ? const Center(child: Text('Không có câu hỏi.'))
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: SingleChildScrollView(
-                            controller: _scrollController,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (review.quizLatexLoading) ...[
-                                  const SizedBox(height: AppLayout.gapSm),
-                                  const Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncAutoNext(canAdvance: canAdvance);
+    });
+
+    final autoNextProgress = _autoNextProgress;
+
+    return Padding(
+      padding: const EdgeInsets.all(AppLayout.cardPadding),
+      child: question == null
+          ? const Center(child: Text('Không có câu hỏi.'))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _ReviewProgressHeader(review: review),
+                const SizedBox(height: AppLayout.gapSm),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.only(bottom: 64),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (review.quizLatexLoading) ...[
+                                const SizedBox(height: AppLayout.gapSm),
+                                const Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                    SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Đang chuẩn hóa công thức…',
+                                        style: TextStyle(
+                                          color: AppColors.secondaryText,
+                                          fontSize: 12.5,
                                         ),
                                       ),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Đang chuẩn hóa công thức…',
-                                          style: TextStyle(
-                                            color: AppColors.secondaryText,
-                                            fontSize: 12.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: AppLayout.gapSm),
-                                ],
-                                StudyMarkdown(
-                                  StudyNotesMarkdownCode.formatBody(
-                                    question.content.trim(),
-                                    kind: formatKind,
-                                  ),
-                                  formatKind: formatKind,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(
-                                        color: AppColors.primaryText,
-                                        height: 1.45,
-                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: AppLayout.gapMd),
-                                if (choices.isEmpty)
-                                  const Text(
-                                    'Câu này chưa có đáp án lựa chọn đã lưu.',
-                                    style: TextStyle(
-                                      color: AppColors.secondaryText,
-                                    ),
-                                  )
-                                else
-                                  ...choices.map(
-                                    (c) => Padding(
-                                      padding: const EdgeInsets.only(
-                                        bottom: AppLayout.gapSm,
-                                      ),
-                                      child: _QuizChoiceButton(
-                                        choice: c,
-                                        formatKind: formatKind,
-                                        selectedLabel: review.quizSelectedLabel,
-                                        answered: review.quizAnswered,
-                                        isCorrectPick: review.quizIsCorrect,
-                                        correctLabel: review.quizCorrectLabel ??
-                                            question.answerLabel?.trim(),
-                                        onTap: (review.quizAnswered ||
-                                                review.quizResolvingAnswer)
-                                            ? null
-                                            : () => service
-                                                .submitQuizChoice(c),
-                                      ),
-                                    ),
-                                  ),
-                                if (!review.quizResolvingAnswer &&
-                                    choices.isNotEmpty &&
-                                    !review.quizTipLoading &&
-                                    (review.quizTip == null ||
-                                        review.quizTip!.trim().isEmpty)) ...[
-                                  const SizedBox(height: AppLayout.gapMd),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: OutlinedButton.icon(
-                                      onPressed: () => _requestQuizTip(
-                                        context,
-                                        ref,
-                                        service,
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.accent,
-                                        side: const BorderSide(
-                                          color: AppColors.accent,
-                                          width: 1.5,
-                                        ),
-                                      ),
-                                      icon: const Icon(
-                                        AppIcons.sparkle,
-                                        size: 18,
-                                      ),
-                                      label: const Text('Gợi ý'),
-                                    ),
-                                  ),
-                                ],
-                                if (review.quizTipLoading ||
-                                    (review.quizTip != null &&
-                                        review.quizTip!
-                                            .trim()
-                                            .isNotEmpty)) ...[
-                                  const SizedBox(height: AppLayout.gapMd),
-                                  _QuizTipCard(
-                                    tip: review.quizTip,
-                                    loading: review.quizTipLoading,
-                                    formatKind: formatKind,
-                                  ),
-                                ],
-                                if (review.quizResolvingAnswer) ...[
-                                  const SizedBox(height: AppLayout.gapMd),
-                                  const Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                      SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          'Đề chưa có đáp án lưu — Stud đang suy luận…',
-                                          style: TextStyle(
-                                            color: AppColors.secondaryText,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                                if (review.quizAnswered) ...[
-                                  const SizedBox(height: AppLayout.gapSm),
-                                  _QuizFeedback(
-                                    isCorrect: review.quizIsCorrect,
-                                    correctLabel: review.quizCorrectLabel ??
-                                        question.answerLabel?.trim(),
-                                    correctContent: review.quizCorrectContent,
-                                    fromLlm: review.quizAnswerFromLlm,
-                                    choices: choices,
-                                    formatKind: formatKind,
-                                  ),
-                                ],
+                                const SizedBox(height: AppLayout.gapSm),
                               ],
-                            ),
+                              StudyMarkdown(
+                                StudyNotesMarkdownCode.formatBody(
+                                  question.content.trim(),
+                                  kind: formatKind,
+                                ),
+                                formatKind: formatKind,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      color: AppColors.primaryText,
+                                      height: 1.45,
+                                    ),
+                              ),
+                              const SizedBox(height: AppLayout.gapMd),
+                              if (choices.isEmpty)
+                                const Text(
+                                  'Câu này chưa có đáp án lựa chọn đã lưu.',
+                                  style: TextStyle(
+                                    color: AppColors.secondaryText,
+                                  ),
+                                )
+                              else
+                                ...choices.map(
+                                  (c) => Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: AppLayout.gapSm,
+                                    ),
+                                    child: _QuizChoiceButton(
+                                      choice: c,
+                                      formatKind: formatKind,
+                                      selectedLabel: review.quizSelectedLabel,
+                                      answered: review.quizAnswered,
+                                      isCorrectPick: review.quizIsCorrect,
+                                      correctLabel: review.quizCorrectLabel ??
+                                          question.answerLabel?.trim(),
+                                      onTap: (review.quizAnswered ||
+                                              review.quizResolvingAnswer)
+                                          ? null
+                                          : () =>
+                                              service.submitQuizChoice(c),
+                                    ),
+                                  ),
+                                ),
+                              if (!review.quizResolvingAnswer &&
+                                  choices.isNotEmpty &&
+                                  !review.quizTipLoading &&
+                                  (review.quizTip == null ||
+                                      review.quizTip!.trim().isEmpty)) ...[
+                                const SizedBox(height: AppLayout.gapMd),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: OutlinedButton.icon(
+                                    onPressed: _onRequestTip,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppColors.accent,
+                                      side: const BorderSide(
+                                        color: AppColors.accent,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      AppIcons.sparkle,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Gợi ý'),
+                                  ),
+                                ),
+                              ],
+                              if (review.quizTipLoading ||
+                                  (review.quizTip != null &&
+                                      review.quizTip!
+                                          .trim()
+                                          .isNotEmpty)) ...[
+                                const SizedBox(height: AppLayout.gapMd),
+                                _QuizTipCard(
+                                  tip: review.quizTip,
+                                  loading: review.quizTipLoading,
+                                  formatKind: formatKind,
+                                ),
+                              ],
+                              if (review.quizResolvingAnswer) ...[
+                                const SizedBox(height: AppLayout.gapMd),
+                                const Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Đề chưa có đáp án lưu — Stud đang suy luận…',
+                                        style: TextStyle(
+                                          color: AppColors.secondaryText,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                        const SizedBox(height: AppLayout.gapMd),
-                        FilledButton(
-                          onPressed: (!review.quizAnswered &&
-                                      choices.isNotEmpty) ||
-                                  review.quizResolvingAnswer
-                              ? null
-                              : () {
-                                  if (!review.quizAnswered &&
-                                      choices.isEmpty) {
-                                    service.skipQuizWithoutChoices();
-                                  }
-                                  service.continueNext();
-                                },
-                          child: Text(
-                            !review.quizAnswered && choices.isEmpty
-                                ? (review.isLastQuestion
-                                    ? 'Bỏ qua & xong'
-                                    : 'Bỏ qua & câu tiếp')
-                                : (lastDone ? 'Xong' : 'Câu tiếp'),
+                      ),
+                      if (canAdvance)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: _QuizAutoNextFab(
+                            isLast: lastDone ||
+                                (review.isLastQuestion && choices.isEmpty),
+                            progress: autoNextProgress,
+                            onPressed: _goNext,
                           ),
                         ),
-                      ],
-                    ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ),
-        ),
-      ],
     );
+  }
+}
+
+class _QuizAutoNextFab extends StatelessWidget {
+  const _QuizAutoNextFab({
+    required this.isLast,
+    required this.onPressed,
+    this.progress,
+  });
+
+  final bool isLast;
+  final VoidCallback onPressed;
+  /// Remaining countdown fraction (1 → 0). Null = no ring.
+  final double? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = isLast ? AppIcons.checkCircle : AppIcons.chevronRight;
+    final tooltip = isLast ? 'Xong' : 'Câu tiếp';
+    final remaining = progress;
+
+    Widget button = Material(
+      color: AppColors.accent,
+      shape: const CircleBorder(),
+      elevation: 2,
+      shadowColor: Colors.black54,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(icon, size: 22, color: Colors.white),
+        ),
+      ),
+    );
+
+    if (remaining != null) {
+      button = SizedBox(
+        width: 48,
+        height: 48,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: CircularProgressIndicator(
+                value: remaining.clamp(0.0, 1.0),
+                strokeWidth: 2.5,
+                backgroundColor: AppColors.accent.withValues(alpha: 0.18),
+                color: AppColors.accent,
+              ),
+            ),
+            button,
+          ],
+        ),
+      );
+    }
+
+    return Tooltip(message: tooltip, child: button);
   }
 }
 
@@ -673,60 +866,51 @@ class _ReviewProgressHeader extends ConsumerWidget {
     final showTimer = review.stage == ReviewStage.running;
     final remaining = review.quizRemaining;
     final urgent = remaining.inMinutes < 5;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppLayout.pagePadding,
-        AppLayout.gapMd,
-        AppLayout.pagePadding,
-        AppLayout.gapSm,
-      ),
-      child: StudeeGlass(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Câu ${review.displayNumber} / ${review.total}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                if (showTimer) ...[
-                  Icon(
-                    AppIcons.timer,
-                    size: 16,
-                    color: urgent ? AppColors.error : AppColors.secondaryText,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    formatQuizCountdown(remaining),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: urgent ? AppColors.error : AppColors.primaryText,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                TextButton(
-                  onPressed: () => ref.read(reviewServiceProvider).cancel(),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                  ),
-                  child: const Text('Hủy'),
-                ),
-              ],
+    return SizedBox(
+      height: 28,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Câu ${review.displayNumber} / ${review.total}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+                height: 1.1,
+              ),
             ),
-            const SizedBox(height: 8),
-            StudeeGradientProgress(value: review.progress),
+          ),
+          if (showTimer) ...[
+            Icon(
+              AppIcons.timer,
+              size: 13,
+              color: urgent ? AppColors.error : AppColors.secondaryText,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              formatQuizCountdown(remaining),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+                height: 1.1,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: urgent ? AppColors.error : AppColors.primaryText,
+              ),
+            ),
+            const SizedBox(width: 2),
           ],
-        ),
+          TextButton(
+            onPressed: () => confirmCancelReviewSession(context, ref),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Hủy', style: TextStyle(fontSize: 12.5)),
+          ),
+        ],
       ),
     );
   }
@@ -930,149 +1114,6 @@ class _QuizTipCard extends StatelessWidget {
   }
 }
 
-class _QuizFeedback extends StatelessWidget {
-  const _QuizFeedback({
-    required this.isCorrect,
-    required this.correctLabel,
-    required this.choices,
-    this.correctContent,
-    this.fromLlm = false,
-    this.formatKind = SubjectFormatKind.plain,
-  });
-
-  final bool? isCorrect;
-  final String? correctLabel;
-  final String? correctContent;
-  final bool fromLlm;
-  final List<QuestionChoice> choices;
-  final SubjectFormatKind formatKind;
-
-  @override
-  Widget build(BuildContext context) {
-    if (isCorrect == true) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Chính xác!',
-            style: TextStyle(
-              color: AppColors.success,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (fromLlm)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text(
-                'Đáp án do Stud suy luận (đề chưa có đáp án lưu).',
-                style: TextStyle(
-                  color: AppColors.secondaryText,
-                  fontSize: 12.5,
-                ),
-              ),
-            ),
-        ],
-      );
-    }
-
-    Widget? answerBody;
-    String? answerLabel;
-    if (correctLabel != null && correctLabel!.isNotEmpty) {
-      for (final c in choices) {
-        if (c.label.trim().toUpperCase() == correctLabel!.toUpperCase()) {
-          answerLabel = c.label.trim().toUpperCase();
-          final raw = c.content.trim();
-          if (StudyNotesMarkdownCode.isCodeSnippet(raw, kind: formatKind)) {
-            answerBody = _QuizCodeSnippet(
-              code: StudyNotesMarkdownCode.codeSnippetBody(raw),
-            );
-          } else {
-            answerBody = StudyMarkdown(
-              StudyNotesMarkdownCode.formatBody(raw, kind: formatKind),
-              compact: true,
-              formatKind: formatKind,
-            );
-          }
-          break;
-        }
-      }
-    }
-    if (answerBody == null &&
-        correctContent != null &&
-        correctContent!.trim().isNotEmpty) {
-      answerLabel = correctLabel?.trim();
-      final raw = correctContent!.trim();
-      if (StudyNotesMarkdownCode.isCodeSnippet(raw, kind: formatKind)) {
-        answerBody = _QuizCodeSnippet(
-          code: StudyNotesMarkdownCode.codeSnippetBody(raw),
-        );
-      } else {
-        answerBody = StudyMarkdown(
-          StudyNotesMarkdownCode.formatBody(raw, kind: formatKind),
-          compact: true,
-          formatKind: formatKind,
-        );
-      }
-    }
-    if (answerBody == null && correctLabel != null) {
-      answerBody = Text(correctLabel!);
-    }
-
-    if (answerBody == null) {
-      return Text(
-        fromLlm
-            ? 'Chưa đúng. Stud chưa suy ra được đáp án.'
-            : 'Chưa đúng.',
-        style: const TextStyle(
-          color: AppColors.error,
-          fontWeight: FontWeight.w600,
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Chưa đúng. Đáp án:',
-          style: TextStyle(
-            color: AppColors.error,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (answerLabel != null && answerLabel.isNotEmpty) ...[
-              Text(
-                '$answerLabel.',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primaryText,
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(child: answerBody),
-          ],
-        ),
-        if (fromLlm)
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text(
-              'Đáp án do Stud suy luận (đề chưa có đáp án lưu).',
-              style: TextStyle(
-                color: AppColors.secondaryText,
-                fontSize: 12.5,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 Future<void> _requestQuizTip(
   BuildContext context,
   WidgetRef ref,
@@ -1091,6 +1132,41 @@ Future<void> _requestQuizTip(
   }
   if (!context.mounted) return;
   await service.requestQuizTip();
+}
+
+Future<bool> confirmCancelReviewSession(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final review = ref.read(reviewServiceProvider).current;
+  if (review.stage != ReviewStage.running) {
+    await ref.read(reviewServiceProvider).cancel();
+    return true;
+  }
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Hủy ôn tập?'),
+      content: const Text(
+        'Tiến trình ôn tập hiện tại sẽ bị hủy. Không thể hoàn tác.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Ở lại'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Hủy ôn tập'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return false;
+  await ref.read(reviewServiceProvider).cancel();
+  return true;
 }
 
 Future<void> startReviewSession(
@@ -1119,9 +1195,17 @@ Future<void> startReviewSession(
     if (!ok || !context.mounted) return;
   }
 
+  final durationMinutes = await ref
+      .read(reviewQuizSettingsStoreProvider)
+      .loadDurationMinutes();
+  if (!context.mounted) return;
+
   final result = await ref.read(reviewServiceProvider).start(
         subjectId,
         mode: mode,
+        duration: ReviewQuizConfig.durationFromMinutes(
+          ReviewQuizConfig.snapDurationMinutes(durationMinutes),
+        ),
       );
   if (!context.mounted) return;
   result.when(
